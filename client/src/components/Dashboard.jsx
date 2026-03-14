@@ -223,31 +223,38 @@ export default function Dashboard() {
                       onChange={e => setEditingSession(f => ({ ...f, notes: e.target.value }))}
                       className={`${inputCls} resize-none`}
                       placeholder="Notes" />
-                    <div className="flex gap-2 pt-0.5">
-                      <button type="submit" className="px-3 py-2 sm:py-1 rounded bg-violet-600 hover:bg-violet-500 text-white text-sm">Save</button>
-                      <button type="button" onClick={() => setEditingSession(null)} className="px-3 py-2 sm:py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm">Cancel</button>
+                    <div className="flex flex-wrap gap-2 pt-0.5">
+                      <button type="submit" className="px-3 py-2.5 sm:py-1 rounded bg-violet-600 hover:bg-violet-500 text-white text-sm">Save</button>
+                      <button type="button" onClick={() => setEditingSession(null)} className="px-3 py-2.5 sm:py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm">Cancel</button>
+                      <button type="button" className="sm:hidden px-3 py-2.5 rounded text-gray-400 hover:text-gray-200 text-sm"
+                        onClick={() => { setEditingSession(null); setCopyingSession(activeSession.id); setCopyForm({ start_date: today, target_date: '' }); }}>Copy</button>
+                      <button type="button" className="sm:hidden px-3 py-2.5 rounded text-red-400 hover:text-red-300 text-sm ml-auto"
+                        onClick={() => { setEditingSession(null); deleteSession(activeSession.id); }}>Delete</button>
                     </div>
                   </form>
                 ) : (
-                  <div className="rounded-lg bg-violet-700/20 border border-violet-600/30 px-3 py-3">
-                    <div className="flex items-start gap-1">
-                      <div className="flex-1 min-w-0">
-                        <div className="font-medium text-violet-300 flex items-center gap-2 flex-wrap text-sm">
-                          → {new Date(activeSession.target_date).toLocaleDateString()}
-                          {daysLeftBadge(activeSession.target_date)}
+                  <>
+                    <div className="rounded-lg bg-violet-700/20 border border-violet-600/30 px-3 py-3 cursor-pointer"
+                      onClick={() => setEditingSession({ ...activeSession, start_date: activeSession.start_date.slice(0, 10), target_date: activeSession.target_date.slice(0, 10), notes: activeSession.notes || '' })}>
+                      <div className="flex items-start gap-1">
+                        <div className="flex-1 min-w-0">
+                          <div className="font-medium text-violet-300 flex items-center gap-2 flex-wrap text-sm">
+                            → {new Date(activeSession.target_date).toLocaleDateString()}
+                            {daysLeftBadge(activeSession.target_date)}
+                          </div>
+                          <div className="text-xs text-gray-500 mt-0.5">from {new Date(activeSession.start_date).toLocaleDateString()}</div>
+                          {activeSession.notes && <div className="text-xs text-gray-400 mt-1.5 leading-relaxed">{activeSession.notes}</div>}
                         </div>
-                        <div className="text-xs text-gray-500 mt-0.5">from {new Date(activeSession.start_date).toLocaleDateString()}</div>
-                        {activeSession.notes && <div className="text-xs text-gray-400 mt-1.5 leading-relaxed">{activeSession.notes}</div>}
+                        <button onClick={e => { e.stopPropagation(); setCopyingSession(activeSession.id); setCopyForm({ start_date: today, target_date: '' }); }}
+                          className="hidden sm:block text-gray-500 hover:text-gray-300 p-2 shrink-0" title="Copy to new session">⧉</button>
+                        <button onClick={e => { e.stopPropagation(); setEditingSession({ ...activeSession, start_date: activeSession.start_date.slice(0, 10), target_date: activeSession.target_date.slice(0, 10), notes: activeSession.notes || '' }); }}
+                          className="hidden sm:block text-gray-500 hover:text-gray-300 p-2 shrink-0">✎</button>
+                        <button onClick={e => { e.stopPropagation(); deleteSession(activeSession.id); }}
+                          className="hidden sm:block text-red-500 hover:text-red-400 p-2 shrink-0">✕</button>
                       </div>
-                      <button onClick={() => { setCopyingSession(activeSession.id); setCopyForm({ start_date: today, target_date: '' }); }}
-                        className="text-gray-500 hover:text-gray-300 p-2 shrink-0" title="Copy to new session">⧉</button>
-                      <button onClick={() => setEditingSession({ ...activeSession, start_date: activeSession.start_date.slice(0, 10), target_date: activeSession.target_date.slice(0, 10), notes: activeSession.notes || '' })}
-                        className="text-gray-500 hover:text-gray-300 p-2 shrink-0">✎</button>
-                      <button onClick={() => deleteSession(activeSession.id)}
-                        className="text-red-500 hover:text-red-400 p-2 shrink-0">✕</button>
                     </div>
                     {copyingSession === activeSession.id && (
-                      <form onSubmit={submitCopySession} className="mt-2 space-y-1.5 pt-2 border-t border-violet-600/20">
+                      <form onSubmit={submitCopySession} className="mt-2 space-y-1.5 pt-2">
                         <p className="text-xs text-gray-400 font-medium">Copy to new session</p>
                         <input type="date" required value={copyForm.start_date}
                           onChange={e => setCopyForm(f => ({ ...f, start_date: e.target.value }))}
@@ -261,7 +268,7 @@ export default function Dashboard() {
                         </div>
                       </form>
                     )}
-                  </div>
+                  </>
                 )}
               </div>
             )}
@@ -302,7 +309,7 @@ export default function Dashboard() {
                             </form>
                           ) : (
                             <div className="flex items-start gap-1">
-                              <button className="flex-1 text-left" onClick={() => { setActiveSession(s); setCalcResults({}); setShowOtherSessions(false); }}>
+                              <button className="flex-1 text-left py-1" onClick={() => { setActiveSession(s); setCalcResults({}); setShowOtherSessions(false); }}>
                                 <div className="font-medium flex items-center gap-2 flex-wrap">
                                   → {new Date(s.target_date).toLocaleDateString()}
                                   {daysLeftBadge(s.target_date)}
@@ -311,11 +318,11 @@ export default function Dashboard() {
                                 {s.notes && <div className="text-xs opacity-50 mt-0.5 line-clamp-1">{s.notes}</div>}
                               </button>
                               <button onClick={() => { setCopyingSession(s.id); setCopyForm({ start_date: today, target_date: '' }); }}
-                                className="text-gray-500 hover:text-gray-300 p-2 shrink-0" title="Copy to new session">⧉</button>
+                                className="hidden sm:block text-gray-500 hover:text-gray-300 p-2 shrink-0" title="Copy to new session">⧉</button>
                               <button onClick={() => setEditingSession({ ...s, start_date: s.start_date.slice(0, 10), target_date: s.target_date.slice(0, 10), notes: s.notes || '' })}
-                                className="text-gray-500 hover:text-gray-300 p-2 shrink-0">✎</button>
+                                className="hidden sm:block text-gray-500 hover:text-gray-300 p-2 shrink-0">✎</button>
                               <button onClick={() => deleteSession(s.id)}
-                                className="text-red-500 hover:text-red-400 p-2 shrink-0">✕</button>
+                                className="hidden sm:block text-red-500 hover:text-red-400 p-2 shrink-0">✕</button>
                             </div>
                           )}
                         </div>
@@ -402,7 +409,8 @@ export default function Dashboard() {
                   const isExpanded = expandedRegimen === r.id;
                   return (
                     <div key={r.id} className="rounded-xl bg-gray-900 border border-gray-800 p-5">
-                      <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-start justify-between gap-3 cursor-pointer"
+                        onClick={() => setExpandedRegimen(isExpanded ? null : r.id)}>
                         <div className="min-w-0">
                           <h3 className="font-semibold text-white">{r.supplement_name}</h3>
                           <p className="text-xs text-gray-500 truncate">{r.brand} · {r.pills_per_bottle} pills/bottle · ${Number(r.price).toFixed(2)}</p>
@@ -411,11 +419,11 @@ export default function Dashboard() {
                           <span className="text-sm text-gray-400 whitespace-nowrap mr-1">
                             {calcResults[r.id] != null ? calcResults[r.id].currentOnHand : r.current_inventory} on hand
                           </span>
-                          <button onClick={() => setExpandedRegimen(isExpanded ? null : r.id)}
-                            className={`p-2 transition-colors ${isExpanded ? 'text-violet-400 hover:text-violet-300' : 'text-gray-500 hover:text-gray-300'}`}>
+                          <button onClick={e => { e.stopPropagation(); setExpandedRegimen(isExpanded ? null : r.id); }}
+                            className={`hidden sm:block p-2 transition-colors ${isExpanded ? 'text-violet-400 hover:text-violet-300' : 'text-gray-500 hover:text-gray-300'}`}>
                             ✎
                           </button>
-                          <button onClick={() => deleteRegimen(r.id)} className="text-red-500 hover:text-red-400 p-2">✕</button>
+                          <button onClick={e => { e.stopPropagation(); deleteRegimen(r.id); }} className="hidden sm:block text-red-500 hover:text-red-400 p-2">✕</button>
                         </div>
                       </div>
 
@@ -447,6 +455,12 @@ export default function Dashboard() {
                             onUpdate={() => loadPhases(r.id)}
                             sessionTotalDays={sessionTotalDays}
                           />
+                          <div className="sm:hidden flex gap-2 pt-2 border-t border-gray-700/50">
+                            <button onClick={() => setExpandedRegimen(null)}
+                              className="flex-1 py-2.5 rounded bg-gray-700 hover:bg-gray-600 text-gray-200 text-sm font-medium">Done</button>
+                            <button onClick={() => deleteRegimen(r.id)}
+                              className="px-4 py-2.5 rounded border border-red-900 text-red-400 hover:text-red-300 text-sm">Delete</button>
+                          </div>
                         </div>
                       )}
 
