@@ -41,6 +41,7 @@ export default function SupplementsPanel({ supplements, onUpdate }) {
   }
 
   async function deleteSupplement(id) {
+    if (!window.confirm('Delete this supplement? It will be removed from all regimens.')) return;
     await api.deleteSupplement(id);
     onUpdate();
   }

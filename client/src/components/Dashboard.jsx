@@ -25,6 +25,7 @@ export default function Dashboard() {
   const [addingRegimen, setAddingRegimen] = useState(false);
   const [expandedRegimen, setExpandedRegimen] = useState(null);
   const [regimenNotes, setRegimenNotes] = useState({});
+  const [calcError, setCalcError] = useState('');
 
   useEffect(() => { loadSupplements(); loadSessions(); }, []);
 
@@ -67,6 +68,10 @@ export default function Dashboard() {
 
   async function createSession(e) {
     e.preventDefault();
+    if (sessionForm.target_date <= sessionForm.start_date) {
+      alert('Target date must be after the start date.');
+      return;
+    }
     const s = await api.createSession(sessionForm);
     setSessionForm({ start_date: today, target_date: '', notes: '' });
     setSessions(prev => [s, ...prev]);
@@ -90,6 +95,12 @@ export default function Dashboard() {
   }
 
   async function runCalculate() {
+    const missing = regimens.filter(r => !phases[r.id]?.length);
+    if (missing.length) {
+      setCalcError(`Add at least one phase to: ${missing.map(r => r.supplement_name).join(', ')}`);
+      return;
+    }
+    setCalcError('');
     const { results } = await api.calculate(activeSession.id);
     const map = {};
     for (const r of results) map[r.regimen_id] = r;
@@ -98,6 +109,10 @@ export default function Dashboard() {
 
   async function saveSession(e) {
     e.preventDefault();
+    if (editingSession.target_date <= editingSession.start_date) {
+      alert('Target date must be after the start date.');
+      return;
+    }
     const updated = await api.updateSession(editingSession.id, {
       start_date: editingSession.start_date,
       target_date: editingSession.target_date,
@@ -109,6 +124,7 @@ export default function Dashboard() {
   }
 
   async function deleteSession(id) {
+    if (!window.confirm('Delete this session and all its regimens?')) return;
     await api.deleteSession(id);
     const remaining = sessions.filter(s => s.id !== id);
     setSessions(remaining);
@@ -126,6 +142,7 @@ export default function Dashboard() {
   }
 
   async function deleteRegimen(id) {
+    if (!window.confirm('Remove this regimen and all its phases?')) return;
     await api.deleteRegimen(id);
     loadRegimens();
   }
@@ -372,7 +389,7 @@ export default function Dashboard() {
                   )}
                 </div>
                 <div className="flex gap-2 shrink-0">
-                  <button onClick={() => setAddingRegimen(a => !a)}
+                  <button onClick={() => { setAddingRegimen(a => !a); setCalcError(''); }}
                     className="px-4 py-3 sm:py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-200 text-sm font-medium">
                     {addingRegimen ? 'Cancel' : '+ Add'}
                   </button>
@@ -382,6 +399,10 @@ export default function Dashboard() {
                   </button>
                 </div>
               </div>
+
+              {calcError && (
+                <p className="mt-2 text-xs text-red-400 bg-red-900/20 border border-red-900/40 rounded-lg px-3 py-2">{calcError}</p>
+              )}
 
               {/* Add regimen form */}
               {addingRegimen && (

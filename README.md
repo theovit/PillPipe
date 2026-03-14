@@ -180,3 +180,31 @@ PillPipe is fully self-hosted. Your data never leaves your own machine.
 - [ ] JWT authentication for multi-user or public hosting
 - [ ] Android app — offline-first with local SQLite (no server required)
 - [ ] Doctor portal — multi-tenant support for providers to push sessions to patients
+
+---
+
+## WIP: Dose Reminders & Notifications
+
+> **Status:** Planned — not yet implemented.
+
+The goal is push notifications that remind you to take each supplement at the right time, based on your active session and dosing schedule.
+
+### Planned behavior
+
+- Per-regimen reminder times (e.g. Magnesium at 9pm, LDN at 3am)
+- Respects `days_of_week` — only fires on scheduled days
+- Skips automatically when a phase ends or a session expires
+- Snooze and mark-as-taken actions from the notification
+
+### Delivery options under consideration
+
+| Option | Pros | Cons |
+|---|---|---|
+| **Web Push (PWA)** | Works on mobile via browser, no app store | Requires HTTPS + service worker |
+| **Pushover / ntfy** | Dead simple, self-hostable (ntfy) | Requires third-party account or extra container |
+| **Telegram Bot** | Rich interaction, free | Requires Telegram account |
+
+### Open questions
+
+- Should taken/skipped doses be logged for adherence tracking?
+- Should reminders be server-driven (cron job) or client-driven (service worker)?
