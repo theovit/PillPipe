@@ -136,7 +136,7 @@ export default function SupplementsPanel({ supplements, onUpdate }) {
                 </div>
               </form>
             ) : (
-              <div className="flex items-center px-4 py-3.5 sm:py-3 gap-3">
+              <div className="flex items-center px-5 py-4 sm:py-3.5 gap-3">
                 <div className="flex-1 min-w-0">
                   <div className="font-medium text-white text-sm">{s.name}</div>
                   <div className="text-xs text-gray-500 flex flex-wrap gap-x-1.5 gap-y-0.5 mt-0.5">

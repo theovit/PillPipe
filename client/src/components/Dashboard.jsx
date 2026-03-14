@@ -211,7 +211,7 @@ export default function Dashboard() {
                           {s.notes && <div className="text-xs opacity-50 mt-0.5 line-clamp-2">{s.notes}</div>}
                         </button>
                         <button onClick={() => { setCopyingSession(s.id); setCopyForm({ start_date: today, target_date: '' }); }}
-                          className="text-gray-500 hover:text-gray-300 p-2 shrink-0" title="Copy to new session">⊕</button>
+                          className="text-gray-500 hover:text-gray-300 p-2 shrink-0" title="Copy to new session">⧉</button>
                         <button onClick={() => setEditingSession({ ...s, start_date: s.start_date.slice(0, 10), target_date: s.target_date.slice(0, 10), notes: s.notes || '' })}
                           className="text-gray-500 hover:text-gray-300 p-2 shrink-0">✎</button>
                         <button onClick={() => deleteSession(s.id)}
@@ -262,13 +262,13 @@ export default function Dashboard() {
                   )}
                 </div>
                 <button onClick={runCalculate}
-                  className="px-4 py-2.5 sm:py-1.5 rounded-lg bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium shrink-0">
+                  className="px-5 py-3 sm:py-2 rounded-lg bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium shrink-0">
                   Calculate
                 </button>
               </div>
 
               {/* Add regimen */}
-              <form onSubmit={createRegimen} className="rounded-xl bg-gray-900 border border-gray-800 p-4 flex gap-3 items-end">
+              <form onSubmit={createRegimen} className="rounded-xl bg-gray-900 border border-gray-800 p-5 flex gap-3 items-end mt-4">
                 <div className="flex-1">
                   <label className="block text-xs text-gray-500 mb-1">Supplement</label>
                   <select required value={regimenForm.supplement_id}
@@ -286,8 +286,9 @@ export default function Dashboard() {
               </form>
 
               {/* Regimen cards */}
+              <div className="space-y-4 mt-2">
               {regimens.map(r => (
-                <div key={r.id} className="rounded-xl bg-gray-900 border border-gray-800 p-4 space-y-3">
+                <div key={r.id} className="rounded-xl bg-gray-900 border border-gray-800 p-5 space-y-4">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <h3 className="font-semibold text-white">{r.supplement_name}</h3>
@@ -316,6 +317,7 @@ export default function Dashboard() {
                 </div>
               ))}
 
+              </div>
               {regimens.length === 0 && (
                 <p className="text-center text-gray-600 py-8">No regimens yet. Add a supplement above.</p>
               )}
