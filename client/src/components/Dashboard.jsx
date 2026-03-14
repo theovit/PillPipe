@@ -146,9 +146,9 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-3">
+      <div className={`grid grid-cols-1 gap-4 sm:gap-6 ${view === 'supplements' ? '' : 'lg:grid-cols-3'}`}>
         {/* Sidebar: Sessions */}
-        <div className="lg:col-span-1 space-y-4">
+        {view !== 'supplements' && <div className="lg:col-span-1 space-y-4">
           <div className="rounded-xl bg-gray-900 border border-gray-800 p-4">
             <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">Sessions</h2>
             <form onSubmit={createSession} className="space-y-2.5 mb-4">
@@ -238,10 +238,10 @@ export default function Dashboard() {
               ))}
             </div>
           </div>
-        </div>
+        </div>}
 
         {/* Main panel */}
-        <div className="lg:col-span-2 space-y-4">
+        <div className={view === 'supplements' ? 'col-span-full' : 'lg:col-span-2'} style={{minWidth: 0}}>
           {view === 'supplements' ? (
             <SupplementsPanel supplements={supplements} onUpdate={loadSupplements} />
           ) : activeSession ? (
