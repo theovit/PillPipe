@@ -20,6 +20,8 @@ export default function Dashboard() {
   const [copyForm, setCopyForm] = useState({ start_date: today, target_date: '' });
   const [regimenForm, setRegimenForm] = useState({ supplement_id: '' });
   const [view, setView] = useState('regimens');
+  const [addingSession, setAddingSession] = useState(false);
+  const [showOtherSessions, setShowOtherSessions] = useState(false);
 
   useEffect(() => { loadSupplements(); loadSessions(); }, []);
 
@@ -58,6 +60,7 @@ export default function Dashboard() {
     setSessionForm({ start_date: today, target_date: '', notes: '' });
     setSessions(prev => [s, ...prev]);
     setActiveSession(s);
+    setAddingSession(false);
   }
 
   async function createRegimen(e) {
@@ -150,93 +153,174 @@ export default function Dashboard() {
         {/* Sidebar: Sessions */}
         {view !== 'supplements' && <div className="lg:col-span-1 space-y-4">
           <div className="rounded-xl bg-gray-900 border border-gray-800 p-4">
-            <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">Sessions</h2>
-            <form onSubmit={createSession} className="space-y-2.5 mb-4">
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">Start date</label>
-                <input type="date" required value={sessionForm.start_date}
-                  onChange={e => setSessionForm(f => ({ ...f, start_date: e.target.value }))}
-                  className={inputCls} />
-              </div>
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">Target date</label>
-                <input type="date" required value={sessionForm.target_date}
-                  onChange={e => setSessionForm(f => ({ ...f, target_date: e.target.value }))}
-                  className={inputCls} />
-              </div>
-              <div>
-                <label className="block text-xs text-gray-500 mb-1">Notes <span className="text-gray-600">(optional)</span></label>
-                <textarea rows={2} value={sessionForm.notes}
-                  onChange={e => setSessionForm(f => ({ ...f, notes: e.target.value }))}
-                  className={`${inputCls} resize-none`}
-                  placeholder="e.g. Dr. Smith — taper off LDN after 3mo" />
-              </div>
-              <button type="submit" className="w-full py-2.5 sm:py-2 rounded bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium">
-                New Session
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Session</h2>
+              <button onClick={() => { setAddingSession(a => !a); setEditingSession(null); }}
+                className="text-sm text-violet-400 hover:text-violet-300 font-medium">
+                {addingSession ? 'Cancel' : '+ New'}
               </button>
-            </form>
-            <div className="space-y-1">
-              {sessions.map(s => (
-                <div key={s.id}>
-                  <div className={`rounded px-3 py-2.5 text-sm transition-colors ${
-                    activeSession?.id === s.id
-                      ? 'bg-violet-700/30 border border-violet-600/40 text-violet-300'
-                      : 'hover:bg-gray-800 text-gray-400'
-                  }`}>
-                    {editingSession?.id === s.id ? (
-                      <form onSubmit={saveSession} className="space-y-1.5">
-                        <input type="date" required value={editingSession.start_date}
-                          onChange={e => setEditingSession(f => ({ ...f, start_date: e.target.value }))}
+            </div>
+
+            {/* New session form */}
+            {addingSession && (
+              <form onSubmit={createSession} className="space-y-2.5 mb-4">
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Start date</label>
+                  <input type="date" required value={sessionForm.start_date}
+                    onChange={e => setSessionForm(f => ({ ...f, start_date: e.target.value }))}
+                    className={inputCls} />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Target date</label>
+                  <input type="date" required value={sessionForm.target_date}
+                    onChange={e => setSessionForm(f => ({ ...f, target_date: e.target.value }))}
+                    className={inputCls} />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-500 mb-1">Notes <span className="text-gray-600">(optional)</span></label>
+                  <textarea rows={2} value={sessionForm.notes}
+                    onChange={e => setSessionForm(f => ({ ...f, notes: e.target.value }))}
+                    className={`${inputCls} resize-none`}
+                    placeholder="e.g. Dr. Smith — taper off LDN after 3mo" />
+                </div>
+                <button type="submit" className="w-full py-2.5 sm:py-2 rounded bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium">
+                  Create Session
+                </button>
+              </form>
+            )}
+
+            {/* Active session */}
+            {activeSession && !addingSession && (
+              <div>
+                {editingSession?.id === activeSession.id ? (
+                  <form onSubmit={saveSession} className="space-y-1.5">
+                    <input type="date" required value={editingSession.start_date}
+                      onChange={e => setEditingSession(f => ({ ...f, start_date: e.target.value }))}
+                      className={inputCls} />
+                    <input type="date" required value={editingSession.target_date}
+                      onChange={e => setEditingSession(f => ({ ...f, target_date: e.target.value }))}
+                      className={inputCls} />
+                    <textarea rows={2} value={editingSession.notes || ''}
+                      onChange={e => setEditingSession(f => ({ ...f, notes: e.target.value }))}
+                      className={`${inputCls} resize-none`}
+                      placeholder="Notes" />
+                    <div className="flex gap-2 pt-0.5">
+                      <button type="submit" className="px-3 py-2 sm:py-1 rounded bg-violet-600 hover:bg-violet-500 text-white text-sm">Save</button>
+                      <button type="button" onClick={() => setEditingSession(null)} className="px-3 py-2 sm:py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm">Cancel</button>
+                    </div>
+                  </form>
+                ) : (
+                  <div className="rounded-lg bg-violet-700/20 border border-violet-600/30 px-3 py-3">
+                    <div className="flex items-start gap-1">
+                      <div className="flex-1 min-w-0">
+                        <div className="font-medium text-violet-300 flex items-center gap-2 flex-wrap text-sm">
+                          → {new Date(activeSession.target_date).toLocaleDateString()}
+                          {daysLeftBadge(activeSession.target_date)}
+                        </div>
+                        <div className="text-xs text-gray-500 mt-0.5">from {new Date(activeSession.start_date).toLocaleDateString()}</div>
+                        {activeSession.notes && <div className="text-xs text-gray-400 mt-1.5 leading-relaxed">{activeSession.notes}</div>}
+                      </div>
+                      <button onClick={() => { setCopyingSession(activeSession.id); setCopyForm({ start_date: today, target_date: '' }); }}
+                        className="text-gray-500 hover:text-gray-300 p-2 shrink-0" title="Copy to new session">⧉</button>
+                      <button onClick={() => setEditingSession({ ...activeSession, start_date: activeSession.start_date.slice(0, 10), target_date: activeSession.target_date.slice(0, 10), notes: activeSession.notes || '' })}
+                        className="text-gray-500 hover:text-gray-300 p-2 shrink-0">✎</button>
+                      <button onClick={() => deleteSession(activeSession.id)}
+                        className="text-red-500 hover:text-red-400 p-2 shrink-0">✕</button>
+                    </div>
+                    {copyingSession === activeSession.id && (
+                      <form onSubmit={submitCopySession} className="mt-2 space-y-1.5 pt-2 border-t border-violet-600/20">
+                        <p className="text-xs text-gray-400 font-medium">Copy to new session</p>
+                        <input type="date" required value={copyForm.start_date}
+                          onChange={e => setCopyForm(f => ({ ...f, start_date: e.target.value }))}
                           className={inputCls} />
-                        <input type="date" required value={editingSession.target_date}
-                          onChange={e => setEditingSession(f => ({ ...f, target_date: e.target.value }))}
+                        <input type="date" required value={copyForm.target_date}
+                          onChange={e => setCopyForm(f => ({ ...f, target_date: e.target.value }))}
                           className={inputCls} />
-                        <textarea rows={2} value={editingSession.notes || ''}
-                          onChange={e => setEditingSession(f => ({ ...f, notes: e.target.value }))}
-                          className={`${inputCls} resize-none`}
-                          placeholder="Notes" />
                         <div className="flex gap-2 pt-0.5">
-                          <button type="submit" className="px-3 py-2 sm:py-1 rounded bg-violet-600 hover:bg-violet-500 text-white text-sm">Save</button>
-                          <button type="button" onClick={() => setEditingSession(null)} className="px-3 py-2 sm:py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm">Cancel</button>
+                          <button type="submit" className="px-3 py-2 sm:py-1 rounded bg-violet-600 hover:bg-violet-500 text-white text-sm">Copy</button>
+                          <button type="button" onClick={() => setCopyingSession(null)} className="px-3 py-2 sm:py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm">Cancel</button>
                         </div>
                       </form>
-                    ) : (
-                      <div className="flex items-start gap-1">
-                        <button className="flex-1 text-left" onClick={() => { setActiveSession(s); setCalcResults({}); }}>
-                          <div className="font-medium flex items-center gap-2 flex-wrap">
-                            → {new Date(s.target_date).toLocaleDateString()}
-                            {daysLeftBadge(s.target_date)}
-                          </div>
-                          <div className="text-xs opacity-60">from {new Date(s.start_date).toLocaleDateString()}</div>
-                          {s.notes && <div className="text-xs opacity-50 mt-0.5 line-clamp-2">{s.notes}</div>}
-                        </button>
-                        <button onClick={() => { setCopyingSession(s.id); setCopyForm({ start_date: today, target_date: '' }); }}
-                          className="text-gray-500 hover:text-gray-300 p-2 shrink-0" title="Copy to new session">⧉</button>
-                        <button onClick={() => setEditingSession({ ...s, start_date: s.start_date.slice(0, 10), target_date: s.target_date.slice(0, 10), notes: s.notes || '' })}
-                          className="text-gray-500 hover:text-gray-300 p-2 shrink-0">✎</button>
-                        <button onClick={() => deleteSession(s.id)}
-                          className="text-red-500 hover:text-red-400 p-2 shrink-0">✕</button>
-                      </div>
                     )}
                   </div>
-                  {copyingSession === s.id && (
-                    <form onSubmit={submitCopySession} className="mt-1 space-y-1.5 px-3 py-3 bg-gray-800/50 rounded border border-gray-700">
-                      <p className="text-xs text-gray-400 font-medium">Copy to new session</p>
-                      <input type="date" required value={copyForm.start_date}
-                        onChange={e => setCopyForm(f => ({ ...f, start_date: e.target.value }))}
-                        className={inputCls} />
-                      <input type="date" required value={copyForm.target_date}
-                        onChange={e => setCopyForm(f => ({ ...f, target_date: e.target.value }))}
-                        className={inputCls} />
-                      <div className="flex gap-2 pt-0.5">
-                        <button type="submit" className="px-3 py-2 sm:py-1 rounded bg-violet-600 hover:bg-violet-500 text-white text-sm">Copy</button>
-                        <button type="button" onClick={() => setCopyingSession(null)} className="px-3 py-2 sm:py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm">Cancel</button>
+                )}
+              </div>
+            )}
+
+            {!activeSession && !addingSession && (
+              <p className="text-xs text-gray-600 text-center py-2">No sessions yet.</p>
+            )}
+
+            {/* Other sessions */}
+            {sessions.length > 1 && !addingSession && (
+              <div className="mt-3">
+                <button onClick={() => setShowOtherSessions(s => !s)}
+                  className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-300 transition-colors">
+                  <span>{showOtherSessions ? '▾' : '▸'}</span>
+                  <span>{sessions.length - 1} other session{sessions.length - 1 !== 1 ? 's' : ''}</span>
+                </button>
+                {showOtherSessions && (
+                  <div className="mt-2 space-y-1">
+                    {sessions.filter(s => s.id !== activeSession?.id).map(s => (
+                      <div key={s.id}>
+                        <div className="rounded px-3 py-2.5 text-sm hover:bg-gray-800 text-gray-400 transition-colors">
+                          {editingSession?.id === s.id ? (
+                            <form onSubmit={saveSession} className="space-y-1.5">
+                              <input type="date" required value={editingSession.start_date}
+                                onChange={e => setEditingSession(f => ({ ...f, start_date: e.target.value }))}
+                                className={inputCls} />
+                              <input type="date" required value={editingSession.target_date}
+                                onChange={e => setEditingSession(f => ({ ...f, target_date: e.target.value }))}
+                                className={inputCls} />
+                              <textarea rows={2} value={editingSession.notes || ''}
+                                onChange={e => setEditingSession(f => ({ ...f, notes: e.target.value }))}
+                                className={`${inputCls} resize-none`}
+                                placeholder="Notes" />
+                              <div className="flex gap-2 pt-0.5">
+                                <button type="submit" className="px-3 py-2 sm:py-1 rounded bg-violet-600 hover:bg-violet-500 text-white text-sm">Save</button>
+                                <button type="button" onClick={() => setEditingSession(null)} className="px-3 py-2 sm:py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm">Cancel</button>
+                              </div>
+                            </form>
+                          ) : (
+                            <div className="flex items-start gap-1">
+                              <button className="flex-1 text-left" onClick={() => { setActiveSession(s); setCalcResults({}); setShowOtherSessions(false); }}>
+                                <div className="font-medium flex items-center gap-2 flex-wrap">
+                                  → {new Date(s.target_date).toLocaleDateString()}
+                                  {daysLeftBadge(s.target_date)}
+                                </div>
+                                <div className="text-xs opacity-60">from {new Date(s.start_date).toLocaleDateString()}</div>
+                                {s.notes && <div className="text-xs opacity-50 mt-0.5 line-clamp-1">{s.notes}</div>}
+                              </button>
+                              <button onClick={() => { setCopyingSession(s.id); setCopyForm({ start_date: today, target_date: '' }); }}
+                                className="text-gray-500 hover:text-gray-300 p-2 shrink-0" title="Copy to new session">⧉</button>
+                              <button onClick={() => setEditingSession({ ...s, start_date: s.start_date.slice(0, 10), target_date: s.target_date.slice(0, 10), notes: s.notes || '' })}
+                                className="text-gray-500 hover:text-gray-300 p-2 shrink-0">✎</button>
+                              <button onClick={() => deleteSession(s.id)}
+                                className="text-red-500 hover:text-red-400 p-2 shrink-0">✕</button>
+                            </div>
+                          )}
+                        </div>
+                        {copyingSession === s.id && (
+                          <form onSubmit={submitCopySession} className="mt-1 space-y-1.5 px-3 py-3 bg-gray-800/50 rounded border border-gray-700">
+                            <p className="text-xs text-gray-400 font-medium">Copy to new session</p>
+                            <input type="date" required value={copyForm.start_date}
+                              onChange={e => setCopyForm(f => ({ ...f, start_date: e.target.value }))}
+                              className={inputCls} />
+                            <input type="date" required value={copyForm.target_date}
+                              onChange={e => setCopyForm(f => ({ ...f, target_date: e.target.value }))}
+                              className={inputCls} />
+                            <div className="flex gap-2 pt-0.5">
+                              <button type="submit" className="px-3 py-2 sm:py-1 rounded bg-violet-600 hover:bg-violet-500 text-white text-sm">Copy</button>
+                              <button type="button" onClick={() => setCopyingSession(null)} className="px-3 py-2 sm:py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm">Cancel</button>
+                            </div>
+                          </form>
+                        )}
                       </div>
-                    </form>
-                  )}
-                </div>
-              ))}
-            </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>}
 
