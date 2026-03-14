@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS phases (
   dosage         INTEGER NOT NULL,
   duration_days  INTEGER NOT NULL,
   days_of_week   INTEGER[],        -- NULL = every day; 0=Sun 1=Mon ... 6=Sat
+  indefinite     BOOLEAN NOT NULL DEFAULT FALSE,
   sequence_order INTEGER NOT NULL,
   created_at     TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE (regimen_id, sequence_order)

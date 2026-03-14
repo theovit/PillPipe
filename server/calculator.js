@@ -33,8 +33,9 @@ function calculate({ phases, inventory, startDate, targetDate, pillsPerBottle, p
 
   for (const phase of sorted) {
     const dow = phase.days_of_week && phase.days_of_week.length > 0 ? phase.days_of_week : null;
+    const phaseDays = phase.indefinite ? (totalDays - currentDay) : phase.duration_days;
 
-    for (let d = 0; d < phase.duration_days; d++) {
+    for (let d = 0; d < phaseDays; d++) {
       if (currentDay >= totalDays) break;
 
       // Check if this calendar day is a dosing day

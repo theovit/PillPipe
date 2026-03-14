@@ -21,7 +21,7 @@ PillPipe answers both questions.
 
 - **Sessions** — define a treatment window (start → next appointment). See days remaining or days overdue at a glance.
 - **Regimens** — attach supplements to a session and define their dosing schedule.
-- **Phases** — ordered dosage steps (e.g. "2 pills/day for 2 weeks, then 1 pill/day until the appointment"). Supports day-of-week selection (Mon/Wed/Fri dosing) and duration in days or weeks.
+- **Phases** — ordered dosage steps (e.g. "2 pills/day for 2 weeks, then 1 pill/day until the appointment"). Supports day-of-week selection (Mon/Wed/Fri dosing), duration in days or weeks, and an **Indefinite** flag for long-term maintenance supplements that fills the rest of the session automatically.
 - **Shortfall Engine** — calculates exactly how many pills you need, how many bottles to grab, and the total cost. Tracks current on-hand count as days pass.
 - **Grand total cost** — see the total spend across all regimens after calculating.
 - **Copy session** — clone a session's regimens and phases to a new session at your next appointment.
@@ -159,6 +159,7 @@ That's it. No port forwarding, no DNS, no certificates required. Only devices on
 | dosage | Integer | Pills per dose |
 | duration_days | Integer | Length of this phase |
 | days_of_week | Integer[] | Null = every day; 0=Sun … 6=Sat |
+| indefinite | Boolean | Fills remaining session days automatically |
 | sequence_order | Integer | 1, 2, 3… |
 
 ---

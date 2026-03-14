@@ -135,20 +135,20 @@ app.get('/regimens/:regimenId/phases', w(async (req, res) => {
 }));
 
 app.post('/regimens/:regimenId/phases', w(async (req, res) => {
-  const { dosage, duration_days, days_of_week, sequence_order } = req.body;
+  const { dosage, duration_days, days_of_week, sequence_order, indefinite } = req.body;
   const { rows } = await pool.query(
-    `INSERT INTO phases (regimen_id, dosage, duration_days, days_of_week, sequence_order)
-     VALUES ($1,$2,$3,$4,$5) RETURNING *`,
-    [req.params.regimenId, dosage, duration_days, days_of_week || null, sequence_order]
+    `INSERT INTO phases (regimen_id, dosage, duration_days, days_of_week, sequence_order, indefinite)
+     VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
+    [req.params.regimenId, dosage, indefinite ? 9999 : duration_days, days_of_week || null, sequence_order, !!indefinite]
   );
   res.status(201).json(rows[0]);
 }));
 
 app.put('/phases/:id', w(async (req, res) => {
-  const { dosage, duration_days, days_of_week, sequence_order } = req.body;
+  const { dosage, duration_days, days_of_week, sequence_order, indefinite } = req.body;
   const { rows } = await pool.query(
-    `UPDATE phases SET dosage=$1, duration_days=$2, days_of_week=$3, sequence_order=$4 WHERE id=$5 RETURNING *`,
-    [dosage, duration_days, days_of_week || null, sequence_order, req.params.id]
+    `UPDATE phases SET dosage=$1, duration_days=$2, days_of_week=$3, sequence_order=$4, indefinite=$5 WHERE id=$6 RETURNING *`,
+    [dosage, indefinite ? 9999 : duration_days, days_of_week || null, sequence_order, !!indefinite, req.params.id]
   );
   if (!rows.length) return res.status(404).json({ error: 'Not found' });
   res.json(rows[0]);
@@ -201,6 +201,7 @@ app.use((err, req, res, next) => {
 
 // ── Startup migrations ────────────────────────────────────────────────────────
 pool.query('ALTER TABLE sessions ADD COLUMN IF NOT EXISTS notes TEXT').catch(console.error);
+pool.query('ALTER TABLE phases ADD COLUMN IF NOT EXISTS indefinite BOOLEAN DEFAULT FALSE').catch(console.error);
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`PillPipe API running on port ${PORT}`));
