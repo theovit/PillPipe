@@ -5,6 +5,7 @@ import ShortfallAlert from './ShortfallAlert';
 import SupplementsPanel from './SupplementsPanel';
 
 const today = new Date().toISOString().slice(0, 10);
+const inputCls = 'w-full rounded bg-gray-800 border border-gray-700 px-3 py-2.5 sm:py-1.5 text-base sm:text-sm text-gray-200 focus:outline-none focus:border-violet-500';
 
 export default function Dashboard() {
   const [supplements, setSupplements] = useState([]);
@@ -107,8 +108,6 @@ export default function Dashboard() {
     loadRegimens();
   }
 
-  const inputCls = 'w-full rounded bg-gray-800 border border-gray-700 px-2 py-1 text-sm text-gray-200 focus:outline-none focus:border-violet-500';
-
   function daysLeftBadge(targetDate) {
     const d = Math.ceil((new Date(targetDate) - new Date()) / (1000 * 60 * 60 * 24));
     if (d < 0) return <span className="text-xs text-red-400">{Math.abs(d)}d overdue</span>;
@@ -128,31 +127,31 @@ export default function Dashboard() {
     : 0;
 
   return (
-    <div className="min-h-screen bg-gray-950 text-gray-200 p-6 max-w-4xl mx-auto">
+    <div className="min-h-screen bg-gray-950 text-gray-200 p-3 sm:p-6 max-w-4xl mx-auto">
       {/* Header */}
-      <div className="mb-8 flex items-end justify-between">
+      <div className="mb-6 sm:mb-8 flex items-center justify-between gap-3">
         <div>
-          <h1 className="text-3xl font-bold text-white tracking-tight">PillPipe</h1>
-          <p className="text-gray-500 text-sm mt-1">Supplement inventory & shortfall tracking</p>
+          <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">PillPipe</h1>
+          <p className="text-gray-500 text-xs sm:text-sm mt-0.5">Supplement inventory & shortfall tracking</p>
         </div>
-        <div className="flex gap-1 bg-gray-900 border border-gray-800 rounded-lg p-1">
+        <div className="flex gap-1 bg-gray-900 border border-gray-800 rounded-lg p-1 shrink-0">
           <button onClick={() => setView('regimens')}
-            className={`px-3 py-1 rounded text-sm font-medium transition-colors ${view === 'regimens' ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-gray-200'}`}>
+            className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${view === 'regimens' ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-gray-200'}`}>
             Regimens
           </button>
           <button onClick={() => setView('supplements')}
-            className={`px-3 py-1 rounded text-sm font-medium transition-colors ${view === 'supplements' ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-gray-200'}`}>
+            className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${view === 'supplements' ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-gray-200'}`}>
             Supplements
           </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-3">
         {/* Sidebar: Sessions */}
         <div className="lg:col-span-1 space-y-4">
           <div className="rounded-xl bg-gray-900 border border-gray-800 p-4">
             <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">Sessions</h2>
-            <form onSubmit={createSession} className="space-y-2 mb-4">
+            <form onSubmit={createSession} className="space-y-2.5 mb-4">
               <div>
                 <label className="block text-xs text-gray-500 mb-1">Start date</label>
                 <input type="date" required value={sessionForm.start_date}
@@ -172,39 +171,39 @@ export default function Dashboard() {
                   className={`${inputCls} resize-none`}
                   placeholder="e.g. Dr. Smith — taper off LDN after 3mo" />
               </div>
-              <button type="submit" className="w-full py-1.5 rounded bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium">
+              <button type="submit" className="w-full py-2.5 sm:py-2 rounded bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium">
                 New Session
               </button>
             </form>
             <div className="space-y-1">
               {sessions.map(s => (
                 <div key={s.id}>
-                  <div className={`rounded px-3 py-2 text-sm transition-colors ${
+                  <div className={`rounded px-3 py-2.5 text-sm transition-colors ${
                     activeSession?.id === s.id
                       ? 'bg-violet-700/30 border border-violet-600/40 text-violet-300'
                       : 'hover:bg-gray-800 text-gray-400'
                   }`}>
                     {editingSession?.id === s.id ? (
-                      <form onSubmit={saveSession} className="space-y-1">
+                      <form onSubmit={saveSession} className="space-y-1.5">
                         <input type="date" required value={editingSession.start_date}
                           onChange={e => setEditingSession(f => ({ ...f, start_date: e.target.value }))}
-                          className="w-full rounded bg-gray-800 border border-gray-700 px-2 py-1 text-xs text-gray-200 focus:outline-none focus:border-violet-500" />
+                          className={inputCls} />
                         <input type="date" required value={editingSession.target_date}
                           onChange={e => setEditingSession(f => ({ ...f, target_date: e.target.value }))}
-                          className="w-full rounded bg-gray-800 border border-gray-700 px-2 py-1 text-xs text-gray-200 focus:outline-none focus:border-violet-500" />
+                          className={inputCls} />
                         <textarea rows={2} value={editingSession.notes || ''}
                           onChange={e => setEditingSession(f => ({ ...f, notes: e.target.value }))}
-                          className="w-full rounded bg-gray-800 border border-gray-700 px-2 py-1 text-xs text-gray-200 focus:outline-none focus:border-violet-500 resize-none"
+                          className={`${inputCls} resize-none`}
                           placeholder="Notes" />
-                        <div className="flex gap-1 pt-0.5">
-                          <button type="submit" className="px-2 py-0.5 rounded bg-violet-600 hover:bg-violet-500 text-white text-xs">Save</button>
-                          <button type="button" onClick={() => setEditingSession(null)} className="px-2 py-0.5 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs">Cancel</button>
+                        <div className="flex gap-2 pt-0.5">
+                          <button type="submit" className="px-3 py-2 sm:py-1 rounded bg-violet-600 hover:bg-violet-500 text-white text-sm">Save</button>
+                          <button type="button" onClick={() => setEditingSession(null)} className="px-3 py-2 sm:py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm">Cancel</button>
                         </div>
                       </form>
                     ) : (
                       <div className="flex items-start gap-1">
                         <button className="flex-1 text-left" onClick={() => { setActiveSession(s); setCalcResults({}); }}>
-                          <div className="font-medium flex items-center gap-2">
+                          <div className="font-medium flex items-center gap-2 flex-wrap">
                             → {new Date(s.target_date).toLocaleDateString()}
                             {daysLeftBadge(s.target_date)}
                           </div>
@@ -212,26 +211,26 @@ export default function Dashboard() {
                           {s.notes && <div className="text-xs opacity-50 mt-0.5 line-clamp-2">{s.notes}</div>}
                         </button>
                         <button onClick={() => { setCopyingSession(s.id); setCopyForm({ start_date: today, target_date: '' }); }}
-                          className="text-gray-500 hover:text-gray-300 text-xs px-1 shrink-0 mt-0.5" title="Copy to new session">⊕</button>
+                          className="text-gray-500 hover:text-gray-300 p-2 shrink-0" title="Copy to new session">⊕</button>
                         <button onClick={() => setEditingSession({ ...s, start_date: s.start_date.slice(0, 10), target_date: s.target_date.slice(0, 10), notes: s.notes || '' })}
-                          className="text-gray-500 hover:text-gray-300 text-xs px-1 shrink-0 mt-0.5">✎</button>
+                          className="text-gray-500 hover:text-gray-300 p-2 shrink-0">✎</button>
                         <button onClick={() => deleteSession(s.id)}
-                          className="text-red-500 hover:text-red-400 text-xs px-1 shrink-0 mt-0.5">✕</button>
+                          className="text-red-500 hover:text-red-400 p-2 shrink-0">✕</button>
                       </div>
                     )}
                   </div>
                   {copyingSession === s.id && (
-                    <form onSubmit={submitCopySession} className="mt-1 space-y-1 px-3 py-2 bg-gray-800/50 rounded border border-gray-700">
+                    <form onSubmit={submitCopySession} className="mt-1 space-y-1.5 px-3 py-3 bg-gray-800/50 rounded border border-gray-700">
                       <p className="text-xs text-gray-400 font-medium">Copy to new session</p>
                       <input type="date" required value={copyForm.start_date}
                         onChange={e => setCopyForm(f => ({ ...f, start_date: e.target.value }))}
-                        className="w-full rounded bg-gray-800 border border-gray-700 px-2 py-1 text-xs text-gray-200 focus:outline-none focus:border-violet-500" />
+                        className={inputCls} />
                       <input type="date" required value={copyForm.target_date}
                         onChange={e => setCopyForm(f => ({ ...f, target_date: e.target.value }))}
-                        className="w-full rounded bg-gray-800 border border-gray-700 px-2 py-1 text-xs text-gray-200 focus:outline-none focus:border-violet-500" />
-                      <div className="flex gap-1 pt-0.5">
-                        <button type="submit" className="px-2 py-0.5 rounded bg-violet-600 hover:bg-violet-500 text-white text-xs">Copy</button>
-                        <button type="button" onClick={() => setCopyingSession(null)} className="px-2 py-0.5 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 text-xs">Cancel</button>
+                        className={inputCls} />
+                      <div className="flex gap-2 pt-0.5">
+                        <button type="submit" className="px-3 py-2 sm:py-1 rounded bg-violet-600 hover:bg-violet-500 text-white text-sm">Copy</button>
+                        <button type="button" onClick={() => setCopyingSession(null)} className="px-3 py-2 sm:py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm">Cancel</button>
                       </div>
                     </form>
                   )}
@@ -247,10 +246,10 @@ export default function Dashboard() {
             <SupplementsPanel supplements={supplements} onUpdate={loadSupplements} />
           ) : activeSession ? (
             <>
-              <div className="flex items-start justify-between">
+              <div className="flex items-start justify-between gap-3">
                 <div>
                   <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">
-                    Regimens — Target: {new Date(activeSession.target_date).toLocaleDateString()}
+                    Regimens — {new Date(activeSession.target_date).toLocaleDateString()}
                     {daysLeft >= 0
                       ? <span className="ml-2 text-violet-400 font-normal normal-case">· {daysLeft} days left</span>
                       : <span className="ml-2 text-red-400 font-normal normal-case">· {Math.abs(daysLeft)} days overdue</span>
@@ -262,10 +261,8 @@ export default function Dashboard() {
                     </p>
                   )}
                 </div>
-                <button
-                  onClick={runCalculate}
-                  className="px-4 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium shrink-0"
-                >
+                <button onClick={runCalculate}
+                  className="px-4 py-2.5 sm:py-1.5 rounded-lg bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium shrink-0">
                   Calculate
                 </button>
               </div>
@@ -276,14 +273,14 @@ export default function Dashboard() {
                   <label className="block text-xs text-gray-500 mb-1">Supplement</label>
                   <select required value={regimenForm.supplement_id}
                     onChange={e => setRegimenForm(f => ({ ...f, supplement_id: e.target.value }))}
-                    className="w-full rounded bg-gray-800 border border-gray-700 px-2 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-violet-500">
+                    className={inputCls}>
                     <option value="">Select…</option>
                     {supplements.map(s => (
                       <option key={s.id} value={s.id}>{s.name}{s.brand ? ` (${s.brand})` : ''} — {s.current_inventory} on hand</option>
                     ))}
                   </select>
                 </div>
-                <button type="submit" className="px-4 py-1.5 rounded bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium">
+                <button type="submit" className="px-4 py-2.5 sm:py-1.5 rounded bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium shrink-0">
                   Add
                 </button>
               </form>
@@ -291,18 +288,18 @@ export default function Dashboard() {
               {/* Regimen cards */}
               {regimens.map(r => (
                 <div key={r.id} className="rounded-xl bg-gray-900 border border-gray-800 p-4 space-y-3">
-                  <div className="flex items-start justify-between">
-                    <div>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
                       <h3 className="font-semibold text-white">{r.supplement_name}</h3>
-                      <p className="text-xs text-gray-500">{r.brand} · {r.pills_per_bottle} pills/bottle · ${Number(r.price).toFixed(2)}</p>
+                      <p className="text-xs text-gray-500 truncate">{r.brand} · {r.pills_per_bottle} pills/bottle · ${Number(r.price).toFixed(2)}</p>
                     </div>
-                    <div className="flex items-center gap-3">
-                      <span className="text-sm text-gray-400">
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-sm text-gray-400 whitespace-nowrap">
                         {calcResults[r.id] != null
                           ? calcResults[r.id].currentOnHand
-                          : r.current_inventory} pills on hand
+                          : r.current_inventory} on hand
                       </span>
-                      <button onClick={() => deleteRegimen(r.id)} className="text-red-500 hover:text-red-400 text-xs">✕</button>
+                      <button onClick={() => deleteRegimen(r.id)} className="text-red-500 hover:text-red-400 p-2">✕</button>
                     </div>
                   </div>
 

@@ -37,7 +37,7 @@ function DayPicker({ selected, onChange }) {
     <div className="flex gap-1">
       {DAYS.map(d => (
         <button key={d.value} type="button" onClick={() => toggle(d.value)}
-          className={`w-8 h-8 rounded text-xs font-medium transition-colors ${
+          className={`flex-1 h-9 sm:h-8 rounded text-xs font-medium transition-colors ${
             selected.includes(d.value)
               ? 'bg-violet-600 text-white'
               : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
@@ -52,7 +52,7 @@ function DayPicker({ selected, onChange }) {
 function UnitToggle({ unit, onChange }) {
   return (
     <button type="button" onClick={() => onChange(unit === 'd' ? 'w' : 'd')}
-      className="px-2 py-1 rounded bg-gray-700 hover:bg-gray-600 text-xs text-gray-300 font-medium w-8">
+      className="px-3 py-2.5 sm:py-1.5 rounded bg-gray-700 hover:bg-gray-600 text-sm text-gray-300 font-medium">
       {unit}
     </button>
   );
@@ -73,6 +73,7 @@ function defaultUnit(duration_days) {
   return duration_days && duration_days % 7 === 0 && duration_days >= 7 ? 'w' : 'd';
 }
 
+const inputCls = 'rounded bg-gray-800 border border-gray-700 px-3 py-2.5 sm:py-1.5 text-base sm:text-sm text-gray-200 focus:outline-none focus:border-violet-500';
 const EMPTY_FORM = (days) => ({ dosage: '', duration_days: days ?? '', days_of_week: [], indefinite: false });
 
 export default function PhaseEditor({ regimenId, phases, onUpdate, sessionTotalDays }) {
@@ -132,13 +133,11 @@ export default function PhaseEditor({ regimenId, phases, onUpdate, sessionTotalD
     onUpdate();
   }
 
-  const inputCls = 'w-20 rounded bg-gray-800 border border-gray-700 px-2 py-1 text-sm text-gray-200 focus:outline-none focus:border-violet-500';
-
   function IndefiniteToggle({ checked, onChange }) {
     return (
-      <label className="flex items-center gap-1.5 text-xs text-gray-400 cursor-pointer select-none">
+      <label className="flex items-center gap-2 text-sm text-gray-400 cursor-pointer select-none py-1">
         <input type="checkbox" checked={checked} onChange={e => onChange(e.target.checked)}
-          className="accent-violet-500" />
+          className="accent-violet-500 w-4 h-4" />
         Indefinite
       </label>
     );
@@ -149,17 +148,17 @@ export default function PhaseEditor({ regimenId, phases, onUpdate, sessionTotalD
       <div>
         <label className="block text-xs text-gray-500 mb-1">Span</label>
         {indefinite ? (
-          <div className="flex flex-col gap-1">
-            <span className="text-sm text-violet-400 font-medium">∞ fills session</span>
+          <div className="flex flex-col gap-1.5">
+            <span className="text-sm text-violet-400 font-medium py-2.5">∞ fills session</span>
             <IndefiniteToggle checked={indefinite} onChange={onIndefiniteChange} />
           </div>
         ) : (
-          <div className="flex flex-col gap-1">
-            <div className="flex gap-1 items-center">
+          <div className="flex flex-col gap-1.5">
+            <div className="flex gap-1.5 items-center">
               <input type="number" min="1" required={!indefinite}
                 value={durationDisplay(duration_days, unit)}
                 onChange={e => onDurationChange(durationToDays(e.target.value, unit))}
-                className={inputCls} />
+                className={`w-24 ${inputCls}`} />
               <UnitToggle unit={unit} onChange={onUnitChange} />
             </div>
             <IndefiniteToggle checked={indefinite} onChange={onIndefiniteChange} />
@@ -177,13 +176,13 @@ export default function PhaseEditor({ regimenId, phases, onUpdate, sessionTotalD
       {phases.map((p, i) => (
         <div key={p.id}>
           {editingId === p.id ? (
-            <form onSubmit={saveEdit} className="space-y-2 bg-gray-800/50 rounded px-3 py-2">
-              <div className="flex gap-2 items-start">
+            <form onSubmit={saveEdit} className="space-y-3 bg-gray-800/50 rounded px-3 py-3">
+              <div className="flex flex-col sm:flex-row gap-3 sm:items-start">
                 <div>
                   <label className="block text-xs text-gray-500 mb-1">Pills/dose</label>
                   <input type="number" min="1" required value={editForm.dosage}
                     onChange={e => setEditForm(f => ({ ...f, dosage: e.target.value }))}
-                    className={inputCls} />
+                    className={`w-24 ${inputCls}`} />
                 </div>
                 <SpanField
                   duration_days={editForm.duration_days}
@@ -196,17 +195,17 @@ export default function PhaseEditor({ regimenId, phases, onUpdate, sessionTotalD
               </div>
               <DayPicker selected={editForm.days_of_week} onChange={val => setEditForm(f => ({ ...f, days_of_week: val }))} />
               <div className="flex gap-2">
-                <button type="submit" className="px-3 py-1 rounded bg-violet-600 hover:bg-violet-500 text-white text-sm">Save</button>
-                <button type="button" onClick={() => setEditingId(null)} className="px-3 py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm">Cancel</button>
+                <button type="submit" className="px-4 py-2.5 sm:py-1.5 rounded bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium">Save</button>
+                <button type="button" onClick={() => setEditingId(null)} className="px-4 py-2.5 sm:py-1.5 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm">Cancel</button>
               </div>
             </form>
           ) : (
-            <div className="flex items-center justify-between gap-3 text-sm bg-gray-800/50 rounded px-3 py-2">
-              <span className="text-gray-400 w-6">#{i + 1}</span>
-              <span className="flex-1 text-gray-200">{formatSchedule(p)}</span>
-              <span className={`${p.indefinite ? 'text-violet-400' : 'text-gray-400'}`}>{formatDuration(p)}</span>
-              <button onClick={() => startEdit(p)} className="text-gray-500 hover:text-gray-300 text-xs px-1">✎</button>
-              <button onClick={() => deletePhase(p.id)} className="text-red-500 hover:text-red-400 text-xs px-1">✕</button>
+            <div className="flex items-center justify-between gap-2 text-sm bg-gray-800/50 rounded px-3 py-3 sm:py-2">
+              <span className="text-gray-400 w-6 shrink-0">#{i + 1}</span>
+              <span className="flex-1 text-gray-200 min-w-0">{formatSchedule(p)}</span>
+              <span className={`shrink-0 ${p.indefinite ? 'text-violet-400' : 'text-gray-400'}`}>{formatDuration(p)}</span>
+              <button onClick={() => startEdit(p)} className="text-gray-500 hover:text-gray-300 p-2 shrink-0">✎</button>
+              <button onClick={() => deletePhase(p.id)} className="text-red-500 hover:text-red-400 p-2 shrink-0">✕</button>
             </div>
           )}
         </div>
@@ -228,13 +227,13 @@ export default function PhaseEditor({ regimenId, phases, onUpdate, sessionTotalD
       )}
 
       {adding ? (
-        <form onSubmit={addPhase} className="space-y-2 pt-1">
-          <div className="flex gap-2 items-start">
+        <form onSubmit={addPhase} className="space-y-3 pt-1">
+          <div className="flex flex-col sm:flex-row gap-3 sm:items-start">
             <div>
               <label className="block text-xs text-gray-500 mb-1">Pills/dose</label>
               <input type="number" min="1" required value={form.dosage}
                 onChange={e => setForm(f => ({ ...f, dosage: e.target.value }))}
-                className={inputCls} />
+                className={`w-24 ${inputCls}`} />
             </div>
             <SpanField
               duration_days={form.duration_days}
@@ -252,14 +251,16 @@ export default function PhaseEditor({ regimenId, phases, onUpdate, sessionTotalD
             <DayPicker selected={form.days_of_week} onChange={val => setForm(f => ({ ...f, days_of_week: val }))} />
           </div>
           <div className="flex gap-2">
-            <button type="submit" className="px-3 py-1 rounded bg-violet-600 hover:bg-violet-500 text-white text-sm">Add</button>
-            <button type="button" onClick={() => { setAdding(false); setForm(EMPTY_FORM(remainingDays ?? sessionTotalDays)); setAddUnit(defaultUnit(remainingDays ?? sessionTotalDays)); }}
-              className="px-3 py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm">Cancel</button>
+            <button type="submit" className="px-4 py-2.5 sm:py-1.5 rounded bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium">Add</button>
+            <button type="button"
+              onClick={() => { setAdding(false); setForm(EMPTY_FORM(remainingDays ?? sessionTotalDays)); setAddUnit(defaultUnit(remainingDays ?? sessionTotalDays)); }}
+              className="px-4 py-2.5 sm:py-1.5 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm">Cancel</button>
           </div>
         </form>
       ) : (
-        <button onClick={() => { setForm(EMPTY_FORM(remainingDays ?? sessionTotalDays)); setAddUnit(defaultUnit(remainingDays ?? sessionTotalDays)); setAdding(true); }}
-          className="text-xs text-violet-400 hover:text-violet-300 mt-1">
+        <button
+          onClick={() => { setForm(EMPTY_FORM(remainingDays ?? sessionTotalDays)); setAddUnit(defaultUnit(remainingDays ?? sessionTotalDays)); setAdding(true); }}
+          className="text-sm text-violet-400 hover:text-violet-300 py-2 mt-1">
           + Add phase
         </button>
       )}
