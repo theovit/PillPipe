@@ -23,6 +23,7 @@ CREATE TABLE IF NOT EXISTS regimens (
   id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   session_id    UUID NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
   supplement_id UUID NOT NULL REFERENCES supplements(id) ON DELETE CASCADE,
+  notes         TEXT,
   created_at    TIMESTAMPTZ DEFAULT NOW()
 );
 
