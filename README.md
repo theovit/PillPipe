@@ -1,107 +1,181 @@
 # PillPipe
 
-PillPipe is a high-precision supplement inventory and protocol management web app. It is designed specifically for users on complex, multi-phase regimens where supplements are expensive and waste must be minimized.
+> Self-hosted supplement inventory and protocol management — built for complex, multi-phase regimens where every pill counts.
 
-## The Core Problem
+---
 
-Many specialized supplements cost $50+ per bottle. When a protocol involves tapering doses (e.g., "take 3 for 2 weeks, then 1 for 5 weeks"), standard pill trackers fail to predict exactly when you will run out. PillPipe calculates the exact pill-count gap between your current inventory and your next doctor's evaluation.
+## The Problem
 
-## Key Logic: The Shortfall Engine
+Standard pill trackers tell you what to take. They don't tell you if you'll run out before your next appointment.
 
-Unlike regular trackers, PillPipe calculates supply based on a **Target Date** (your next appointment).
+When a protocol involves tapering doses across weeks — and each bottle costs $50+ — you need to know:
 
-- **Covered:** You have enough pills to reach the Target Date.
-- **Shortfall:** You will run out X days before the Target Date.
-- **Waste Warning:** If you need 2 extra pills to finish a protocol, but must buy a 60-count bottle for $50, the app flags the cost vs. utility so you can decide whether to purchase or adjust the protocol.
+- **Will I have enough?** Exactly how many pills do I need between now and my next evaluation?
+- **Should I reorder?** If I'm 2 pills short but have to buy a 60-count bottle, is it worth it?
+
+PillPipe answers both questions.
+
+---
+
+## Features
+
+- **Sessions** — define a treatment window (start → next appointment). See days remaining or days overdue at a glance.
+- **Regimens** — attach supplements to a session and define their dosing schedule.
+- **Phases** — ordered dosage steps (e.g. "2 pills/day for 2 weeks, then 1 pill/day until the appointment"). Supports day-of-week selection (Mon/Wed/Fri dosing) and duration in days or weeks.
+- **Shortfall Engine** — calculates exactly how many pills you need, how many bottles to grab, and the total cost. Tracks current on-hand count as days pass.
+- **Grand total cost** — see the total spend across all regimens after calculating.
+- **Copy session** — clone a session's regimens and phases to a new session at your next appointment.
+- **Notes** — attach notes to sessions (doctor instructions, reminders, etc.).
+- **Supplements panel** — manage your supplement catalog with inventory, pricing, and type (maintenance vs. protocol).
+
+---
+
+## How It Works: The Shortfall Engine
+
+PillPipe models your entire regimen as a series of **phases** tied to a **Target Date** (your next appointment). Given your current inventory, it calculates:
+
+| Status | Meaning |
+|---|---|
+| **Covered** | You have enough pills to reach the Target Date |
+| **Shortfall** | You will run out before the Target Date — grab N bottles |
+| **Waste Warning** | You need N pills but must buy a full bottle — flags cost vs. utility |
+
+The engine also accounts for **days already elapsed** — the on-hand count decrements as the session progresses so your inventory stays accurate in real time.
+
+---
 
 ## Tech Stack
 
-- **Frontend:** React (Vite) + Tailwind CSS
-- **Backend:** Node.js + Express
-- **Database:** PostgreSQL
-- **Orchestration:** Docker Compose
+| Layer | Technology |
+|---|---|
+| Frontend | React (Vite) + Tailwind CSS |
+| Backend | Node.js + Express |
+| Database | PostgreSQL |
+| Infrastructure | Docker Compose |
+
+---
 
 ## Project Structure
 
 ```
-pill-pipe/
-├── client/                 # React Frontend (Vite + Tailwind)
+PillPipe/
+├── client/                 # React frontend (Vite + Tailwind)
 │   └── src/
-│       ├── components/     # Dashboard, Phase Editor, ShortfallAlert
-│       └── utils/          # API services
-├── server/                 # Node.js Backend
-│   ├── index.js            # Express Routes & Middleware
-│   ├── calculator.js       # The Shortfall Engine Logic
-│   └── db.js               # Postgres Connection (using pg)
+│       ├── components/     # Dashboard, PhaseEditor, ShortfallAlert, SupplementsPanel
+│       └── utils/          # API service layer
+├── server/                 # Node.js + Express backend
+│   ├── index.js            # Routes & middleware
+│   ├── calculator.js       # Shortfall Engine logic
+│   └── db.js               # PostgreSQL connection
 ├── db/
-│   └── init.sql            # Database Schema & Initial Seeds
-├── README.md
-└── docker-compose.yml      # Docker Configuration for App + DB
+│   └── init.sql            # Schema & seed data
+├── .env.example            # Environment variable template
+├── docker-compose.yml
+└── README.md
 ```
+
+---
 
 ## Getting Started
 
-### Prerequisites
+**Prerequisites:** [Docker Desktop](https://www.docker.com/products/docker-desktop/)
 
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+### 1. Configure environment
 
-### Installation
+```bash
+cp .env.example .env
+```
 
-1. **Start the environment:**
-   ```bash
-   docker-compose up --build
-   ```
+Edit `.env` and set a strong `DB_PASSWORD` before running.
 
-2. **Database migration:**
-   The `init.sql` script in `/db` runs automatically on first startup to create all tables.
+### 2. Start the stack
 
-3. **Access:**
-   - Web UI: http://localhost:5173
-   - API: http://localhost:3000
+```bash
+docker compose up --build
+```
+
+The schema in `db/init.sql` runs automatically on first startup.
+
+| Service | URL |
+|---|---|
+| Web UI | http://localhost:5173 |
+
+---
+
+## Remote Access via Tailscale
+
+Tailscale lets you access PillPipe from your phone or any device without exposing it to the public internet.
+
+### Setup
+
+1. Install [Tailscale](https://tailscale.com/download) on the machine running Docker and on your phone.
+2. Sign in on both devices — they'll appear on the same private network automatically.
+3. Find your machine's Tailscale IP in the Tailscale admin console (e.g. `100.x.x.x`).
+4. Open `http://100.x.x.x:5173` on your phone.
+
+That's it. No port forwarding, no DNS, no certificates required. Only devices on your Tailscale network can reach the app.
+
+> **Note:** The backend (port 3000) and database (port 5432) are not exposed outside Docker — only the Vite frontend on port 5173 is reachable.
+
+---
 
 ## Database Schema
 
-### supplements
+**supplements** — the pills themselves
+
 | Column | Type | Notes |
 |---|---|---|
-| id | UUID | Primary Key |
-| name | String | |
-| brand | String | |
+| id | UUID | Primary key |
+| name | Text | |
+| brand | Text | |
 | pills_per_bottle | Integer | |
 | price | Decimal | |
 | type | Enum | `maintenance` or `protocol` |
+| current_inventory | Integer | Current pill count on hand |
 
-### sessions
+**sessions** — a treatment window
+
 | Column | Type | Notes |
 |---|---|---|
-| id | UUID | Primary Key |
+| id | UUID | Primary key |
 | start_date | Date | |
-| target_date | Date | The "finish line" or appointment date |
+| target_date | Date | Next appointment |
+| notes | Text | Optional doctor instructions / reminders |
 
-### regimens
+**regimens** — a supplement within a session
+
 | Column | Type | Notes |
 |---|---|---|
-| id | UUID | Primary Key |
-| session_id | UUID | FK to sessions |
-| supplement_id | UUID | FK to supplements |
-| current_inventory | Integer | Physical count at session start |
+| id | UUID | Primary key |
+| session_id | UUID | FK → sessions |
+| supplement_id | UUID | FK → supplements |
 
-### phases
+**phases** — ordered dosage steps within a regimen
+
 | Column | Type | Notes |
 |---|---|---|
-| id | UUID | Primary Key |
-| regimen_id | UUID | FK to regimens |
-| dosage | Integer | Pills per day |
-| duration_days | Integer | |
-| sequence_order | Integer | Phase 1, Phase 2, etc. |
+| id | UUID | Primary key |
+| regimen_id | UUID | FK → regimens |
+| dosage | Integer | Pills per dose |
+| duration_days | Integer | Length of this phase |
+| days_of_week | Integer[] | Null = every day; 0=Sun … 6=Sat |
+| sequence_order | Integer | 1, 2, 3… |
 
-## Security & Privacy
+---
 
-- **Self-Hosted:** You own your data. Run this on a home server, Raspberry Pi, or private VPS.
-- **No External APIs:** Your medical regimen never leaves your private network.
+## Privacy & Security
+
+PillPipe is fully self-hosted. Your data never leaves your own machine.
+
+- Backend API is internal to Docker — not exposed on the host
+- Database is internal to Docker — not exposed on the host
+- Credentials are stored in `.env` (gitignored)
+- Error responses never leak internal details
+
+---
 
 ## Roadmap
 
-- [ ] PWA Support: "Add to Home Screen" support for iOS/Android
-- [ ] Cost Projection: See the total cost of your next refill trip
-- [ ] Doctor Portal: Multi-tenant support allowing doctors to push sessions directly to patients
+- [ ] JWT authentication for multi-user or public hosting
+- [ ] Android app — offline-first with local SQLite (no server required)
+- [ ] Doctor portal — multi-tenant support for providers to push sessions to patients
