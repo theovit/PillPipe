@@ -22,6 +22,8 @@ export default function Dashboard() {
   const [view, setView] = useState('regimens');
   const [addingSession, setAddingSession] = useState(false);
   const [showOtherSessions, setShowOtherSessions] = useState(false);
+  const [addingRegimen, setAddingRegimen] = useState(false);
+  const [expandedRegimen, setExpandedRegimen] = useState(null);
 
   useEffect(() => { loadSupplements(); loadSessions(); }, []);
 
@@ -67,7 +69,15 @@ export default function Dashboard() {
     e.preventDefault();
     await api.createRegimen(activeSession.id, { supplement_id: regimenForm.supplement_id });
     setRegimenForm({ supplement_id: '' });
+    setAddingRegimen(false);
     loadRegimens();
+  }
+
+  function phaseSummary(ps) {
+    if (!ps?.length) return 'No phases';
+    const defined = ps.filter(p => !p.indefinite).reduce((s, p) => s + p.duration_days, 0);
+    const hasIndef = ps.some(p => p.indefinite);
+    return `${ps.length} phase${ps.length !== 1 ? 's' : ''} · ${defined}d${hasIndef ? ' + ∞' : ''}`;
   }
 
   async function runCalculate() {
@@ -345,65 +355,90 @@ export default function Dashboard() {
                     </p>
                   )}
                 </div>
-                <button onClick={runCalculate}
-                  className="px-5 py-3 sm:py-2 rounded-lg bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium shrink-0">
-                  Calculate
-                </button>
+                <div className="flex gap-2 shrink-0">
+                  <button onClick={() => setAddingRegimen(a => !a)}
+                    className="px-4 py-3 sm:py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-200 text-sm font-medium">
+                    {addingRegimen ? 'Cancel' : '+ Add'}
+                  </button>
+                  <button onClick={runCalculate}
+                    className="px-5 py-3 sm:py-2 rounded-lg bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium">
+                    Calculate
+                  </button>
+                </div>
               </div>
 
-              {/* Add regimen */}
-              <form onSubmit={createRegimen} className="rounded-xl bg-gray-900 border border-gray-800 p-5 flex gap-3 items-end mt-4">
-                <div className="flex-1">
-                  <label className="block text-xs text-gray-500 mb-1">Supplement</label>
-                  <select required value={regimenForm.supplement_id}
-                    onChange={e => setRegimenForm(f => ({ ...f, supplement_id: e.target.value }))}
-                    className={inputCls}>
-                    <option value="">Select…</option>
-                    {supplements.map(s => (
-                      <option key={s.id} value={s.id}>{s.name}{s.brand ? ` (${s.brand})` : ''} — {s.current_inventory} on hand</option>
-                    ))}
-                  </select>
-                </div>
-                <button type="submit" className="px-4 py-2.5 sm:py-1.5 rounded bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium shrink-0">
-                  Add
-                </button>
-              </form>
+              {/* Add regimen form */}
+              {addingRegimen && (
+                <form onSubmit={createRegimen} className="rounded-xl bg-gray-900 border border-gray-800 p-5 flex gap-3 items-end mt-4">
+                  <div className="flex-1">
+                    <label className="block text-xs text-gray-500 mb-1">Supplement</label>
+                    <select required value={regimenForm.supplement_id}
+                      onChange={e => setRegimenForm(f => ({ ...f, supplement_id: e.target.value }))}
+                      className={inputCls}>
+                      <option value="">Select…</option>
+                      {supplements.map(s => (
+                        <option key={s.id} value={s.id}>{s.name}{s.brand ? ` (${s.brand})` : ''} — {s.current_inventory} on hand</option>
+                      ))}
+                    </select>
+                  </div>
+                  <button type="submit" className="px-4 py-2.5 sm:py-1.5 rounded bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium shrink-0">
+                    Add
+                  </button>
+                </form>
+              )}
 
               {/* Regimen cards */}
-              <div className="space-y-4 mt-2">
-              {regimens.map(r => (
-                <div key={r.id} className="rounded-xl bg-gray-900 border border-gray-800 p-5 space-y-4">
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <h3 className="font-semibold text-white">{r.supplement_name}</h3>
-                      <p className="text-xs text-gray-500 truncate">{r.brand} · {r.pills_per_bottle} pills/bottle · ${Number(r.price).toFixed(2)}</p>
+              <div className="space-y-3 mt-4">
+                {regimens.map(r => {
+                  const isExpanded = expandedRegimen === r.id;
+                  return (
+                    <div key={r.id} className="rounded-xl bg-gray-900 border border-gray-800 p-5">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <h3 className="font-semibold text-white">{r.supplement_name}</h3>
+                          <p className="text-xs text-gray-500 truncate">{r.brand} · {r.pills_per_bottle} pills/bottle · ${Number(r.price).toFixed(2)}</p>
+                        </div>
+                        <div className="flex items-center gap-1 shrink-0">
+                          <span className="text-sm text-gray-400 whitespace-nowrap mr-1">
+                            {calcResults[r.id] != null ? calcResults[r.id].currentOnHand : r.current_inventory} on hand
+                          </span>
+                          <button onClick={() => setExpandedRegimen(isExpanded ? null : r.id)}
+                            className={`p-2 transition-colors ${isExpanded ? 'text-violet-400 hover:text-violet-300' : 'text-gray-500 hover:text-gray-300'}`}>
+                            ✎
+                          </button>
+                          <button onClick={() => deleteRegimen(r.id)} className="text-red-500 hover:text-red-400 p-2">✕</button>
+                        </div>
+                      </div>
+
+                      {/* Collapsed: phase summary */}
+                      {!isExpanded && (
+                        <p className="text-xs text-gray-600 mt-2">{phaseSummary(phases[r.id])}</p>
+                      )}
+
+                      {/* Expanded: full phase editor */}
+                      {isExpanded && (
+                        <div className="mt-4">
+                          <PhaseEditor
+                            regimenId={r.id}
+                            phases={phases[r.id] || []}
+                            onUpdate={() => loadPhases(r.id)}
+                            sessionTotalDays={sessionTotalDays}
+                          />
+                        </div>
+                      )}
+
+                      {calcResults[r.id] && (
+                        <div className="mt-3">
+                          <ShortfallAlert result={calcResults[r.id]} supplementName={r.supplement_name} />
+                        </div>
+                      )}
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <span className="text-sm text-gray-400 whitespace-nowrap">
-                        {calcResults[r.id] != null
-                          ? calcResults[r.id].currentOnHand
-                          : r.current_inventory} on hand
-                      </span>
-                      <button onClick={() => deleteRegimen(r.id)} className="text-red-500 hover:text-red-400 p-2">✕</button>
-                    </div>
-                  </div>
-
-                  <PhaseEditor
-                    regimenId={r.id}
-                    phases={phases[r.id] || []}
-                    onUpdate={() => loadPhases(r.id)}
-                    sessionTotalDays={sessionTotalDays}
-                  />
-
-                  {calcResults[r.id] && (
-                    <ShortfallAlert result={calcResults[r.id]} supplementName={r.supplement_name} />
-                  )}
-                </div>
-              ))}
-
+                  );
+                })}
               </div>
+
               {regimens.length === 0 && (
-                <p className="text-center text-gray-600 py-8">No regimens yet. Add a supplement above.</p>
+                <p className="text-center text-gray-600 py-8">No regimens yet. Use + Add above.</p>
               )}
             </>
           ) : (
