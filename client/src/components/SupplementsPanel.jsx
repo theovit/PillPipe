@@ -139,13 +139,17 @@ export default function SupplementsPanel({ supplements, onUpdate }) {
               <div className="flex items-center px-5 py-4 sm:py-3.5 gap-3">
                 <div className="flex-1 min-w-0">
                   <div className="font-medium text-white text-sm">{s.name}</div>
-                  <div className="text-xs text-gray-500 flex flex-wrap gap-x-1.5 gap-y-0.5 mt-0.5">
-                    {s.brand && <span>{s.brand} ·</span>}
-                    <span>{s.pills_per_bottle} pills/bottle · ${Number(s.price).toFixed(2)}</span>
-                    <span className="text-gray-300">{s.current_inventory} on hand</span>
-                    <span className={`px-1.5 py-0.5 rounded ${s.type === 'maintenance' ? 'bg-blue-900/40 text-blue-400' : 'bg-amber-900/40 text-amber-400'}`}>
-                      {s.type}
-                    </span>
+                  <div className="text-xs text-gray-500 mt-0.5 space-y-0.5">
+                    <div className="flex flex-wrap gap-x-1.5">
+                      {s.brand && <span>{s.brand} ·</span>}
+                      <span>{s.pills_per_bottle} pills/bottle · ${Number(s.price).toFixed(2)}</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-gray-300">{s.current_inventory} on hand</span>
+                      <span className={`px-1.5 py-0.5 rounded ${s.type === 'maintenance' ? 'bg-blue-900/40 text-blue-400' : 'bg-amber-900/40 text-amber-400'}`}>
+                        {s.type}
+                      </span>
+                    </div>
                   </div>
                 </div>
                 <button onClick={() => startEdit(s)} className="text-gray-500 hover:text-gray-300 p-2 shrink-0">✎</button>
