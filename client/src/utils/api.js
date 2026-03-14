@@ -29,6 +29,7 @@ export const api = {
   // Regimens
   getRegimens: (sessionId) => request(`/sessions/${sessionId}/regimens`),
   createRegimen: (sessionId, body) => request(`/sessions/${sessionId}/regimens`, { method: 'POST', body }),
+  updateRegimen: (id, body) => request(`/regimens/${id}`, { method: 'PATCH', body }),
   deleteRegimen: (id) => request(`/regimens/${id}`, { method: 'DELETE' }),
 
   // Phases

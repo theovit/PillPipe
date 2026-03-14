@@ -24,6 +24,7 @@ export default function Dashboard() {
   const [showOtherSessions, setShowOtherSessions] = useState(false);
   const [addingRegimen, setAddingRegimen] = useState(false);
   const [expandedRegimen, setExpandedRegimen] = useState(null);
+  const [regimenNotes, setRegimenNotes] = useState({});
 
   useEffect(() => { loadSupplements(); loadSessions(); }, []);
 
@@ -45,10 +46,18 @@ export default function Dashboard() {
     const data = await api.getRegimens(activeSession.id);
     setRegimens(data);
     const phasesMap = {};
+    const notesMap = {};
     for (const r of data) {
       phasesMap[r.id] = await api.getPhases(r.id);
+      notesMap[r.id] = r.notes || '';
     }
     setPhases(phasesMap);
+    setRegimenNotes(notesMap);
+  }
+
+  async function saveRegimenNotes(id) {
+    await api.updateRegimen(id, { notes: regimenNotes[id] || null });
+    setRegimens(prev => prev.map(r => r.id === id ? { ...r, notes: regimenNotes[id] || null } : r));
   }
 
   async function loadPhases(regimenId) {
@@ -410,14 +419,28 @@ export default function Dashboard() {
                         </div>
                       </div>
 
-                      {/* Collapsed: phase summary */}
+                      {/* Collapsed: phase summary + notes preview */}
                       {!isExpanded && (
-                        <p className="text-xs text-gray-600 mt-2">{phaseSummary(phases[r.id])}</p>
+                        <div className="mt-2 space-y-1">
+                          <p className="text-xs text-gray-600">{phaseSummary(phases[r.id])}</p>
+                          {r.notes && <p className="text-xs text-gray-500 italic line-clamp-1">{r.notes}</p>}
+                        </div>
                       )}
 
-                      {/* Expanded: full phase editor */}
+                      {/* Expanded: notes + full phase editor */}
                       {isExpanded && (
-                        <div className="mt-4">
+                        <div className="mt-4 space-y-4">
+                          <div>
+                            <label className="block text-xs text-gray-500 mb-1">Notes <span className="text-gray-600">(optional)</span></label>
+                            <textarea
+                              rows={2}
+                              value={regimenNotes[r.id] ?? ''}
+                              onChange={e => setRegimenNotes(n => ({ ...n, [r.id]: e.target.value }))}
+                              onBlur={() => saveRegimenNotes(r.id)}
+                              className={`${inputCls} resize-none`}
+                              placeholder="e.g. take with food, avoid at night…"
+                            />
+                          </div>
                           <PhaseEditor
                             regimenId={r.id}
                             phases={phases[r.id] || []}

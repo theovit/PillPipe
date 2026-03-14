@@ -120,6 +120,15 @@ app.post('/sessions/:sessionId/regimens', w(async (req, res) => {
   res.status(201).json(rows[0]);
 }));
 
+app.patch('/regimens/:id', w(async (req, res) => {
+  const { notes } = req.body;
+  const { rows } = await pool.query(
+    `UPDATE regimens SET notes=$1 WHERE id=$2 RETURNING *`,
+    [notes || null, req.params.id]
+  );
+  res.json(rows[0]);
+}));
+
 app.delete('/regimens/:id', w(async (req, res) => {
   await pool.query('DELETE FROM regimens WHERE id=$1', [req.params.id]);
   res.status(204).end();
@@ -202,6 +211,7 @@ app.use((err, req, res, next) => {
 // ── Startup migrations ────────────────────────────────────────────────────────
 pool.query('ALTER TABLE sessions ADD COLUMN IF NOT EXISTS notes TEXT').catch(console.error);
 pool.query('ALTER TABLE phases ADD COLUMN IF NOT EXISTS indefinite BOOLEAN DEFAULT FALSE').catch(console.error);
+pool.query('ALTER TABLE regimens ADD COLUMN IF NOT EXISTS notes TEXT').catch(console.error);
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`PillPipe API running on port ${PORT}`));
