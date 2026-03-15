@@ -1,6 +1,7 @@
 const express = require('express');
 const pool = require('./db');
 const { calculate } = require('./calculator');
+const { version } = require('./package.json');
 
 const app = express();
 app.use(express.json());
@@ -9,6 +10,7 @@ const w = fn => (req, res, next) => fn(req, res, next).catch(next);
 
 // ── Health ────────────────────────────────────────────────────────────────────
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
+app.get('/version', (req, res) => res.json({ version }));
 
 // ── Supplements ───────────────────────────────────────────────────────────────
 app.get('/supplements', w(async (req, res) => {
@@ -274,4 +276,4 @@ pool.query('ALTER TABLE phases ADD COLUMN IF NOT EXISTS indefinite BOOLEAN DEFAU
 pool.query('ALTER TABLE regimens ADD COLUMN IF NOT EXISTS notes TEXT').catch(console.error);
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`PillPipe API running on port ${PORT}`));
+app.listen(PORT, () => console.log(`PillPipe API v${version} running on port ${PORT}`));

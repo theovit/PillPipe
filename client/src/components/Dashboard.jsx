@@ -27,9 +27,14 @@ export default function Dashboard() {
   const [regimenNotes, setRegimenNotes] = useState({});
   const [calcError, setCalcError] = useState('');
   const [openSections, setOpenSections] = useState({});
+  const [appVersion, setAppVersion] = useState('');
   function toggleSection(name) { setOpenSections(p => ({ ...p, [name]: !p[name] })); }
 
-  useEffect(() => { loadSupplements(); loadSessions(); }, []);
+  useEffect(() => {
+    loadSupplements();
+    loadSessions();
+    api.getVersion().then(d => setAppVersion(d.version)).catch(() => {});
+  }, []);
 
   async function loadSupplements() {
     setSupplements(await api.getSupplements());
@@ -303,6 +308,10 @@ export default function Dashboard() {
               <p className="px-5 pb-4 text-xs text-gray-600 border-t border-gray-800 pt-3">Date format, default session duration — coming soon.</p>
             )}
           </div>
+
+          {appVersion && (
+            <p className="text-xs text-gray-700 text-center pt-2">PillPipe v{appVersion}</p>
+          )}
         </div>
       )}
 
