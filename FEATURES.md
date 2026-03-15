@@ -6,16 +6,7 @@
 
 ### P1 — Build Next
 
-#### Version Handling
-**Effort:** Very Low | **Value:** Medium — good hygiene, enables About section
-
-The running app should know and display its own version so users always know what build they're on. Foundation for the About section and future update notifications.
-
-**Planned behavior**
-- Server reads version from `package.json` at startup and logs it to stdout
-- `GET /version` endpoint returns `{ "version": "1.0.0" }`
-- Client fetches version on mount and displays it in the About section and/or footer
-- Follows [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`)
+*All P1 items complete. See Completed section below.*
 
 ---
 
@@ -184,3 +175,4 @@ Multi-tenant support allowing healthcare providers to create sessions and push t
 - [x] Quick inventory adjustment (+/− buttons on supplement rows)
 - [x] Data backup, restore, and clear (Settings → Data section)
 - [x] Settings page — full-screen tab with collapsible sections; SVG cog icon in nav; Appearance + Preferences placeholders ready
+- [x] Version handling — `GET /version` endpoint; version read from `package.json`; displayed in Settings footer
