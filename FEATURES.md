@@ -29,8 +29,6 @@ Add first-class support for liquid supplements and tinctures dosed in milliliter
 
 ---
 
----
-
 ### P2 — Near Term
 
 #### Dose Reminders & Notifications
@@ -63,12 +61,12 @@ A companion notification type for supplements that aren't part of a structured s
 - Alert includes supplement name, current on-hand quantity, and a reminder of the usual dose so the user knows how urgent the reorder is
 - Threshold is per-supplement and opt-in — does not fire by default
 
-**Open questions**
-- Should taken/skipped doses be logged for adherence tracking?
-- Should reminders be server-driven (cron job) or client-driven (service worker)?
-- Should the running low threshold be entered in days of supply or raw units (caps/ml/drops)?
-
----
+**Decisions made**
+- Delivery: Web Push (PWA) for now; Android push notifications will replace it when the mobile app ships
+- Dose logging: Yes — taken/skipped doses will be logged (feeds into P3 Adherence Tracking)
+- Scheduling: Server-driven cron job (more reliable than service worker)
+- Settings: Notification preferences will live in the Settings page
+- Running low threshold: TBD — days of supply or raw units
 
 ---
 
