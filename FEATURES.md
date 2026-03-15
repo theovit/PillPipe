@@ -80,6 +80,71 @@ Allow users to bump the on-hand count up or down directly from the supplements l
 
 ---
 
+### Data Backup
+Manual and automatic backup of all user data so nothing is lost if the Docker volume is wiped.
+
+**Options under consideration**
+- Manual export: download a `.sql` or `.json` snapshot from the UI
+- Auto-backup: scheduled `pg_dump` to a local file on a configurable interval
+- Restore: upload a backup file to reinitialize the database
+
+---
+
+### Google SSO + Drive Backup
+Sign in with Google to enable automatic backup of data to Google Drive.
+
+**Behavior**
+- OAuth2 login via Google — no separate account needed
+- Data exported as JSON and saved to a dedicated PillPipe folder in Drive
+- Backup triggered manually or on a schedule
+- Restore from Drive on first login or after a data loss event
+
+**Open questions**
+- Should Google login gate the whole app or just the backup feature?
+- How often should auto-backup run (daily, on every change)?
+
+---
+
+### Settings Menu
+A dedicated settings panel accessible from the main nav for app-wide preferences.
+
+**Planned settings**
+- **Font size** — small / medium / large
+- **Theme color picker** — change the violet accent to a user-chosen color
+- **Date format** — MM/DD/YYYY vs DD/MM/YYYY vs YYYY-MM-DD
+- **Default session duration** — pre-fill the target date offset when creating a new session
+- Other relevant preferences as features are added
+
+---
+
+### About Section
+A simple modal or page with app info.
+
+**Planned content**
+- App version
+- Short description and purpose
+- Link to GitHub repo
+- Credits / open source licenses
+
+---
+
+### Donate Section
+A way for users to support the project financially.
+
+**Planned content**
+- One-time donation via Ko-fi, Buy Me a Coffee, or GitHub Sponsors
+- Optional recurring support
+- Short note on what donations fund (hosting, development time, etc.)
+
+---
+
+### Flexible Ads
+*(Details to be provided later)*
+
+**Status:** Placeholder — more detail needed before scoping.
+
+---
+
 ## Completed (recent)
 
 - [x] Per-regimen notes with auto-save
