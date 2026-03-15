@@ -37,6 +37,16 @@ app.put('/supplements/:id', w(async (req, res) => {
   res.json(rows[0]);
 }));
 
+app.patch('/supplements/:id', w(async (req, res) => {
+  const { current_inventory } = req.body;
+  const { rows } = await pool.query(
+    `UPDATE supplements SET current_inventory=$1 WHERE id=$2 RETURNING *`,
+    [Math.max(0, current_inventory), req.params.id]
+  );
+  if (!rows.length) return res.status(404).json({ error: 'Not found' });
+  res.json(rows[0]);
+}));
+
 app.delete('/supplements/:id', w(async (req, res) => {
   await pool.query('DELETE FROM supplements WHERE id=$1', [req.params.id]);
   res.status(204).end();

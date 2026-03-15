@@ -17,6 +17,7 @@ export const api = {
   getSupplements: () => request('/supplements'),
   createSupplement: (body) => request('/supplements', { method: 'POST', body }),
   updateSupplement: (id, body) => request(`/supplements/${id}`, { method: 'PUT', body }),
+  patchSupplement: (id, body) => request(`/supplements/${id}`, { method: 'PATCH', body }),
   deleteSupplement: (id) => request(`/supplements/${id}`, { method: 'DELETE' }),
 
   // Sessions

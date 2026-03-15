@@ -9,6 +9,19 @@ export default function SupplementsPanel({ supplements, onUpdate }) {
   const [form, setForm] = useState(EMPTY);
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({});
+  const [localInventory, setLocalInventory] = useState({});
+
+  function getInventory(s) {
+    return localInventory[s.id] ?? s.current_inventory;
+  }
+
+  async function adjustInventory(e, s, delta) {
+    e.stopPropagation();
+    const next = Math.max(0, getInventory(s) + delta);
+    setLocalInventory(prev => ({ ...prev, [s.id]: next }));
+    await api.patchSupplement(s.id, { current_inventory: next });
+    onUpdate();
+  }
 
   function startEdit(s) {
     setEditingId(s.id);
@@ -148,12 +161,18 @@ export default function SupplementsPanel({ supplements, onUpdate }) {
                       <span>{s.pills_per_bottle} pills/bottle · ${Number(s.price).toFixed(2)}</span>
                     </div>
                     <div className="flex items-center gap-1.5">
-                      <span className="text-gray-300">{s.current_inventory} on hand</span>
+                      <span className="text-gray-300">{getInventory(s)} on hand</span>
                       <span className={`px-1.5 py-0.5 rounded ${s.type === 'maintenance' ? 'bg-blue-900/40 text-blue-400' : 'bg-amber-900/40 text-amber-400'}`}>
                         {s.type}
                       </span>
                     </div>
                   </div>
+                </div>
+                <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
+                  <button onClick={e => adjustInventory(e, s, -1)}
+                    className="w-7 h-7 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 text-base leading-none flex items-center justify-center">−</button>
+                  <button onClick={e => adjustInventory(e, s, 1)}
+                    className="w-7 h-7 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 text-base leading-none flex items-center justify-center">+</button>
                 </div>
                 <button onClick={e => { e.stopPropagation(); startEdit(s); }} className="hidden sm:block text-gray-500 hover:text-gray-300 p-2 shrink-0">✎</button>
                 <button onClick={e => { e.stopPropagation(); deleteSupplement(s.id); }} className="hidden sm:block text-red-500 hover:text-red-400 p-2 shrink-0">✕</button>
