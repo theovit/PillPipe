@@ -29,6 +29,28 @@ Per-regimen push notifications reminding you to take each supplement at the righ
 
 ## Future Features
 
+### Version Handling
+Track and expose the running application version so users and operators always know what build is deployed.
+
+**Behavior**
+- Server exposes a `GET /version` endpoint returning the current app version from `package.json`
+- Client displays the version in the About section (and footer or settings menu)
+- On startup, the server logs the running version to stdout
+- Version follows [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`)
+
+**Implementation notes**
+- Read version at startup from `server/package.json` (e.g. `const { version } = require('./package.json')`)
+- `GET /version` response: `{ "version": "1.0.0" }`
+- Client fetches version on mount and stores it in component state; displayed as "v1.0.0" in the UI
+- No authentication required — version endpoint is public
+
+**Open questions**
+- Should the client show a "new version available" banner when a newer release is detected (requires a release feed or remote manifest)?
+- Should version be included in the `GET /health` response as well?
+
+---
+
+
 ### Quick Inventory Adjustment
 Allow users to bump the on-hand count up or down directly from the supplements list without opening the full edit form.
 
