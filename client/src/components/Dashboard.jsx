@@ -318,9 +318,56 @@ export default function Dashboard() {
             )}
           </div>
 
-          {appVersion && (
-            <p className="text-xs text-gray-600 text-center pt-2 font-mono tracking-widest">v{appVersion}</p>
-          )}
+          {/* About */}
+          <div className="rounded-xl bg-gray-900 border border-gray-800 overflow-hidden">
+            <button onClick={() => toggleSection('about')}
+              className="w-full flex items-center justify-between px-5 py-4 text-left">
+              <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">About</h2>
+              <span className="text-gray-600 text-xs">{openSections.about ? '▲' : '▼'}</span>
+            </button>
+            {openSections.about && (
+              <div className="px-5 pb-5 space-y-4 border-t border-gray-800 pt-4">
+                {/* App identity */}
+                <div className="flex items-center gap-3">
+                  <div className="text-violet-500 shrink-0">
+                    <svg viewBox="0 0 12 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-4 h-8">
+                      <rect x="1" y="1" width="10" height="22" rx="5" stroke="currentColor" strokeWidth="1.5"/>
+                      <line x1="1.75" y1="12" x2="10.25" y2="12" stroke="currentColor" strokeWidth="1.5"/>
+                      <rect x="1" y="1" width="10" height="11" rx="5" fill="currentColor" fillOpacity="0.35"/>
+                    </svg>
+                  </div>
+                  <div>
+                    <p className="text-sm font-bold text-white leading-none">
+                      PillPipe
+                      {appVersion && <span className="ml-2 text-xs font-mono text-gray-500">v{appVersion}</span>}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-1">Supplement inventory &amp; shortfall tracking</p>
+                  </div>
+                </div>
+                {/* Description */}
+                <p className="text-xs text-gray-400 leading-relaxed">
+                  Track supplement regimens, calculate shortfalls before your next appointment, and manage inventory — all in a self-hosted app that stays on your own network.
+                </p>
+                {/* Links */}
+                <div className="border-t border-gray-800 pt-3 space-y-2.5">
+                  <a href="https://github.com/theovit/PillPipe" target="_blank" rel="noopener noreferrer"
+                    className="flex items-center gap-2 text-xs text-violet-400 hover:text-violet-300 transition-colors">
+                    <svg viewBox="0 0 24 24" fill="currentColor" className="w-3.5 h-3.5 shrink-0">
+                      <path d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0 1 12 6.844a9.59 9.59 0 0 1 2.504.337c1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.02 10.02 0 0 0 22 12.017C22 6.484 17.522 2 12 2Z"/>
+                    </svg>
+                    GitHub — theovit/PillPipe
+                  </a>
+                  <p className="flex items-center gap-2 text-xs text-gray-600">
+                    <svg viewBox="0 0 24 24" fill="currentColor" className="w-3.5 h-3.5 shrink-0 text-gray-700">
+                      <path d="M11.584 2.376a.75.75 0 0 1 .832 0l9 6a.75.75 0 1 1-.832 1.248L12 3.901 3.416 9.624a.75.75 0 0 1-.832-1.248l9-6Z"/>
+                      <path fillRule="evenodd" d="M20.25 10.332v9.918H21a.75.75 0 0 1 0 1.5H3a.75.75 0 0 1 0-1.5h.75v-9.918a.75.75 0 0 1 .634-.74A49.109 49.109 0 0 1 12 9c2.59 0 5.134.202 7.616.592a.75.75 0 0 1 .634.74Zm-7.5 2.418a.75.75 0 0 0-1.5 0v6h1.5v-6Zm3 0a.75.75 0 0 0-1.5 0v6h1.5v-6Zm-6 0a.75.75 0 0 0-1.5 0v6h1.5v-6Z" clipRule="evenodd"/>
+                    </svg>
+                    MIT License · Open Source
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
 

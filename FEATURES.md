@@ -70,18 +70,6 @@ A companion notification type for supplements that aren't part of a structured s
 
 ---
 
-#### About Section
-**Effort:** Very Low | **Value:** Low–Medium — polish and transparency
-
-A simple modal accessible from the nav showing basic app info. Depends on version handling being built first so it can display the live version number.
-
-**Planned content**
-- App version (pulled from `GET /version`)
-- Short description of what PillPipe does
-- Link to the GitHub repo
-- Open source license info
-- Link to the Donate section
-
 ---
 
 ### P3 — Medium Term
@@ -208,3 +196,4 @@ Multi-tenant support allowing healthcare providers to create sessions and push t
 - [x] Data backup, restore, and clear (Settings → Data section)
 - [x] Settings page — full-screen tab with collapsible sections; SVG cog icon in nav; Appearance + Preferences placeholders ready
 - [x] Version handling — `GET /version` endpoint; version read from `package.json`; displayed in Settings footer
+- [x] About section — collapsible Settings section; pill icon, version, description, GitHub link, MIT license
