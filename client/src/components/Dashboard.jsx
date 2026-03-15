@@ -26,7 +26,6 @@ export default function Dashboard() {
   const [expandedRegimen, setExpandedRegimen] = useState(null);
   const [regimenNotes, setRegimenNotes] = useState({});
   const [calcError, setCalcError] = useState('');
-  const [showBackup, setShowBackup] = useState(false);
 
   useEffect(() => { loadSupplements(); loadSessions(); }, []);
 
@@ -186,7 +185,7 @@ export default function Dashboard() {
     }
     const text = await file.text();
     await api.restore(JSON.parse(text));
-    setShowBackup(false);
+    setView('regimens');
     await loadSupplements();
     await loadSessions();
     e.target.value = '';
@@ -196,7 +195,7 @@ export default function Dashboard() {
     if (!window.confirm('This will permanently delete ALL sessions, regimens, and supplements. This cannot be undone.')) return;
     if (!window.confirm('Are you absolutely sure? All data will be gone.')) return;
     await api.clearData();
-    setShowBackup(false);
+    setView('regimens');
     setActiveSession(null);
     setSessions([]);
     setRegimens([]);
@@ -214,11 +213,6 @@ export default function Dashboard() {
           <p className="text-gray-500 text-xs sm:text-sm mt-0.5">Supplement inventory & shortfall tracking</p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
-          <button onClick={() => setShowBackup(true)}
-            title="Settings"
-            className="p-2 rounded-lg text-gray-500 hover:text-gray-300 hover:bg-gray-800 transition-colors text-base">
-            ⚙
-          </button>
           <div className="flex gap-1 bg-gray-900 border border-gray-800 rounded-lg p-1">
             <button onClick={() => setView('regimens')}
               className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${view === 'regimens' ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-gray-200'}`}>
@@ -228,51 +222,69 @@ export default function Dashboard() {
               className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${view === 'supplements' ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-gray-200'}`}>
               Supplements
             </button>
+            <button onClick={() => setView('settings')}
+              className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${view === 'settings' ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-gray-200'}`}>
+              ⚙
+            </button>
           </div>
         </div>
       </div>
 
-      {/* Settings modal */}
-      {showBackup && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 w-full max-w-sm space-y-5">
-            <div className="flex items-center justify-between">
-              <h2 className="text-white font-semibold">Settings</h2>
-              <button onClick={() => setShowBackup(false)} className="text-gray-500 hover:text-gray-300 text-lg leading-none">✕</button>
-            </div>
-
-            {/* Data — Backup & Restore */}
-            <div>
-              <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Data</h3>
-              <div className="space-y-2">
+      {/* Settings page */}
+      {view === 'settings' && (
+        <div className="max-w-lg space-y-6">
+          {/* Data */}
+          <div className="rounded-xl bg-gray-900 border border-gray-800 p-5">
+            <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4">Data</h2>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-4">
                 <div>
-                  <p className="text-xs text-gray-400 mb-1.5">Export all data to a JSON file you can restore from later.</p>
-                  <button onClick={downloadBackup}
-                    className="w-full py-2.5 rounded-lg bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium">
-                    Download Backup
-                  </button>
+                  <p className="text-sm text-gray-200 font-medium">Download Backup</p>
+                  <p className="text-xs text-gray-500 mt-0.5">Export all data to a JSON file.</p>
                 </div>
+                <button onClick={downloadBackup}
+                  className="shrink-0 px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium">
+                  Export
+                </button>
+              </div>
+              <div className="border-t border-gray-800 pt-3 flex items-center justify-between gap-4">
                 <div>
-                  <p className="text-xs text-gray-400 mb-1.5">Restore from a backup file. <span className="text-amber-400">Replaces all current data.</span></p>
-                  <label className="block w-full py-2.5 rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-200 text-sm font-medium text-center cursor-pointer">
-                    Restore from Backup
-                    <input type="file" accept=".json" className="hidden" onChange={restoreBackup} />
-                  </label>
+                  <p className="text-sm text-gray-200 font-medium">Restore from Backup</p>
+                  <p className="text-xs text-amber-500 mt-0.5">Replaces all current data.</p>
                 </div>
-                <div className="border-t border-gray-800 pt-2">
-                  <p className="text-xs text-gray-400 mb-1.5">Permanently delete all sessions, regimens, and supplements.</p>
-                  <button onClick={clearAllData}
-                    className="w-full py-2.5 rounded-lg border border-red-900 text-red-400 hover:bg-red-900/20 text-sm font-medium">
-                    Clear All Data
-                  </button>
+                <label className="shrink-0 px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-200 text-sm font-medium cursor-pointer">
+                  Import
+                  <input type="file" accept=".json" className="hidden" onChange={restoreBackup} />
+                </label>
+              </div>
+              <div className="border-t border-gray-800 pt-3 flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-sm text-gray-200 font-medium">Clear All Data</p>
+                  <p className="text-xs text-red-500 mt-0.5">Permanently deletes everything.</p>
                 </div>
+                <button onClick={clearAllData}
+                  className="shrink-0 px-4 py-2 rounded-lg border border-red-900 text-red-400 hover:bg-red-900/20 text-sm font-medium">
+                  Clear
+                </button>
               </div>
             </div>
+          </div>
+
+          {/* Appearance — coming soon */}
+          <div className="rounded-xl bg-gray-900 border border-gray-800 p-5 opacity-50">
+            <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-1">Appearance</h2>
+            <p className="text-xs text-gray-600">Font size, theme color — coming soon.</p>
+          </div>
+
+          {/* Preferences — coming soon */}
+          <div className="rounded-xl bg-gray-900 border border-gray-800 p-5 opacity-50">
+            <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-1">Preferences</h2>
+            <p className="text-xs text-gray-600">Date format, default session duration — coming soon.</p>
           </div>
         </div>
       )}
 
-      <div className={`grid grid-cols-1 gap-4 sm:gap-6 ${view === 'supplements' ? '' : 'lg:grid-cols-3'}`}>
+      <div className={`grid grid-cols-1 gap-4 sm:gap-6 ${view === 'supplements' ? '' : 'lg:grid-cols-3'} ${view === 'settings' ? 'hidden' : ''}`}>
         {/* Sidebar: Sessions */}
         {view !== 'supplements' && <div className="lg:col-span-1 space-y-4">
           <div className="rounded-xl bg-gray-900 border border-gray-800 p-4">
