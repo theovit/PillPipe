@@ -158,11 +158,11 @@ export default function SupplementsPanel({ supplements, onUpdate }) {
                   <div className="text-xs text-gray-500 mt-0.5 space-y-0.5">
                     <div className="flex flex-wrap gap-x-1.5">
                       {s.brand && <span>{s.brand} ·</span>}
-                      <span>{s.pills_per_bottle} pills/bottle · ${Number(s.price).toFixed(2)}</span>
+                      <span className="font-mono">{s.pills_per_bottle}</span><span> pills · </span><span className="font-mono">${Number(s.price).toFixed(2)}</span>
                     </div>
                     <div className="flex items-center gap-1.5">
-                      <span className="text-gray-300">{getInventory(s)} on hand</span>
-                      <span className={`px-1.5 py-0.5 rounded ${s.type === 'maintenance' ? 'bg-blue-900/40 text-blue-400' : 'bg-amber-900/40 text-amber-400'}`}>
+                      <span className="text-gray-300 font-mono">{getInventory(s)}</span><span className="text-gray-500"> on hand</span>
+                      <span className={`px-1.5 py-0.5 rounded text-xs font-medium tracking-wide ${s.type === 'maintenance' ? 'bg-blue-900/40 text-blue-400' : 'bg-amber-900/40 text-amber-400'}`}>
                         {s.type}
                       </span>
                     </div>

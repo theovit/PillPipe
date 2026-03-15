@@ -201,9 +201,9 @@ export default function PhaseEditor({ regimenId, phases, onUpdate, sessionTotalD
             </form>
           ) : (
             <div className="flex items-center justify-between gap-2 text-sm bg-gray-800/50 rounded px-3 py-3 sm:py-2">
-              <span className="text-gray-400 w-6 shrink-0">#{i + 1}</span>
+              <span className="text-gray-600 w-5 shrink-0 font-mono text-xs">#{i + 1}</span>
               <span className="flex-1 text-gray-200 min-w-0">{formatSchedule(p)}</span>
-              <span className={`shrink-0 ${p.indefinite ? 'text-violet-400' : 'text-gray-400'}`}>{formatDuration(p)}</span>
+              <span className={`shrink-0 font-mono text-xs ${p.indefinite ? 'text-violet-400' : 'text-gray-400'}`}>{formatDuration(p)}</span>
               <button onClick={() => startEdit(p)} className="text-gray-500 hover:text-gray-300 p-2 shrink-0">✎</button>
               <button onClick={() => deletePhase(p.id)} className="text-red-500 hover:text-red-400 p-2 shrink-0">✕</button>
             </div>
@@ -212,7 +212,7 @@ export default function PhaseEditor({ regimenId, phases, onUpdate, sessionTotalD
       ))}
 
       {sessionTotalDays > 0 && phases.length > 0 && (
-        <div className="text-xs text-gray-500 pt-1">
+        <div className="text-xs text-gray-500 pt-1 font-mono">
           {hasIndefinite ? (
             <span>{definedDays}d + <span className="text-violet-400">∞</span> · <span className="text-green-500">session fully covered</span></span>
           ) : (
@@ -220,7 +220,7 @@ export default function PhaseEditor({ regimenId, phases, onUpdate, sessionTotalD
               {definedDays}d of {sessionTotalDays}d allocated
               {definedDays < sessionTotalDays && <span className="text-violet-400"> · {remainingDays}d remaining</span>}
               {definedDays === sessionTotalDays && <span className="text-green-500"> · fully covered</span>}
-              {definedDays > sessionTotalDays && <span className="text-amber-400"> · {definedDays - sessionTotalDays}d over session length</span>}
+              {definedDays > sessionTotalDays && <span className="text-amber-400"> · {definedDays - sessionTotalDays}d over</span>}
             </>
           )}
         </div>

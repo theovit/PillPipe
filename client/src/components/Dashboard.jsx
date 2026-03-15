@@ -156,8 +156,8 @@ export default function Dashboard() {
 
   function daysLeftBadge(targetDate) {
     const d = Math.ceil((new Date(targetDate) - new Date()) / (1000 * 60 * 60 * 24));
-    if (d < 0) return <span className="text-xs text-red-400">{Math.abs(d)}d overdue</span>;
-    return <span className="text-xs text-violet-400">{d}d left</span>;
+    if (d < 0) return <span className="text-xs text-red-400 font-mono">{Math.abs(d)}d overdue</span>;
+    return <span className="text-xs text-violet-400 font-mono">{d}d left</span>;
   }
 
   const totalCost = Object.keys(calcResults).length > 0
@@ -215,9 +215,18 @@ export default function Dashboard() {
     <div className="min-h-screen bg-gray-950 text-gray-200 p-3 sm:p-6 max-w-4xl mx-auto">
       {/* Header */}
       <div className="mb-6 sm:mb-8 flex items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">PillPipe</h1>
-          <p className="text-gray-500 text-xs sm:text-sm mt-0.5">Supplement inventory & shortfall tracking</p>
+        <div className="flex items-center gap-3">
+          <div className="text-violet-500 shrink-0">
+            <svg viewBox="0 0 12 24" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-5 h-10 sm:w-6 sm:h-12">
+              <rect x="1" y="1" width="10" height="22" rx="5" stroke="currentColor" strokeWidth="1.5"/>
+              <line x1="1.75" y1="12" x2="10.25" y2="12" stroke="currentColor" strokeWidth="1.5"/>
+              <rect x="1" y="1" width="10" height="11" rx="5" fill="currentColor" fillOpacity="0.35"/>
+            </svg>
+          </div>
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight leading-none">PillPipe</h1>
+            <p className="hidden sm:block text-gray-500 text-xs sm:text-sm mt-1 tracking-wide">Supplement inventory & shortfall tracking</p>
+          </div>
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <div className="flex gap-1 bg-gray-900 border border-gray-800 rounded-lg p-1">
@@ -310,7 +319,7 @@ export default function Dashboard() {
           </div>
 
           {appVersion && (
-            <p className="text-xs text-gray-700 text-center pt-2">PillPipe v{appVersion}</p>
+            <p className="text-xs text-gray-600 text-center pt-2 font-mono tracking-widest">v{appVersion}</p>
           )}
         </div>
       )}
@@ -386,10 +395,10 @@ export default function Dashboard() {
                       <div className="flex items-start gap-1">
                         <div className="flex-1 min-w-0">
                           <div className="font-medium text-violet-300 flex items-center gap-2 flex-wrap text-sm">
-                            → {new Date(activeSession.target_date).toLocaleDateString()}
+                            <span className="font-mono">→ {new Date(activeSession.target_date).toLocaleDateString()}</span>
                             {daysLeftBadge(activeSession.target_date)}
                           </div>
-                          <div className="text-xs text-gray-500 mt-0.5">from {new Date(activeSession.start_date).toLocaleDateString()}</div>
+                          <div className="text-xs text-gray-500 mt-0.5 font-mono">from {new Date(activeSession.start_date).toLocaleDateString()}</div>
                           {activeSession.notes && <div className="text-xs text-gray-400 mt-1.5 leading-relaxed">{activeSession.notes}</div>}
                         </div>
                         <button onClick={e => { e.stopPropagation(); setCopyingSession(activeSession.id); setCopyForm({ start_date: today, target_date: '' }); }}
@@ -458,10 +467,10 @@ export default function Dashboard() {
                             <div className="flex items-start gap-1">
                               <button className="flex-1 text-left py-1" onClick={() => { setActiveSession(s); setCalcResults({}); setShowOtherSessions(false); }}>
                                 <div className="font-medium flex items-center gap-2 flex-wrap">
-                                  → {new Date(s.target_date).toLocaleDateString()}
+                                  <span className="font-mono">→ {new Date(s.target_date).toLocaleDateString()}</span>
                                   {daysLeftBadge(s.target_date)}
                                 </div>
-                                <div className="text-xs opacity-60">from {new Date(s.start_date).toLocaleDateString()}</div>
+                                <div className="text-xs opacity-60 font-mono">from {new Date(s.start_date).toLocaleDateString()}</div>
                                 {s.notes && <div className="text-xs opacity-50 mt-0.5 line-clamp-1">{s.notes}</div>}
                               </button>
                               <button onClick={() => { setCopyingSession(s.id); setCopyForm({ start_date: today, target_date: '' }); }}
@@ -508,13 +517,13 @@ export default function Dashboard() {
                   <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">
                     Regimens — {new Date(activeSession.target_date).toLocaleDateString()}
                     {daysLeft >= 0
-                      ? <span className="ml-2 text-violet-400 font-normal normal-case">· {daysLeft} days left</span>
-                      : <span className="ml-2 text-red-400 font-normal normal-case">· {Math.abs(daysLeft)} days overdue</span>
+                      ? <span className="ml-2 text-violet-400 font-normal normal-case font-mono">· {daysLeft}d left</span>
+                      : <span className="ml-2 text-red-400 font-normal normal-case font-mono">· {Math.abs(daysLeft)}d overdue</span>
                     }
                   </h2>
                   {totalCost !== null && (
                     <p className="text-xs text-gray-500 mt-0.5">
-                      Total to buy: <span className="text-violet-300 font-medium">${totalCost.toFixed(2)}</span>
+                      Total to buy: <span className="text-violet-300 font-medium font-mono">${totalCost.toFixed(2)}</span>
                     </p>
                   )}
                 </div>
@@ -568,7 +577,7 @@ export default function Dashboard() {
                         </div>
                         <div className="flex items-center gap-1 shrink-0">
                           <span className="text-sm text-gray-400 whitespace-nowrap mr-1">
-                            {calcResults[r.id] != null ? calcResults[r.id].currentOnHand : r.current_inventory} on hand
+                            <span className="font-mono">{calcResults[r.id] != null ? calcResults[r.id].currentOnHand : r.current_inventory}</span> on hand
                           </span>
                           <button onClick={e => { e.stopPropagation(); setExpandedRegimen(isExpanded ? null : r.id); }}
                             className={`hidden sm:block p-2 transition-colors ${isExpanded ? 'text-violet-400 hover:text-violet-300' : 'text-gray-500 hover:text-gray-300'}`}>

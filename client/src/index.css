@@ -1,8 +1,25 @@
 @import "tailwindcss";
 
+@theme {
+  --font-sans: 'IBM Plex Sans', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', 'Fira Mono', monospace;
+}
+
 body {
   margin: 0;
-  background: #0f0f13;
-  color: #e2e2e8;
-  font-family: system-ui, 'Segoe UI', Roboto, sans-serif;
+  background: #0b0d12;
+  color: #e2e6ef;
+  font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #252830; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #353844; }
+
+input[type="date"]::-webkit-calendar-picker-indicator {
+  filter: invert(0.4);
+  cursor: pointer;
 }
