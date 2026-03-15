@@ -24,9 +24,16 @@ PillPipe answers both questions.
 - **Phases** — ordered dosage steps (e.g. "2 pills/day for 2 weeks, then 1 pill/day until the appointment"). Supports day-of-week selection (Mon/Wed/Fri dosing), duration in days or weeks, and an **Indefinite** flag for long-term maintenance supplements that fills the rest of the session automatically.
 - **Shortfall Engine** — calculates exactly how many pills you need, how many bottles to grab, and the total cost. Tracks current on-hand count as days pass.
 - **Grand total cost** — see the total spend across all regimens after calculating.
+- **Quick inventory adjustment** — +/− buttons on supplement rows for fast on-hand count updates without leaving the panel.
 - **Copy session** — clone a session's regimens and phases to a new session at your next appointment.
-- **Notes** — attach notes to sessions (doctor instructions, reminders, etc.).
+- **Per-regimen notes** — attach notes directly to a regimen with auto-save (doctor instructions, timing reminders, etc.).
+- **Session notes** — attach notes to sessions for top-level context.
+- **Collapse/expand** — regimen cards and the sessions sidebar can be collapsed to reduce visual clutter.
 - **Supplements panel** — manage your supplement catalog with inventory, pricing, and type (maintenance vs. protocol).
+- **Mobile touch-friendly UI** — tap to edit, hidden icons, action buttons optimized for phone use.
+- **Settings page** — full-screen tab with data backup, restore, and clear; version info; and appearance/preference placeholders.
+- **Data backup & restore** — export all your data as JSON and restore it later from Settings → Data.
+- **Version display** — app version shown in the Settings footer, pulled live from the server.
 
 ---
 
@@ -48,7 +55,7 @@ The engine also accounts for **days already elapsed** — the on-hand count decr
 
 | Layer | Technology |
 |---|---|
-| Frontend | React (Vite) + Tailwind CSS |
+| Frontend | React 19 (Vite) + Tailwind CSS v4 |
 | Backend | Node.js + Express |
 | Database | PostgreSQL |
 | Infrastructure | Docker Compose |
@@ -61,8 +68,10 @@ The engine also accounts for **days already elapsed** — the on-hand count decr
 PillPipe/
 ├── client/                 # React frontend (Vite + Tailwind)
 │   └── src/
+│       ├── App.jsx         # Root component and routing
+│       ├── main.jsx        # Entry point
 │       ├── components/     # Dashboard, PhaseEditor, ShortfallAlert, SupplementsPanel
-│       └── utils/          # API service layer
+│       └── utils/          # API service layer (api.js)
 ├── server/                 # Node.js + Express backend
 │   ├── index.js            # Routes & middleware
 │   ├── calculator.js       # Shortfall Engine logic
@@ -86,7 +95,13 @@ PillPipe/
 cp .env.example .env
 ```
 
-Edit `.env` and set a strong `DB_PASSWORD` before running.
+Edit `.env` and set a strong `DB_PASSWORD` before running. The template ships with:
+
+```
+DB_USER=pillpipe
+DB_PASSWORD=changeme
+DB_NAME=pillpipe
+```
 
 ### 2. Start the stack
 
@@ -177,9 +192,20 @@ PillPipe is fully self-hosted. Your data never leaves your own machine.
 
 ## Roadmap
 
-- [ ] JWT authentication for multi-user or public hosting
-- [ ] Android app — offline-first with local SQLite (no server required)
-- [ ] Doctor portal — multi-tenant support for providers to push sessions to patients
+### Near Term
+- [ ] **Dose reminders & notifications** — push alerts at the right time, per regimen, respecting days-of-week schedules
+- [ ] **About modal** — app version, description, GitHub link, and license info accessible from the nav
+- [ ] **Shortfall export** — download calculation results as PDF or CSV for doctor visits
+
+### Medium Term
+- [ ] **Adherence tracking** — log taken/skipped/snoozed doses; calendar and percentage views per regimen
+- [ ] **Session templates** — save a regimen structure as a reusable template for recurring protocols
+
+### Later
+- [ ] **Google SSO + Drive backup** — sign in with Google; auto-backup data to Drive on a configurable schedule
+- [ ] **JWT authentication** — multi-user or public hosting support
+- [ ] **Android app** — offline-first with local SQLite; shortfall engine runs entirely on-device
+- [ ] **Doctor portal** — multi-tenant support for providers to push sessions to patients
 
 ---
 
@@ -201,7 +227,8 @@ The goal is push notifications that remind you to take each supplement at the ri
 | Option | Pros | Cons |
 |---|---|---|
 | **Web Push (PWA)** | Works on mobile via browser, no app store | Requires HTTPS + service worker |
-| **Pushover / ntfy** | Dead simple, self-hostable (ntfy) | Requires third-party account or extra container |
+| **ntfy (self-hosted)** | Free, self-hostable, simple API | Requires extra Docker container |
+| **Pushover** | Reliable, dead simple | $5 one-time fee per platform |
 | **Telegram Bot** | Rich interaction, free | Requires Telegram account |
 
 ### Open questions
