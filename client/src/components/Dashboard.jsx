@@ -26,6 +26,8 @@ export default function Dashboard() {
   const [expandedRegimen, setExpandedRegimen] = useState(null);
   const [regimenNotes, setRegimenNotes] = useState({});
   const [calcError, setCalcError] = useState('');
+  const [openSections, setOpenSections] = useState({});
+  function toggleSection(name) { setOpenSections(p => ({ ...p, [name]: !p[name] })); }
 
   useEffect(() => { loadSupplements(); loadSessions(); }, []);
 
@@ -232,54 +234,72 @@ export default function Dashboard() {
 
       {/* Settings page */}
       {view === 'settings' && (
-        <div className="max-w-lg space-y-6">
+        <div className="max-w-lg space-y-3">
           {/* Data */}
-          <div className="rounded-xl bg-gray-900 border border-gray-800 p-5">
-            <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4">Data</h2>
-            <div className="space-y-3">
-              <div className="flex items-center justify-between gap-4">
-                <div>
-                  <p className="text-sm text-gray-200 font-medium">Download Backup</p>
-                  <p className="text-xs text-gray-500 mt-0.5">Export all data to a JSON file.</p>
+          <div className="rounded-xl bg-gray-900 border border-gray-800 overflow-hidden">
+            <button onClick={() => toggleSection('data')}
+              className="w-full flex items-center justify-between px-5 py-4 text-left">
+              <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Data</h2>
+              <span className="text-gray-600 text-xs">{openSections.data ? '▲' : '▼'}</span>
+            </button>
+            {openSections.data && (
+              <div className="px-5 pb-4 space-y-3 border-t border-gray-800 pt-3">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <p className="text-sm text-gray-200 font-medium">Download Backup</p>
+                    <p className="text-xs text-gray-500 mt-0.5">Export all data to a JSON file.</p>
+                  </div>
+                  <button onClick={downloadBackup}
+                    className="shrink-0 px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium">
+                    Export
+                  </button>
                 </div>
-                <button onClick={downloadBackup}
-                  className="shrink-0 px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium">
-                  Export
-                </button>
-              </div>
-              <div className="border-t border-gray-800 pt-3 flex items-center justify-between gap-4">
-                <div>
-                  <p className="text-sm text-gray-200 font-medium">Restore from Backup</p>
-                  <p className="text-xs text-amber-500 mt-0.5">Replaces all current data.</p>
+                <div className="border-t border-gray-800 pt-3 flex items-center justify-between gap-4">
+                  <div>
+                    <p className="text-sm text-gray-200 font-medium">Restore from Backup</p>
+                    <p className="text-xs text-amber-500 mt-0.5">Replaces all current data.</p>
+                  </div>
+                  <label className="shrink-0 px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-200 text-sm font-medium cursor-pointer">
+                    Import
+                    <input type="file" accept=".json" className="hidden" onChange={restoreBackup} />
+                  </label>
                 </div>
-                <label className="shrink-0 px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-200 text-sm font-medium cursor-pointer">
-                  Import
-                  <input type="file" accept=".json" className="hidden" onChange={restoreBackup} />
-                </label>
-              </div>
-              <div className="border-t border-gray-800 pt-3 flex items-center justify-between gap-4">
-                <div>
-                  <p className="text-sm text-gray-200 font-medium">Clear All Data</p>
-                  <p className="text-xs text-red-500 mt-0.5">Permanently deletes everything.</p>
+                <div className="border-t border-gray-800 pt-3 flex items-center justify-between gap-4">
+                  <div>
+                    <p className="text-sm text-gray-200 font-medium">Clear All Data</p>
+                    <p className="text-xs text-red-500 mt-0.5">Permanently deletes everything.</p>
+                  </div>
+                  <button onClick={clearAllData}
+                    className="shrink-0 px-4 py-2 rounded-lg border border-red-900 text-red-400 hover:bg-red-900/20 text-sm font-medium">
+                    Clear
+                  </button>
                 </div>
-                <button onClick={clearAllData}
-                  className="shrink-0 px-4 py-2 rounded-lg border border-red-900 text-red-400 hover:bg-red-900/20 text-sm font-medium">
-                  Clear
-                </button>
               </div>
-            </div>
+            )}
           </div>
 
           {/* Appearance — coming soon */}
-          <div className="rounded-xl bg-gray-900 border border-gray-800 p-5 opacity-50">
-            <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-1">Appearance</h2>
-            <p className="text-xs text-gray-600">Font size, theme color — coming soon.</p>
+          <div className="rounded-xl bg-gray-900 border border-gray-800 overflow-hidden opacity-50">
+            <button onClick={() => toggleSection('appearance')}
+              className="w-full flex items-center justify-between px-5 py-4 text-left cursor-not-allowed">
+              <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Appearance</h2>
+              <span className="text-gray-600 text-xs">{openSections.appearance ? '▲' : '▼'}</span>
+            </button>
+            {openSections.appearance && (
+              <p className="px-5 pb-4 text-xs text-gray-600 border-t border-gray-800 pt-3">Font size, theme color — coming soon.</p>
+            )}
           </div>
 
           {/* Preferences — coming soon */}
-          <div className="rounded-xl bg-gray-900 border border-gray-800 p-5 opacity-50">
-            <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-1">Preferences</h2>
-            <p className="text-xs text-gray-600">Date format, default session duration — coming soon.</p>
+          <div className="rounded-xl bg-gray-900 border border-gray-800 overflow-hidden opacity-50">
+            <button onClick={() => toggleSection('preferences')}
+              className="w-full flex items-center justify-between px-5 py-4 text-left cursor-not-allowed">
+              <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Preferences</h2>
+              <span className="text-gray-600 text-xs">{openSections.preferences ? '▲' : '▼'}</span>
+            </button>
+            {openSections.preferences && (
+              <p className="px-5 pb-4 text-xs text-gray-600 border-t border-gray-800 pt-3">Date format, default session duration — coming soon.</p>
+            )}
           </div>
         </div>
       )}
