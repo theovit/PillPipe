@@ -6,7 +6,28 @@
 
 ### P1 — Build Next
 
-*All P1 items complete. See Completed section below.*
+#### Liquid & Drops Support
+**Effort:** Medium | **Value:** High — expands supplement types beyond capsules/tablets
+
+Add first-class support for liquid supplements and tinctures dosed in milliliters, and for drop-based supplements (e.g. iodine, vitamin D liquid, LDN compounded drops). The two unit types are related — drops are converted to milliliters using a standard average of **20 drops per milliliter**, which is the accepted pharmacological convention for a standard dropper tip.
+
+**Planned behavior**
+- New `unit` field on each supplement: `capsules` (default), `tablets`, `ml`, `drops`
+- When unit is `ml`: dose entry accepts decimal values (e.g. 1.5 ml), on-hand count tracked in ml
+- When unit is `drops`: dose entry accepts whole drop counts; displayed alongside ml equivalent (e.g. "10 drops ≈ 0.5 ml") using the 20 drops/ml conversion
+- Shortfall engine treats ml and drops as the same inventory pool for a given supplement — no separate tracking needed
+- UI label on regimen rows and supplement panel updates dynamically to reflect unit type (e.g. "2 drops/day" instead of "2 caps/day")
+- Cost-per-unit and bottles-to-buy logic adapted for volume-based units (e.g. per-ml cost, bottle size in ml)
+
+**Conversion reference**
+- 1 ml = 20 drops (standard dropper tip average)
+- Display both values in the UI wherever drops are used so users always have the ml context
+
+**Open questions**
+- Should bottle size be entered in ml or in total drop count for drop-based supplements?
+- Should the 20 drops/ml ratio be user-overridable per supplement for non-standard dropper tips?
+
+---
 
 ---
 
@@ -32,9 +53,20 @@ Push notifications that remind you to take each supplement at the right time, ba
 | **Pushover** | Reliable, simple | $5 one-time fee per platform |
 | **Telegram Bot** | Rich interaction, free | Requires Telegram account |
 
+**Running Low — On-Hand Alerts**
+
+A companion notification type for supplements that aren't part of a structured session but are used on an ongoing or indefinite maintenance basis. Unlike the shortfall system (which calculates based on a session's end date), this alert fires purely based on remaining on-hand quantity falling below a threshold — no session math needed.
+
+- Each supplement can have an optional **reorder threshold** set (e.g. alert when fewer than 14 days of supply remain)
+- Notification fires when on-hand drops at or below the threshold, prompting the user to reorder before running out
+- Designed for indefinite-use items: daily maintenance supplements, liquids, drops, or anything not tied to a fixed protocol end date
+- Alert includes supplement name, current on-hand quantity, and a reminder of the usual dose so the user knows how urgent the reorder is
+- Threshold is per-supplement and opt-in — does not fire by default
+
 **Open questions**
 - Should taken/skipped doses be logged for adherence tracking?
 - Should reminders be server-driven (cron job) or client-driven (service worker)?
+- Should the running low threshold be entered in days of supply or raw units (caps/ml/drops)?
 
 ---
 
