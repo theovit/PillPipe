@@ -1,8 +1,42 @@
 import { useState } from 'react';
 import { api } from '../utils/api';
 
-const EMPTY = { name: '', brand: '', pills_per_bottle: '', price: '', type: 'maintenance', current_inventory: '' };
+const EMPTY = { name: '', brand: '', pills_per_bottle: '', price: '', type: 'maintenance', current_inventory: '', unit: 'capsules', drops_per_ml: 20 };
 const inputCls = 'rounded bg-gray-800 border border-gray-700 px-3 py-2.5 sm:py-1.5 text-base sm:text-sm text-gray-200 focus:outline-none focus:border-violet-500';
+
+// ── Unit helpers ──────────────────────────────────────────────────────────────
+function bottleLabel(unit) {
+  if (unit === 'ml') return 'Volume/bottle (ml)';
+  if (unit === 'drops') return 'Bottle size (ml)';
+  if (unit === 'tablets') return 'Tabs/bottle';
+  return 'Caps/bottle';
+}
+function inventoryLabel(unit) {
+  if (unit === 'ml') return 'On hand (ml)';
+  if (unit === 'drops') return 'On hand (drops)';
+  if (unit === 'tablets') return 'On hand (tabs)';
+  return 'On hand (caps)';
+}
+function parsePpb(val, unit) {
+  return (unit === 'ml' || unit === 'drops') ? parseFloat(val) || 0 : parseInt(val) || 0;
+}
+function parseInv(val, unit) {
+  return unit === 'ml' ? parseFloat(val) || 0 : parseInt(val) || 0;
+}
+function formatInventoryRow(value, unit, drops_per_ml = 20) {
+  const v = Number(value);
+  if (unit === 'drops') return `${v} drops (${(v / drops_per_ml).toFixed(1)} ml)`;
+  if (unit === 'ml') return `${v} ml`;
+  if (unit === 'tablets') return `${v} tab${v !== 1 ? 's' : ''}`;
+  return `${v} cap${v !== 1 ? 's' : ''}`;
+}
+function formatBottleRow(ppb, unit) {
+  const v = Number(ppb);
+  if (unit === 'drops') return `${v} ml/bottle`;
+  if (unit === 'ml') return `${v} ml/bottle`;
+  if (unit === 'tablets') return `${v} tabs/bottle`;
+  return `${v} caps/bottle`;
+}
 
 export default function SupplementsPanel({ supplements, onUpdate }) {
   const [adding, setAdding] = useState(false);
@@ -17,7 +51,7 @@ export default function SupplementsPanel({ supplements, onUpdate }) {
 
   async function adjustInventory(e, s, delta) {
     e.stopPropagation();
-    const next = Math.max(0, getInventory(s) + delta);
+    const next = Math.max(0, Number(getInventory(s)) + delta);
     setLocalInventory(prev => ({ ...prev, [s.id]: next }));
     await api.patchSupplement(s.id, { current_inventory: next });
     onUpdate();
@@ -25,16 +59,27 @@ export default function SupplementsPanel({ supplements, onUpdate }) {
 
   function startEdit(s) {
     setEditingId(s.id);
-    setEditForm({ name: s.name, brand: s.brand || '', pills_per_bottle: s.pills_per_bottle, price: s.price, type: s.type, current_inventory: s.current_inventory });
+    setEditForm({
+      name: s.name,
+      brand: s.brand || '',
+      pills_per_bottle: s.pills_per_bottle,
+      price: s.price,
+      type: s.type,
+      current_inventory: s.current_inventory,
+      unit: s.unit || 'capsules',
+      drops_per_ml: s.drops_per_ml ?? 20,
+    });
   }
 
   async function saveEdit(e) {
     e.preventDefault();
+    const unit = editForm.unit;
     await api.updateSupplement(editingId, {
       ...editForm,
-      pills_per_bottle: parseInt(editForm.pills_per_bottle),
+      pills_per_bottle: parsePpb(editForm.pills_per_bottle, unit),
       price: parseFloat(editForm.price),
-      current_inventory: parseInt(editForm.current_inventory) || 0,
+      current_inventory: parseInv(editForm.current_inventory, unit),
+      drops_per_ml: parseFloat(editForm.drops_per_ml) || 20,
     });
     setEditingId(null);
     onUpdate();
@@ -42,11 +87,13 @@ export default function SupplementsPanel({ supplements, onUpdate }) {
 
   async function addSupplement(e) {
     e.preventDefault();
+    const unit = form.unit;
     await api.createSupplement({
       ...form,
-      pills_per_bottle: parseInt(form.pills_per_bottle),
+      pills_per_bottle: parsePpb(form.pills_per_bottle, unit),
       price: parseFloat(form.price),
-      current_inventory: parseInt(form.current_inventory) || 0,
+      current_inventory: parseInv(form.current_inventory, unit),
+      drops_per_ml: parseFloat(form.drops_per_ml) || 20,
     });
     setForm(EMPTY);
     setAdding(false);
@@ -90,9 +137,34 @@ export default function SupplementsPanel({ supplements, onUpdate }) {
         <label className="block text-xs text-gray-500 mb-1">Type</label>
         {typeSel(f.type, v => setF(p => ({ ...p, type: v })))}
       </div>
+      {/* Unit selector */}
+      <div className="col-span-2">
+        <label className="block text-xs text-gray-500 mb-1">Unit</label>
+        <div className="flex gap-1.5">
+          {['capsules', 'tablets', 'ml', 'drops'].map(u => (
+            <button key={u} type="button"
+              onClick={() => setF(p => ({ ...p, unit: u }))}
+              className={`flex-1 py-2 sm:py-1.5 rounded text-xs font-medium transition-colors ${f.unit === u ? 'bg-violet-600 text-white' : 'bg-gray-800 text-gray-400 hover:text-gray-200 border border-gray-700'}`}>
+              {u}
+            </button>
+          ))}
+        </div>
+      </div>
+      {/* drops_per_ml override — only shown for drops */}
+      {f.unit === 'drops' && (
+        <div className="col-span-2">
+          <label className="block text-xs text-gray-500 mb-1">
+            Drops per ml <span className="text-gray-600">(default 20 — standard dropper)</span>
+          </label>
+          <input type="number" min="1" step="0.1" value={f.drops_per_ml}
+            onChange={e => setF(p => ({ ...p, drops_per_ml: e.target.value }))}
+            className={`w-32 ${inputCls}`} />
+        </div>
+      )}
       <div>
-        <label className="block text-xs text-gray-500 mb-1">Pills/bottle</label>
-        <input type="number" min="1" required value={f.pills_per_bottle}
+        <label className="block text-xs text-gray-500 mb-1">{bottleLabel(f.unit)}</label>
+        <input type="number" min="0.001" step={f.unit === 'ml' || f.unit === 'drops' ? '0.1' : '1'}
+          required value={f.pills_per_bottle}
           onChange={e => setF(p => ({ ...p, pills_per_bottle: e.target.value }))}
           className={`w-full ${inputCls}`} />
       </div>
@@ -103,10 +175,15 @@ export default function SupplementsPanel({ supplements, onUpdate }) {
           className={`w-full ${inputCls}`} />
       </div>
       <div className="col-span-2">
-        <label className="block text-xs text-gray-500 mb-1">On hand (pills)</label>
-        <input type="number" min="0" required value={f.current_inventory}
+        <label className="block text-xs text-gray-500 mb-1">{inventoryLabel(f.unit)}</label>
+        <input type="number" min="0"
+          step={f.unit === 'ml' ? '0.1' : '1'}
+          required value={f.current_inventory}
           onChange={e => setF(p => ({ ...p, current_inventory: e.target.value }))}
           className={`w-full ${inputCls}`} placeholder="0" />
+        {f.unit === 'drops' && f.drops_per_ml > 0 && f.current_inventory > 0 && (
+          <p className="text-xs text-gray-600 mt-1">≈ {(Number(f.current_inventory) / Number(f.drops_per_ml)).toFixed(1)} ml</p>
+        )}
       </div>
     </div>
   );
@@ -158,10 +235,15 @@ export default function SupplementsPanel({ supplements, onUpdate }) {
                   <div className="text-xs text-gray-500 mt-0.5 space-y-0.5">
                     <div className="flex flex-wrap gap-x-1.5">
                       {s.brand && <span>{s.brand} ·</span>}
-                      <span className="font-mono">{s.pills_per_bottle}</span><span> pills · </span><span className="font-mono">${Number(s.price).toFixed(2)}</span>
+                      <span className="font-mono">{formatBottleRow(s.pills_per_bottle, s.unit || 'capsules')}</span>
+                      <span> · </span>
+                      <span className="font-mono">${Number(s.price).toFixed(2)}</span>
                     </div>
                     <div className="flex items-center gap-1.5">
-                      <span className="text-gray-300 font-mono">{getInventory(s)}</span><span className="text-gray-500"> on hand</span>
+                      <span className="text-gray-300 font-mono">
+                        {formatInventoryRow(getInventory(s), s.unit || 'capsules', s.drops_per_ml || 20)}
+                      </span>
+                      <span className="text-gray-500"> on hand</span>
                       <span className={`px-1.5 py-0.5 rounded text-xs font-medium tracking-wide ${s.type === 'maintenance' ? 'bg-blue-900/40 text-blue-400' : 'bg-amber-900/40 text-amber-400'}`}>
                         {s.type}
                       </span>

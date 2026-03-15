@@ -6,7 +6,11 @@
 
 ### P1 — Build Next
 
-#### Liquid & Drops Support
+*All P1 items complete. See Completed section below.*
+
+---
+
+#### Liquid & Drops Support (archived)
 **Effort:** Medium | **Value:** High — expands supplement types beyond capsules/tablets
 
 Add first-class support for liquid supplements and tinctures dosed in milliliters, and for drop-based supplements (e.g. iodine, vitamin D liquid, LDN compounded drops). The two unit types are related — drops are converted to milliliters using a standard average of **20 drops per milliliter**, which is the accepted pharmacological convention for a standard dropper tip.
@@ -195,3 +199,4 @@ Multi-tenant support allowing healthcare providers to create sessions and push t
 - [x] Settings page — full-screen tab with collapsible sections; SVG cog icon in nav; Appearance + Preferences placeholders ready
 - [x] Version handling — `GET /version` endpoint; version read from `package.json`; displayed in Settings footer
 - [x] About section — collapsible Settings section; pill icon, version, description, GitHub link, MIT license
+- [x] Liquid & Drops support — `unit` field (capsules/tablets/ml/drops), `drops_per_ml` override, dynamic labels throughout UI, decimal dosage/inventory for ml, drops↔ml conversion in calculator route

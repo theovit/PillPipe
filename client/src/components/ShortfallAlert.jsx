@@ -1,4 +1,12 @@
-export default function ShortfallAlert({ result, supplementName }) {
+function fmtAmt(value, unit, drops_per_ml = 20) {
+  const v = Number(value);
+  if (unit === 'drops') return `${v} drops`;
+  if (unit === 'ml') return `${v} ml`;
+  if (unit === 'tablets') return `${v} tabs`;
+  return `${v} caps`;
+}
+
+export default function ShortfallAlert({ result, supplementName, unit = 'capsules', drops_per_ml = 20 }) {
   if (!result) return null;
 
   const { status, shortfall, pillsNeeded, inventory, bottlesNeeded, estimatedCost, waste } = result;
@@ -26,11 +34,12 @@ export default function ShortfallAlert({ result, supplementName }) {
             <span className="text-amber-300 font-semibold font-mono">${estimatedCost.toFixed(2)}</span>
           )}
         </div>
-        <span className="text-red-400 text-xs font-mono shrink-0">{shortfall} short</span>
+        <span className="text-red-400 text-xs font-mono shrink-0">{fmtAmt(shortfall, unit, drops_per_ml)} short</span>
       </div>
       <div className="text-gray-500 text-xs font-mono">
-        need <span className="text-gray-400">{pillsNeeded}</span> · have <span className="text-gray-400">{inventory}</span>
-        {waste > 0 && <span> · <span className="text-gray-400">{waste}</span> leftover</span>}
+        need <span className="text-gray-400">{fmtAmt(pillsNeeded, unit, drops_per_ml)}</span>
+        {' · '}have <span className="text-gray-400">{fmtAmt(inventory, unit, drops_per_ml)}</span>
+        {waste > 0 && <span> · <span className="text-gray-400">{fmtAmt(waste, unit, drops_per_ml)}</span> leftover</span>}
       </div>
     </div>
   );

@@ -17,16 +17,27 @@ function formatDuration(phase) {
   return `${phase.duration_days}d`;
 }
 
-function formatSchedule(phase) {
+function dosageLabel(unit) {
+  if (unit === 'ml') return 'ml/dose';
+  if (unit === 'drops') return 'drops/dose';
+  if (unit === 'tablets') return 'tabs/dose';
+  return 'caps/dose';
+}
+
+function formatSchedule(phase, unit = 'capsules') {
+  const lbl = dosageLabel(unit);
+  const shortLbl = unit === 'ml' ? 'ml' : unit === 'drops' ? 'drops' : unit === 'tablets' ? 'tabs' : 'caps';
+  const d = Number(phase.dosage);
+  const amtStr = unit === 'ml' ? `${d} ml` : `${d} ${d !== 1 ? shortLbl : shortLbl.replace(/s$/, '')}`;
   if (!phase.days_of_week || phase.days_of_week.length === 0) {
-    return `${phase.dosage} pill${phase.dosage !== 1 ? 's' : ''}/day`;
+    return `${amtStr}/day`;
   }
   const names = phase.days_of_week
     .slice()
     .sort((a, b) => a - b)
     .map(d => DAYS[d].label)
     .join(' ');
-  return `${phase.dosage} pill${phase.dosage !== 1 ? 's' : ''} · ${names}`;
+  return `${amtStr} · ${names}`;
 }
 
 function DayPicker({ selected, onChange }) {
@@ -76,7 +87,7 @@ function defaultUnit(duration_days) {
 const inputCls = 'rounded bg-gray-800 border border-gray-700 px-3 py-2.5 sm:py-1.5 text-base sm:text-sm text-gray-200 focus:outline-none focus:border-violet-500';
 const EMPTY_FORM = (days) => ({ dosage: '', duration_days: days ?? '', days_of_week: [], indefinite: false });
 
-export default function PhaseEditor({ regimenId, phases, onUpdate, sessionTotalDays }) {
+export default function PhaseEditor({ regimenId, phases, onUpdate, sessionTotalDays, unit = 'capsules' }) {
   const definedDays = phases.filter(p => !p.indefinite).reduce((sum, p) => sum + p.duration_days, 0);
   const hasIndefinite = phases.some(p => p.indefinite);
   const remainingDays = sessionTotalDays ? Math.max(0, sessionTotalDays - definedDays) : null;
@@ -103,7 +114,7 @@ export default function PhaseEditor({ regimenId, phases, onUpdate, sessionTotalD
     e.preventDefault();
     const phase = phases.find(p => p.id === editingId);
     await api.updatePhase(editingId, {
-      dosage: parseInt(editForm.dosage),
+      dosage: unit === 'ml' ? parseFloat(editForm.dosage) : parseInt(editForm.dosage),
       duration_days: parseInt(editForm.duration_days) || 0,
       days_of_week: editForm.days_of_week.length > 0 ? editForm.days_of_week : null,
       sequence_order: phase.sequence_order,
@@ -116,7 +127,7 @@ export default function PhaseEditor({ regimenId, phases, onUpdate, sessionTotalD
   async function addPhase(e) {
     e.preventDefault();
     await api.createPhase(regimenId, {
-      dosage: parseInt(form.dosage),
+      dosage: unit === 'ml' ? parseFloat(form.dosage) : parseInt(form.dosage),
       duration_days: parseInt(form.duration_days) || 0,
       days_of_week: form.days_of_week.length > 0 ? form.days_of_week : null,
       sequence_order: phases.length + 1,
@@ -179,8 +190,8 @@ export default function PhaseEditor({ regimenId, phases, onUpdate, sessionTotalD
             <form onSubmit={saveEdit} className="space-y-3 bg-gray-800/50 rounded px-3 py-3">
               <div className="flex flex-col sm:flex-row gap-3 sm:items-start">
                 <div>
-                  <label className="block text-xs text-gray-500 mb-1">Pills/dose</label>
-                  <input type="number" min="1" required value={editForm.dosage}
+                  <label className="block text-xs text-gray-500 mb-1">{dosageLabel(unit)}</label>
+                  <input type="number" min="0.001" step={unit === 'ml' ? '0.1' : '1'} required value={editForm.dosage}
                     onChange={e => setEditForm(f => ({ ...f, dosage: e.target.value }))}
                     className={`w-24 ${inputCls}`} />
                 </div>
@@ -202,7 +213,7 @@ export default function PhaseEditor({ regimenId, phases, onUpdate, sessionTotalD
           ) : (
             <div className="flex items-center justify-between gap-2 text-sm bg-gray-800/50 rounded px-3 py-3 sm:py-2">
               <span className="text-gray-600 w-5 shrink-0 font-mono text-xs">#{i + 1}</span>
-              <span className="flex-1 text-gray-200 min-w-0">{formatSchedule(p)}</span>
+              <span className="flex-1 text-gray-200 min-w-0">{formatSchedule(p, unit)}</span>
               <span className={`shrink-0 font-mono text-xs ${p.indefinite ? 'text-violet-400' : 'text-gray-400'}`}>{formatDuration(p)}</span>
               <button onClick={() => startEdit(p)} className="text-gray-500 hover:text-gray-300 p-2 shrink-0">✎</button>
               <button onClick={() => deletePhase(p.id)} className="text-red-500 hover:text-red-400 p-2 shrink-0">✕</button>

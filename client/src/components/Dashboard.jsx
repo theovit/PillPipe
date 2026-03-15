@@ -600,7 +600,7 @@ export default function Dashboard() {
                       className={inputCls}>
                       <option value="">Select…</option>
                       {supplements.map(s => (
-                        <option key={s.id} value={s.id}>{s.name}{s.brand ? ` (${s.brand})` : ''} — {s.current_inventory} on hand</option>
+                        <option key={s.id} value={s.id}>{s.name}{s.brand ? ` (${s.brand})` : ''} — {s.current_inventory} {s.unit === 'ml' ? 'ml' : s.unit === 'drops' ? 'drops' : s.unit === 'tablets' ? 'tabs' : 'caps'} on hand</option>
                       ))}
                     </select>
                   </div>
@@ -620,11 +620,22 @@ export default function Dashboard() {
                         onClick={() => setExpandedRegimen(isExpanded ? null : r.id)}>
                         <div className="min-w-0">
                           <h3 className="font-semibold text-white">{r.supplement_name}</h3>
-                          <p className="text-xs text-gray-500 truncate">{r.brand} · {r.pills_per_bottle} pills/bottle · ${Number(r.price).toFixed(2)}</p>
+                          <p className="text-xs text-gray-500 truncate">
+                            {r.brand && `${r.brand} · `}
+                            {r.unit === 'drops' ? `${r.pills_per_bottle} ml/bottle` : r.unit === 'ml' ? `${r.pills_per_bottle} ml/bottle` : `${r.pills_per_bottle} ${r.unit === 'tablets' ? 'tabs' : 'caps'}/bottle`}
+                            {' · '}${Number(r.price).toFixed(2)}
+                          </p>
                         </div>
                         <div className="flex items-center gap-1 shrink-0">
                           <span className="text-sm text-gray-400 whitespace-nowrap mr-1">
-                            <span className="font-mono">{calcResults[r.id] != null ? calcResults[r.id].currentOnHand : r.current_inventory}</span> on hand
+                            <span className="font-mono">{(() => {
+                            const v = calcResults[r.id] != null ? calcResults[r.id].currentOnHand : r.current_inventory;
+                            const u = r.unit || 'capsules';
+                            if (u === 'drops') return `${Number(v)} drops`;
+                            if (u === 'ml') return `${Number(v)} ml`;
+                            if (u === 'tablets') return `${Number(v)} tabs`;
+                            return `${Number(v)} caps`;
+                          })()}</span> on hand
                           </span>
                           <button onClick={e => { e.stopPropagation(); setExpandedRegimen(isExpanded ? null : r.id); }}
                             className={`hidden sm:block p-2 transition-colors ${isExpanded ? 'text-violet-400 hover:text-violet-300' : 'text-gray-500 hover:text-gray-300'}`}>
@@ -661,6 +672,7 @@ export default function Dashboard() {
                             phases={phases[r.id] || []}
                             onUpdate={() => loadPhases(r.id)}
                             sessionTotalDays={sessionTotalDays}
+                            unit={r.unit || 'capsules'}
                           />
                           <div className="sm:hidden flex gap-2 pt-2 border-t border-gray-700/50">
                             <button onClick={() => setExpandedRegimen(null)}
@@ -673,7 +685,12 @@ export default function Dashboard() {
 
                       {calcResults[r.id] && (
                         <div className="mt-3">
-                          <ShortfallAlert result={calcResults[r.id]} supplementName={r.supplement_name} />
+                          <ShortfallAlert
+                            result={calcResults[r.id]}
+                            supplementName={r.supplement_name}
+                            unit={calcResults[r.id]?.unit || r.unit || 'capsules'}
+                            drops_per_ml={calcResults[r.id]?.drops_per_ml || r.drops_per_ml || 20}
+                          />
                         </div>
                       )}
                     </div>

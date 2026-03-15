@@ -19,21 +19,21 @@ app.get('/supplements', w(async (req, res) => {
 }));
 
 app.post('/supplements', w(async (req, res) => {
-  const { name, brand, pills_per_bottle, price, type, current_inventory } = req.body;
+  const { name, brand, pills_per_bottle, price, type, current_inventory, unit, drops_per_ml } = req.body;
   const { rows } = await pool.query(
-    `INSERT INTO supplements (name, brand, pills_per_bottle, price, type, current_inventory)
-     VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
-    [name, brand, pills_per_bottle, price, type, current_inventory ?? 0]
+    `INSERT INTO supplements (name, brand, pills_per_bottle, price, type, current_inventory, unit, drops_per_ml)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+    [name, brand, pills_per_bottle, price, type, current_inventory ?? 0, unit || 'capsules', drops_per_ml ?? 20]
   );
   res.status(201).json(rows[0]);
 }));
 
 app.put('/supplements/:id', w(async (req, res) => {
-  const { name, brand, pills_per_bottle, price, type, current_inventory } = req.body;
+  const { name, brand, pills_per_bottle, price, type, current_inventory, unit, drops_per_ml } = req.body;
   const { rows } = await pool.query(
-    `UPDATE supplements SET name=$1, brand=$2, pills_per_bottle=$3, price=$4, type=$5, current_inventory=$6
-     WHERE id=$7 RETURNING *`,
-    [name, brand, pills_per_bottle, price, type, current_inventory ?? 0, req.params.id]
+    `UPDATE supplements SET name=$1, brand=$2, pills_per_bottle=$3, price=$4, type=$5, current_inventory=$6, unit=$7, drops_per_ml=$8
+     WHERE id=$9 RETURNING *`,
+    [name, brand, pills_per_bottle, price, type, current_inventory ?? 0, unit || 'capsules', drops_per_ml ?? 20, req.params.id]
   );
   if (!rows.length) return res.status(404).json({ error: 'Not found' });
   res.json(rows[0]);
@@ -114,7 +114,7 @@ app.delete('/sessions/:id', w(async (req, res) => {
 // ── Regimens ──────────────────────────────────────────────────────────────────
 app.get('/sessions/:sessionId/regimens', w(async (req, res) => {
   const { rows } = await pool.query(
-    `SELECT r.*, s.name AS supplement_name, s.brand, s.pills_per_bottle, s.price, s.type, s.current_inventory
+    `SELECT r.*, s.name AS supplement_name, s.brand, s.pills_per_bottle, s.price, s.type, s.current_inventory, s.unit, s.drops_per_ml
      FROM regimens r
      JOIN supplements s ON s.id = r.supplement_id
      WHERE r.session_id = $1`,
@@ -189,7 +189,7 @@ app.get('/sessions/:sessionId/calculate', w(async (req, res) => {
   const session = sessionRows[0];
 
   const { rows: regimens } = await pool.query(
-    `SELECT r.*, s.pills_per_bottle, s.price, s.current_inventory
+    `SELECT r.*, s.pills_per_bottle, s.price, s.current_inventory, s.unit, s.drops_per_ml
      FROM regimens r JOIN supplements s ON s.id = r.supplement_id
      WHERE r.session_id=$1`,
     [req.params.sessionId]
@@ -200,15 +200,21 @@ app.get('/sessions/:sessionId/calculate', w(async (req, res) => {
       'SELECT * FROM phases WHERE regimen_id=$1 ORDER BY sequence_order',
       [regimen.id]
     );
+    const unit = regimen.unit || 'capsules';
+    const drops_per_ml = Number(regimen.drops_per_ml) || 20;
+    // For drops: pills_per_bottle is stored in ml — convert to drops for the calculator
+    const pillsPerBottle = unit === 'drops'
+      ? Number(regimen.pills_per_bottle) * drops_per_ml
+      : Number(regimen.pills_per_bottle);
     const calc = calculate({
       phases,
-      inventory: regimen.current_inventory,
+      inventory: Number(regimen.current_inventory),
       startDate: session.start_date,
       targetDate: session.target_date,
-      pillsPerBottle: regimen.pills_per_bottle,
+      pillsPerBottle,
       pricePerBottle: regimen.price,
     });
-    return { regimen_id: regimen.id, ...calc };
+    return { regimen_id: regimen.id, unit, drops_per_ml, ...calc };
   }));
 
   res.json({ session, results });
@@ -231,8 +237,8 @@ app.post('/restore', w(async (req, res) => {
     await client.query('TRUNCATE supplements, sessions CASCADE');
     for (const s of supplements)
       await client.query(
-        'INSERT INTO supplements (id,name,brand,pills_per_bottle,price,type,current_inventory) VALUES ($1,$2,$3,$4,$5,$6,$7)',
-        [s.id, s.name, s.brand, s.pills_per_bottle, s.price, s.type, s.current_inventory]
+        'INSERT INTO supplements (id,name,brand,pills_per_bottle,price,type,current_inventory,unit,drops_per_ml) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)',
+        [s.id, s.name, s.brand, s.pills_per_bottle, s.price, s.type, s.current_inventory, s.unit || 'capsules', s.drops_per_ml ?? 20]
       );
     for (const s of sessions)
       await client.query(
@@ -274,6 +280,11 @@ app.use((err, req, res, next) => {
 pool.query('ALTER TABLE sessions ADD COLUMN IF NOT EXISTS notes TEXT').catch(console.error);
 pool.query('ALTER TABLE phases ADD COLUMN IF NOT EXISTS indefinite BOOLEAN DEFAULT FALSE').catch(console.error);
 pool.query('ALTER TABLE regimens ADD COLUMN IF NOT EXISTS notes TEXT').catch(console.error);
+pool.query("ALTER TABLE supplements ADD COLUMN IF NOT EXISTS unit VARCHAR(10) DEFAULT 'capsules'").catch(console.error);
+pool.query('ALTER TABLE supplements ADD COLUMN IF NOT EXISTS drops_per_ml NUMERIC DEFAULT 20').catch(console.error);
+pool.query('ALTER TABLE supplements ALTER COLUMN pills_per_bottle TYPE NUMERIC').catch(console.error);
+pool.query('ALTER TABLE supplements ALTER COLUMN current_inventory TYPE NUMERIC').catch(console.error);
+pool.query('ALTER TABLE phases ALTER COLUMN dosage TYPE NUMERIC').catch(console.error);
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`PillPipe API v${version} running on port ${PORT}`));
