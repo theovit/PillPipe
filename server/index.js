@@ -212,6 +212,51 @@ app.get('/sessions/:sessionId/calculate', w(async (req, res) => {
   res.json({ session, results });
 }));
 
+// ── Backup / Restore ──────────────────────────────────────────────────────────
+app.get('/backup', w(async (req, res) => {
+  const { rows: supplements } = await pool.query('SELECT * FROM supplements');
+  const { rows: sessions } = await pool.query('SELECT * FROM sessions');
+  const { rows: regimens } = await pool.query('SELECT * FROM regimens');
+  const { rows: phases } = await pool.query('SELECT * FROM phases');
+  res.json({ version: 1, exported_at: new Date().toISOString(), supplements, sessions, regimens, phases });
+}));
+
+app.post('/restore', w(async (req, res) => {
+  const { supplements = [], sessions = [], regimens = [], phases = [] } = req.body;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('TRUNCATE supplements, sessions CASCADE');
+    for (const s of supplements)
+      await client.query(
+        'INSERT INTO supplements (id,name,brand,pills_per_bottle,price,type,current_inventory) VALUES ($1,$2,$3,$4,$5,$6,$7)',
+        [s.id, s.name, s.brand, s.pills_per_bottle, s.price, s.type, s.current_inventory]
+      );
+    for (const s of sessions)
+      await client.query(
+        'INSERT INTO sessions (id,start_date,target_date,notes) VALUES ($1,$2,$3,$4)',
+        [s.id, s.start_date, s.target_date, s.notes]
+      );
+    for (const r of regimens)
+      await client.query(
+        'INSERT INTO regimens (id,session_id,supplement_id,notes) VALUES ($1,$2,$3,$4)',
+        [r.id, r.session_id, r.supplement_id, r.notes]
+      );
+    for (const p of phases)
+      await client.query(
+        'INSERT INTO phases (id,regimen_id,dosage,duration_days,days_of_week,indefinite,sequence_order) VALUES ($1,$2,$3,$4,$5,$6,$7)',
+        [p.id, p.regimen_id, p.dosage, p.duration_days, p.days_of_week, p.indefinite, p.sequence_order]
+      );
+    await client.query('COMMIT');
+    res.json({ ok: true });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e;
+  } finally {
+    client.release();
+  }
+}));
+
 // ── Error handler ─────────────────────────────────────────────────────────────
 app.use((err, req, res, next) => {
   console.error(err.stack);

@@ -41,4 +41,8 @@ export const api = {
 
   // Calculate
   calculate: (sessionId) => request(`/sessions/${sessionId}/calculate`),
+
+  // Backup / Restore
+  getBackup: () => request('/backup'),
+  restore: (body) => request('/restore', { method: 'POST', body }),
 };

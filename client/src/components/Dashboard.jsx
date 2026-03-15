@@ -26,6 +26,7 @@ export default function Dashboard() {
   const [expandedRegimen, setExpandedRegimen] = useState(null);
   const [regimenNotes, setRegimenNotes] = useState({});
   const [calcError, setCalcError] = useState('');
+  const [showBackup, setShowBackup] = useState(false);
 
   useEffect(() => { loadSupplements(); loadSessions(); }, []);
 
@@ -165,6 +166,32 @@ export default function Dashboard() {
     ? Math.ceil((new Date(activeSession.target_date) - new Date()) / (1000 * 60 * 60 * 24))
     : 0;
 
+  async function downloadBackup() {
+    const data = await api.getBackup();
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `pillpipe-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function restoreBackup(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (!window.confirm('This will replace ALL your data with the backup. Are you sure?')) {
+      e.target.value = '';
+      return;
+    }
+    const text = await file.text();
+    await api.restore(JSON.parse(text));
+    setShowBackup(false);
+    await loadSupplements();
+    await loadSessions();
+    e.target.value = '';
+  }
+
   return (
     <div className="min-h-screen bg-gray-950 text-gray-200 p-3 sm:p-6 max-w-4xl mx-auto">
       {/* Header */}
@@ -173,17 +200,52 @@ export default function Dashboard() {
           <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">PillPipe</h1>
           <p className="text-gray-500 text-xs sm:text-sm mt-0.5">Supplement inventory & shortfall tracking</p>
         </div>
-        <div className="flex gap-1 bg-gray-900 border border-gray-800 rounded-lg p-1 shrink-0">
-          <button onClick={() => setView('regimens')}
-            className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${view === 'regimens' ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-gray-200'}`}>
-            Regimens
+        <div className="flex items-center gap-2 shrink-0">
+          <button onClick={() => setShowBackup(true)}
+            title="Backup / Restore"
+            className="p-2 rounded-lg text-gray-500 hover:text-gray-300 hover:bg-gray-800 transition-colors text-base">
+            ⬡
           </button>
-          <button onClick={() => setView('supplements')}
-            className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${view === 'supplements' ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-gray-200'}`}>
-            Supplements
-          </button>
+          <div className="flex gap-1 bg-gray-900 border border-gray-800 rounded-lg p-1">
+            <button onClick={() => setView('regimens')}
+              className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${view === 'regimens' ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-gray-200'}`}>
+              Regimens
+            </button>
+            <button onClick={() => setView('supplements')}
+              className={`px-3 py-1.5 rounded text-sm font-medium transition-colors ${view === 'supplements' ? 'bg-violet-600 text-white' : 'text-gray-400 hover:text-gray-200'}`}>
+              Supplements
+            </button>
+          </div>
         </div>
       </div>
+
+      {/* Backup / Restore modal */}
+      {showBackup && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 w-full max-w-sm space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-white font-semibold">Backup & Restore</h2>
+              <button onClick={() => setShowBackup(false)} className="text-gray-500 hover:text-gray-300 text-lg leading-none">✕</button>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <p className="text-xs text-gray-400 mb-2">Export all sessions, regimens, supplements, and phases to a JSON file.</p>
+                <button onClick={downloadBackup}
+                  className="w-full py-2.5 rounded-lg bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium">
+                  Download Backup
+                </button>
+              </div>
+              <div className="border-t border-gray-800 pt-3">
+                <p className="text-xs text-gray-400 mb-2">Restore from a backup file. <span className="text-red-400">This replaces all current data.</span></p>
+                <label className="block w-full py-2.5 rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-200 text-sm font-medium text-center cursor-pointer">
+                  Choose Backup File
+                  <input type="file" accept=".json" className="hidden" onChange={restoreBackup} />
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className={`grid grid-cols-1 gap-4 sm:gap-6 ${view === 'supplements' ? '' : 'lg:grid-cols-3'}`}>
         {/* Sidebar: Sessions */}

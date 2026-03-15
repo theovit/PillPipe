@@ -6,42 +6,6 @@
 
 ### P1 — Build Next
 
-#### Quick Inventory Adjustment
-**Effort:** Low | **Value:** High — daily use
-
-`+` and `−` buttons directly on each supplement row so you can nudge the on-hand count without opening the full edit form. Useful for small real-world corrections — you dropped a pill, lost one in the bottle, or took an extra dose outside your normal schedule.
-
-**Planned behavior**
-- `+` and `−` buttons visible on each supplement row (desktop) and in the expanded mobile view
-- Each tap adjusts `current_inventory` by 1 and saves immediately via PATCH
-- Count cannot go below 0
-- If a session has already been calculated, prompt the user to recalculate
-
-**UI sketch**
-```
-[ Magnesium Glycinate ]   120 on hand  [ − ] [ + ]   maintenance
-```
-
----
-
-#### Data Backup
-**Effort:** Low–Medium | **Value:** Critical — prevents total data loss
-
-Docker volumes are persistent but not indestructible. A `docker compose down -v`, a disk failure, or an accidental reset would wipe all sessions, regimens, and supplement history. This feature gives users a way to export and restore their data.
-
-**Planned behavior**
-- **Manual export:** Download a `.json` snapshot of all data from the Settings menu
-- **Manual restore:** Upload a backup file to reinitialize the database
-- **Auto-backup:** Optional scheduled `pg_dump` saved to a local folder on a configurable interval (daily, weekly)
-- Backup file includes supplements, sessions, regimens, and phases
-
-**Implementation notes**
-- Export endpoint: `GET /backup` — returns full DB snapshot as JSON
-- Restore endpoint: `POST /restore` — accepts JSON and repopulates tables
-- Auto-backup via a cron job inside the backend container
-
----
-
 #### Version Handling
 **Effort:** Very Low | **Value:** Medium — good hygiene, enables About section
 
@@ -232,3 +196,5 @@ Multi-tenant support allowing healthcare providers to create sessions and push t
 - [x] Copy session (clone regimens + phases to a new session)
 - [x] Days-of-week dosing support
 - [x] Grand total cost across all regimens
+- [x] Quick inventory adjustment (+/− buttons on supplement rows)
+- [x] Data backup & restore (JSON export/import via header modal)
