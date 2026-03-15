@@ -192,6 +192,19 @@ export default function Dashboard() {
     e.target.value = '';
   }
 
+  async function clearAllData() {
+    if (!window.confirm('This will permanently delete ALL sessions, regimens, and supplements. This cannot be undone.')) return;
+    if (!window.confirm('Are you absolutely sure? All data will be gone.')) return;
+    await api.clearData();
+    setShowBackup(false);
+    setActiveSession(null);
+    setSessions([]);
+    setRegimens([]);
+    setPhases({});
+    setCalcResults({});
+    await loadSupplements();
+  }
+
   return (
     <div className="min-h-screen bg-gray-950 text-gray-200 p-3 sm:p-6 max-w-4xl mx-auto">
       {/* Header */}
@@ -202,9 +215,9 @@ export default function Dashboard() {
         </div>
         <div className="flex items-center gap-2 shrink-0">
           <button onClick={() => setShowBackup(true)}
-            title="Backup / Restore"
+            title="Settings"
             className="p-2 rounded-lg text-gray-500 hover:text-gray-300 hover:bg-gray-800 transition-colors text-base">
-            ⬡
+            ⚙
           </button>
           <div className="flex gap-1 bg-gray-900 border border-gray-800 rounded-lg p-1">
             <button onClick={() => setView('regimens')}
@@ -219,28 +232,40 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Backup / Restore modal */}
+      {/* Settings modal */}
       {showBackup && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-          <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 w-full max-w-sm space-y-4">
+          <div className="bg-gray-900 border border-gray-800 rounded-xl p-6 w-full max-w-sm space-y-5">
             <div className="flex items-center justify-between">
-              <h2 className="text-white font-semibold">Backup & Restore</h2>
+              <h2 className="text-white font-semibold">Settings</h2>
               <button onClick={() => setShowBackup(false)} className="text-gray-500 hover:text-gray-300 text-lg leading-none">✕</button>
             </div>
-            <div className="space-y-3">
-              <div>
-                <p className="text-xs text-gray-400 mb-2">Export all sessions, regimens, supplements, and phases to a JSON file.</p>
-                <button onClick={downloadBackup}
-                  className="w-full py-2.5 rounded-lg bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium">
-                  Download Backup
-                </button>
-              </div>
-              <div className="border-t border-gray-800 pt-3">
-                <p className="text-xs text-gray-400 mb-2">Restore from a backup file. <span className="text-red-400">This replaces all current data.</span></p>
-                <label className="block w-full py-2.5 rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-200 text-sm font-medium text-center cursor-pointer">
-                  Choose Backup File
-                  <input type="file" accept=".json" className="hidden" onChange={restoreBackup} />
-                </label>
+
+            {/* Data — Backup & Restore */}
+            <div>
+              <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3">Data</h3>
+              <div className="space-y-2">
+                <div>
+                  <p className="text-xs text-gray-400 mb-1.5">Export all data to a JSON file you can restore from later.</p>
+                  <button onClick={downloadBackup}
+                    className="w-full py-2.5 rounded-lg bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium">
+                    Download Backup
+                  </button>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-400 mb-1.5">Restore from a backup file. <span className="text-amber-400">Replaces all current data.</span></p>
+                  <label className="block w-full py-2.5 rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-200 text-sm font-medium text-center cursor-pointer">
+                    Restore from Backup
+                    <input type="file" accept=".json" className="hidden" onChange={restoreBackup} />
+                  </label>
+                </div>
+                <div className="border-t border-gray-800 pt-2">
+                  <p className="text-xs text-gray-400 mb-1.5">Permanently delete all sessions, regimens, and supplements.</p>
+                  <button onClick={clearAllData}
+                    className="w-full py-2.5 rounded-lg border border-red-900 text-red-400 hover:bg-red-900/20 text-sm font-medium">
+                    Clear All Data
+                  </button>
+                </div>
               </div>
             </div>
           </div>

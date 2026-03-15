@@ -257,6 +257,11 @@ app.post('/restore', w(async (req, res) => {
   }
 }));
 
+app.delete('/data', w(async (req, res) => {
+  await pool.query('TRUNCATE supplements, sessions CASCADE');
+  res.json({ ok: true });
+}));
+
 // ── Error handler ─────────────────────────────────────────────────────────────
 app.use((err, req, res, next) => {
   console.error(err.stack);

@@ -6,6 +6,23 @@
 
 ### P1 — Build Next
 
+#### Settings Menu
+**Effort:** Medium | **Value:** High — home for all app-wide controls
+
+A dedicated settings panel (⚙ in the header) that grows as features are added. The Data section is already built; future sections will live here too.
+
+**Currently in settings**
+- **Data — Download Backup** — exports all data to a dated JSON file
+- **Data — Restore from Backup** — re-imports a backup JSON file (replaces all data, with confirmation)
+- **Data — Clear All Data** — wipes the database with double confirmation
+
+**Planned additions**
+- **Appearance** — font size (small / medium / large), theme color picker
+- **Preferences** — date format, default session duration
+- **Notifications** — reminder times and snooze duration (once reminders are built)
+
+---
+
 #### Version Handling
 **Effort:** Very Low | **Value:** Medium — good hygiene, enables About section
 
@@ -44,21 +61,6 @@ Push notifications that remind you to take each supplement at the right time, ba
 **Open questions**
 - Should taken/skipped doses be logged for adherence tracking?
 - Should reminders be server-driven (cron job) or client-driven (service worker)?
-
----
-
-#### Settings Menu
-**Effort:** Medium | **Value:** High — personalisation and quality of life
-
-A dedicated settings panel in the main nav for app-wide preferences. Currently everything is hardcoded (violet theme, default font, US date format). Settings give users control without touching code.
-
-**Planned settings**
-- **Font size** — small / medium / large (affects the whole app)
-- **Theme color picker** — swap the violet accent for any color
-- **Date format** — MM/DD/YYYY vs DD/MM/YYYY vs YYYY-MM-DD
-- **Default session duration** — pre-fill the target date offset when creating a new session (e.g. always default to 30 days out)
-- **Notification preferences** — reminder times, snooze duration (once reminders are built)
-- Settings persisted to `localStorage` (no DB needed for user prefs)
 
 ---
 
