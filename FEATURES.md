@@ -6,23 +6,6 @@
 
 ### P1 — Build Next
 
-#### Settings Menu
-**Effort:** Medium | **Value:** High — home for all app-wide controls
-
-A dedicated settings panel (⚙ in the header) that grows as features are added. The Data section is already built; future sections will live here too.
-
-**Currently in settings**
-- **Data — Download Backup** — exports all data to a dated JSON file
-- **Data — Restore from Backup** — re-imports a backup JSON file (replaces all data, with confirmation)
-- **Data — Clear All Data** — wipes the database with double confirmation
-
-**Planned additions**
-- **Appearance** — font size (small / medium / large), theme color picker
-- **Preferences** — date format, default session duration
-- **Notifications** — reminder times and snooze duration (once reminders are built)
-
----
-
 #### Version Handling
 **Effort:** Very Low | **Value:** Medium — good hygiene, enables About section
 
@@ -199,4 +182,5 @@ Multi-tenant support allowing healthcare providers to create sessions and push t
 - [x] Days-of-week dosing support
 - [x] Grand total cost across all regimens
 - [x] Quick inventory adjustment (+/− buttons on supplement rows)
-- [x] Data backup & restore (JSON export/import via header modal)
+- [x] Data backup, restore, and clear (Settings → Data section)
+- [x] Settings page — full-screen tab with collapsible sections; SVG cog icon in nav; Appearance + Preferences placeholders ready
