@@ -30,8 +30,18 @@ See Completed section and README → Google Drive Backup Setup.
 
 ---
 
+#### ~~Donate Section~~ — ✅ Shipped
+
+See Completed section.
+
+---
+
+### P5 — Long Term
+
 #### Flexible Ads
 **Effort:** Medium | **Value:** Medium — supports the project without forcing users into a paywall
+
+Moved to P5 — donations are the preferred support mechanism. Revisit if the app grows a larger public user base.
 
 User-controlled ad experience. Most people don't like ads — that's fine, the default is ad-free. But for users who want to support the project passively, they can opt into progressively more ads. Critically, **ad-free is always free** — there is no "pay to remove ads" model.
 
@@ -58,24 +68,7 @@ User-controlled ad experience. Most people don't like ads — that's fine, the d
 - Level 3 confirmation is extra explicit — describes exactly what "intrusive" means (full-screen takeovers, unskippable interstitials) before the user commits.
 - Ad level stored in **localStorage** (local to device). No server sync for now — revisit if multi-device demand comes up.
 
-**Open questions**
-- Where does ad revenue go? (hosting costs, development, donate pool?) — revisit alongside the Donate Section design.
-
 ---
-
-#### Donate Section
-**Effort:** Very Low | **Value:** Low until app is public
-
-A way for users to support the project. Low priority until the app has more users or is publicly available.
-
-**Planned content**
-- One-time donation via Ko-fi, Buy Me a Coffee, or GitHub Sponsors
-- Optional recurring support
-- Short note on what donations fund (hosting, development time, future features)
-
----
-
-### P5 — Long Term
 
 #### Authentication
 **Effort:** High | **Value:** Required for public hosting
@@ -130,3 +123,4 @@ Multi-tenant support allowing healthcare providers to create sessions and push t
 - [x] Google Drive Backup — OAuth2 connect via Google; manual, daily, or on-change backup modes; JSON backup uploaded to Drive with timestamped filenames; view and restore any previous backup from Settings → Data; tokens stored in DB; server-side cron for scheduled backups; on-change middleware triggers backup after successful mutations
 - [x] Appearance Settings — theme color picker (6 presets: violet/blue/cyan/green/orange/rose + custom color via HSL shade derivation); font size (small/medium/large via root font-size); CSS variable swap applies across all components instantly; persisted to localStorage
 - [x] Preferences Settings — date format (locale/MM-DD-YYYY/DD-MM-YYYY/YYYY-MM-DD) applied to session card dates and CSV export; default session duration (none/30/60/90/120 days) pre-fills target date when new session form opens; persisted to localStorage
+- [x] Donate / Support Section — collapsible "Support the Project" section in Settings; Ko-fi button + GitHub Sponsors button; short note on what donations fund

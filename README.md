@@ -333,11 +333,10 @@ PillPipe is fully self-hosted. Your data never leaves your own machine unless yo
 ## Roadmap
 
 ### Later
-- [ ] **Flexible Ads** — see below
-- [ ] **Donate section** — one-time or recurring support via Ko-fi / GitHub Sponsors; revenue direction TBD alongside ads
 - [ ] **JWT authentication** — multi-user or public hosting support
 - [ ] **Android app** — offline-first with local SQLite; shortfall engine runs entirely on-device
 - [ ] **Doctor portal** — multi-tenant support for providers to push sessions to patients
+- [ ] **Flexible Ads** — opt-in ad levels (0–3); ad-free is always the default and always free
 
 ---
 
