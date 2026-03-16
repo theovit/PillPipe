@@ -216,8 +216,13 @@ PillPipe can back up your data to Google Drive automatically. Because this is a 
 
 1. Go to **APIs & Services → OAuth consent screen** (now called **Google Auth Platform** in newer consoles)
 2. Choose **External** → **Create**
-3. Fill in **App name** (e.g. "PillPipe") and your email for the support and developer fields → **Save and Continue** through the remaining steps
-4. On the **Audience** page, publishing status will be **Testing** by default. Either:
+3. Fill in **App name** (e.g. "PillPipe") and your email for the support and developer fields → **Save and Continue**
+4. On the **Data Access** (Scopes) step, click **Add or remove scopes** and add the following two scopes:
+   - `.../auth/drive.file` — allows PillPipe to create and manage its own backup files in Drive
+   - `.../auth/userinfo.email` — used to display which account is connected in Settings
+
+   You can search for them by typing `drive.file` and `userinfo.email` in the filter box. Click **Update** when done, then **Save and Continue**.
+5. On the **Audience** page, publishing status will be **Testing** by default. Either:
    - Click **Publish app** to make it available to any Google account (recommended for personal use — `drive.file` is a non-sensitive scope and requires no Google review), or
    - Stay in Testing and click **+ Add users** → add your Gmail address
 
