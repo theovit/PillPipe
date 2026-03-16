@@ -375,8 +375,8 @@ app.post('/restore', w(async (req, res) => {
       );
     for (const r of regimens)
       await client.query(
-        'INSERT INTO regimens (id,session_id,supplement_id,notes) VALUES ($1,$2,$3,$4)',
-        [r.id, r.session_id, r.supplement_id, r.notes]
+        'INSERT INTO regimens (id,session_id,supplement_id,notes,reminder_time) VALUES ($1,$2,$3,$4,$5)',
+        [r.id, r.session_id, r.supplement_id, r.notes, r.reminder_time ?? null]
       );
     for (const p of phases)
       await client.query(
@@ -502,7 +502,8 @@ app.post('/drive/restore/:fileId', w(async (req, res) => {
     { fileId: req.params.fileId, alt: 'media' },
     { responseType: 'text' }
   );
-  const { supplements=[], sessions=[], regimens=[], phases=[], templates=[], template_regimens=[], template_phases=[] } = JSON.parse(response.data);
+  const parsed = JSON.parse(response.data);
+  const { supplements=[], sessions=[], regimens=[], phases=[], templates=[], template_regimens=[], template_phases=[], prefs=null } = parsed;
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -513,7 +514,7 @@ app.post('/drive/restore/:fileId', w(async (req, res) => {
     for (const s of sessions)
       await client.query('INSERT INTO sessions (id,start_date,target_date,notes) VALUES ($1,$2,$3,$4)', [s.id, s.start_date, s.target_date, s.notes]);
     for (const r of regimens)
-      await client.query('INSERT INTO regimens (id,session_id,supplement_id,notes) VALUES ($1,$2,$3,$4)', [r.id, r.session_id, r.supplement_id, r.notes]);
+      await client.query('INSERT INTO regimens (id,session_id,supplement_id,notes,reminder_time) VALUES ($1,$2,$3,$4,$5)', [r.id, r.session_id, r.supplement_id, r.notes, r.reminder_time??null]);
     for (const p of phases)
       await client.query('INSERT INTO phases (id,regimen_id,dosage,duration_days,days_of_week,indefinite,sequence_order) VALUES ($1,$2,$3,$4,$5,$6,$7)', [p.id, p.regimen_id, p.dosage, p.duration_days, p.days_of_week, p.indefinite, p.sequence_order]);
     for (const t of templates)
@@ -523,7 +524,7 @@ app.post('/drive/restore/:fileId', w(async (req, res) => {
     for (const tp of template_phases)
       await client.query('INSERT INTO template_phases (id,template_regimen_id,dosage,duration_days,days_of_week,indefinite,sequence_order,created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)', [tp.id, tp.template_regimen_id, tp.dosage, tp.duration_days, tp.days_of_week, tp.indefinite, tp.sequence_order, tp.created_at]);
     await client.query('COMMIT');
-    res.json({ ok: true });
+    res.json({ ok: true, prefs });
   } catch (e) {
     await client.query('ROLLBACK');
     throw e;

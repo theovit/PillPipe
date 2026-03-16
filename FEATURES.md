@@ -117,7 +117,7 @@ Multi-tenant support allowing healthcare providers to create sessions and push t
 - [x] Days-of-week dosing support
 - [x] Grand total cost across all regimens
 - [x] Quick inventory adjustment (+/− buttons on supplement rows)
-- [x] Data backup, restore, and clear (Settings → Data section)
+- [x] Data backup, restore, and clear (Settings → Data section) — backup includes all DB data + client prefs (appearance, preferences); reminder_time restored correctly
 - [x] Settings page — full-screen tab with collapsible sections; SVG cog icon in nav; Appearance + Preferences section shells present (content tracked in backlog)
 - [x] Version handling — `GET /version` endpoint; version read from `package.json`; displayed in Settings footer
 - [x] About section — collapsible Settings section; pill icon, version, description, GitHub link, MIT license

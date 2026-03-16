@@ -191,7 +191,11 @@ export default function Dashboard() {
     if (!confirm(`Restore from "${filename}"? This will replace all current data.`)) return;
     setDriveWorking(true); setDriveMsg('');
     try {
-      await api.restoreFromDrive(fileId);
+      const result = await api.restoreFromDrive(fileId);
+      // Apply client-side prefs from the backup before reloading
+      if (result?.prefs) {
+        savePrefs(result.prefs);
+      }
       setDriveMsg('✓ Restored successfully. Reloading…');
       setTimeout(() => window.location.reload(), 1200);
     } catch (e) { setDriveMsg(`Restore failed: ${e.message}`); setDriveWorking(false); }
@@ -412,7 +416,9 @@ export default function Dashboard() {
 
   async function downloadBackup() {
     const data = await api.getBackup();
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    // Merge client-side prefs into the backup so a full restore is possible
+    const fullBackup = { ...data, prefs: loadPrefs() };
+    const blob = new Blob([JSON.stringify(fullBackup, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -429,7 +435,14 @@ export default function Dashboard() {
       return;
     }
     const text = await file.text();
-    await api.restore(JSON.parse(text));
+    const parsed = JSON.parse(text);
+    await api.restore(parsed);
+    // Restore client-side prefs if present in the backup
+    if (parsed.prefs) {
+      savePrefs(parsed.prefs);
+      setPrefs(parsed.prefs);
+      applyPrefs(parsed.prefs);
+    }
     setView('regimens');
     await loadSupplements();
     await loadSessions();
