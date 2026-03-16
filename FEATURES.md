@@ -65,20 +65,7 @@ Push notifications that remind you to take each supplement at the right time, ba
 
 ### P3 — Medium Term
 
-*Adherence Tracking complete. See Completed section.*
-
----
-
-#### Shortfall Export
-**Effort:** Low–Medium | **Value:** Medium — useful for doctor visits
-
-Export the shortfall calculation results as a PDF or CSV so users can hand it to a doctor or use it when ordering supplements. Currently results only live in the UI.
-
-**Planned behavior**
-- "Export" button appears after Calculate is run
-- PDF includes session dates, each regimen's phase summary, on-hand count, shortfall, bottles to buy, and cost
-- CSV version for users who want to work with the data in a spreadsheet
-- Grand total cost included in both formats
+*Shortfall Export and Adherence Tracking complete. See Completed section.*
 
 ---
 
@@ -182,4 +169,5 @@ Multi-tenant support allowing healthcare providers to create sessions and push t
 - [x] Liquid & Drops support — `unit` field (capsules/tablets/ml/drops), `drops_per_ml` override, dynamic labels throughout UI, decimal dosage/inventory for ml, drops↔ml conversion in calculator route
 - [x] Dose Reminders & Notifications — Web Push (VAPID), service worker, subscribe/unsubscribe in Settings, server-side cron (checks every minute), per-regimen reminder time picker, dose_log table, `push_subscriptions` table, test notification button
 - [x] Running Low — On-Hand Alerts — per-supplement `reorder_threshold` (raw units, opt-in), ⚠ low badge on supplement rows, daily 8am server cron fires push notification with on-hand count + days remaining (calculated from active regimen phase dosage)
-- [x] Adherence Tracking — 30-day dot grid per regimen (green=taken, red=skipped, gray=missed), adherence % stat, "Taken today / Skip today" log buttons, change/undo support; SW message listener logs doses tapped from push notifications; `AdherenceCalendar` component in expanded regimen card
+- [x] Adherence Tracking — 30-day dot grid per regimen (green=taken, red=skipped, gray=missed), adherence % stat, "Taken today / Skip today" log buttons, change/undo support; SW message listener logs doses tapped from push notifications; `AdherenceCalendar` component in expanded regimen card; quick-log buttons on collapsed cards; "Mark all taken / Skip all" bulk bar
+- [x] Shortfall Export — "↓ CSV" button appears after Calculate runs; exports session header, per-regimen rows (on-hand, needed, shortfall, bottles, cost, days short, status), and grand total; zero new dependencies

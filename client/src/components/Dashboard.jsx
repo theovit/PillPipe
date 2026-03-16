@@ -263,6 +263,47 @@ export default function Dashboard() {
     return <span className="text-xs text-violet-400 font-mono">{d}d left</span>;
   }
 
+  function downloadCSV() {
+    const esc = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
+    const sessionStart  = new Date(activeSession.start_date).toLocaleDateString();
+    const sessionTarget = new Date(activeSession.target_date).toLocaleDateString();
+    const lines = [
+      `PillPipe Shortfall Export`,
+      `${esc('Session')},${esc(`${sessionStart} → ${sessionTarget} (${sessionTotalDays} days)`)}`,
+      `${esc('Generated')},${esc(new Date().toLocaleDateString())}`,
+      '',
+      'Supplement,Brand,Unit,"On Hand","Total Needed",Shortfall,"Bottles to Buy","Est. Cost","Days Short",Status',
+    ];
+    for (const r of regimens) {
+      const res = calcResults[r.id];
+      if (!res) continue;
+      const u = r.unit || 'capsules';
+      const unitLabel = u === 'ml' ? 'ml' : u === 'drops' ? 'drops' : u === 'tablets' ? 'tabs' : 'caps';
+      lines.push([
+        esc(r.supplement_name),
+        esc(r.brand || ''),
+        unitLabel,
+        Number(res.currentOnHand),
+        Number(res.pillsNeeded),
+        Number(res.shortfall),
+        Number(res.bottlesNeeded),
+        `$${(res.estimatedCost || 0).toFixed(2)}`,
+        Number(res.daysShort),
+        res.status,
+      ].join(','));
+    }
+    const tc = Object.values(calcResults).reduce((s, r) => s + (r.estimatedCost || 0), 0);
+    lines.push('');
+    lines.push(`,,,,,,,,$${tc.toFixed(2)},,Total Est. Cost`);
+    const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = `pillpipe-shortfall-${activeSession.target_date.slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   const totalCost = Object.keys(calcResults).length > 0
     ? Object.values(calcResults).reduce((sum, r) => sum + (r.estimatedCost || 0), 0)
     : null;
@@ -771,6 +812,13 @@ export default function Dashboard() {
                     className="px-4 py-3 sm:py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-200 text-sm font-medium">
                     {addingRegimen ? 'Cancel' : '+ Add'}
                   </button>
+                  {totalCost !== null && (
+                    <button onClick={downloadCSV}
+                      className="px-4 py-3 sm:py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm font-medium"
+                      title="Export results as CSV">
+                      ↓ CSV
+                    </button>
+                  )}
                   <button onClick={runCalculate}
                     className="px-5 py-3 sm:py-2 rounded-lg bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium">
                     Calculate
