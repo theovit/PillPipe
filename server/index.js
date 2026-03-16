@@ -88,12 +88,33 @@ app.get('/sessions', w(async (req, res) => {
 }));
 
 app.post('/sessions', w(async (req, res) => {
-  const { start_date, target_date, notes } = req.body;
+  const { start_date, target_date, notes, template_id } = req.body;
   const { rows } = await pool.query(
     `INSERT INTO sessions (start_date, target_date, notes) VALUES ($1,$2,$3) RETURNING *`,
     [start_date, target_date, notes || null]
   );
-  res.status(201).json(rows[0]);
+  const session = rows[0];
+  if (template_id) {
+    const { rows: tmplRegimens } = await pool.query(
+      'SELECT * FROM template_regimens WHERE template_id=$1', [template_id]
+    );
+    for (const tr of tmplRegimens) {
+      const { rows: [newRegimen] } = await pool.query(
+        'INSERT INTO regimens (session_id, supplement_id) VALUES ($1,$2) RETURNING *',
+        [session.id, tr.supplement_id]
+      );
+      const { rows: tmplPhases } = await pool.query(
+        'SELECT * FROM template_phases WHERE template_regimen_id=$1 ORDER BY sequence_order', [tr.id]
+      );
+      for (const tp of tmplPhases) {
+        await pool.query(
+          'INSERT INTO phases (regimen_id, dosage, duration_days, days_of_week, sequence_order, indefinite) VALUES ($1,$2,$3,$4,$5,$6)',
+          [newRegimen.id, tp.dosage, tp.duration_days, tp.days_of_week, tp.sequence_order, tp.indefinite]
+        );
+      }
+    }
+  }
+  res.status(201).json(session);
 }));
 
 app.put('/sessions/:id', w(async (req, res) => {
@@ -135,6 +156,44 @@ app.post('/sessions/:id/copy', w(async (req, res) => {
 
 app.delete('/sessions/:id', w(async (req, res) => {
   await pool.query('DELETE FROM sessions WHERE id=$1', [req.params.id]);
+  res.status(204).end();
+}));
+
+// ── Templates ─────────────────────────────────────────────────────────────────
+app.get('/templates', w(async (req, res) => {
+  const { rows } = await pool.query('SELECT * FROM templates ORDER BY name');
+  res.json(rows);
+}));
+
+app.post('/sessions/:id/save-as-template', w(async (req, res) => {
+  const { name } = req.body;
+  if (!name?.trim()) return res.status(400).json({ error: 'Name is required' });
+  const { rows: [tmpl] } = await pool.query(
+    'INSERT INTO templates (name) VALUES ($1) RETURNING *', [name.trim()]
+  );
+  const { rows: srcRegimens } = await pool.query(
+    'SELECT * FROM regimens WHERE session_id=$1', [req.params.id]
+  );
+  for (const r of srcRegimens) {
+    const { rows: [tr] } = await pool.query(
+      'INSERT INTO template_regimens (template_id, supplement_id) VALUES ($1,$2) RETURNING *',
+      [tmpl.id, r.supplement_id]
+    );
+    const { rows: srcPhases } = await pool.query(
+      'SELECT * FROM phases WHERE regimen_id=$1 ORDER BY sequence_order', [r.id]
+    );
+    for (const p of srcPhases) {
+      await pool.query(
+        'INSERT INTO template_phases (template_regimen_id, dosage, duration_days, days_of_week, sequence_order, indefinite) VALUES ($1,$2,$3,$4,$5,$6)',
+        [tr.id, p.dosage, p.duration_days, p.days_of_week, p.sequence_order, !!p.indefinite]
+      );
+    }
+  }
+  res.status(201).json(tmpl);
+}));
+
+app.delete('/templates/:id', w(async (req, res) => {
+  await pool.query('DELETE FROM templates WHERE id=$1', [req.params.id]);
   res.status(204).end();
 }));
 
@@ -253,15 +312,18 @@ app.get('/backup', w(async (req, res) => {
   const { rows: sessions } = await pool.query('SELECT * FROM sessions');
   const { rows: regimens } = await pool.query('SELECT * FROM regimens');
   const { rows: phases } = await pool.query('SELECT * FROM phases');
-  res.json({ version: 1, exported_at: new Date().toISOString(), supplements, sessions, regimens, phases });
+  const { rows: templates } = await pool.query('SELECT * FROM templates');
+  const { rows: template_regimens } = await pool.query('SELECT * FROM template_regimens');
+  const { rows: template_phases } = await pool.query('SELECT * FROM template_phases');
+  res.json({ version: 1, exported_at: new Date().toISOString(), supplements, sessions, regimens, phases, templates, template_regimens, template_phases });
 }));
 
 app.post('/restore', w(async (req, res) => {
-  const { supplements = [], sessions = [], regimens = [], phases = [] } = req.body;
+  const { supplements = [], sessions = [], regimens = [], phases = [], templates = [], template_regimens = [], template_phases = [] } = req.body;
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    await client.query('TRUNCATE supplements, sessions CASCADE');
+    await client.query('TRUNCATE supplements, sessions, templates CASCADE');
     for (const s of supplements)
       await client.query(
         'INSERT INTO supplements (id,name,brand,pills_per_bottle,price,type,current_inventory,unit,drops_per_ml,reorder_threshold,reorder_threshold_mode) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)',
@@ -281,6 +343,21 @@ app.post('/restore', w(async (req, res) => {
       await client.query(
         'INSERT INTO phases (id,regimen_id,dosage,duration_days,days_of_week,indefinite,sequence_order) VALUES ($1,$2,$3,$4,$5,$6,$7)',
         [p.id, p.regimen_id, p.dosage, p.duration_days, p.days_of_week, p.indefinite, p.sequence_order]
+      );
+    for (const t of templates)
+      await client.query(
+        'INSERT INTO templates (id,name,notes,created_at) VALUES ($1,$2,$3,$4)',
+        [t.id, t.name, t.notes ?? null, t.created_at]
+      );
+    for (const tr of template_regimens)
+      await client.query(
+        'INSERT INTO template_regimens (id,template_id,supplement_id,created_at) VALUES ($1,$2,$3,$4)',
+        [tr.id, tr.template_id, tr.supplement_id, tr.created_at]
+      );
+    for (const tp of template_phases)
+      await client.query(
+        'INSERT INTO template_phases (id,template_regimen_id,dosage,duration_days,days_of_week,indefinite,sequence_order,created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)',
+        [tp.id, tp.template_regimen_id, tp.dosage, tp.duration_days, tp.days_of_week, tp.indefinite, tp.sequence_order, tp.created_at]
       );
     await client.query('COMMIT');
     res.json({ ok: true });
@@ -410,6 +487,37 @@ pool.query(`
     UNIQUE (regimen_id, date)
   )
 `).catch(console.error);
+// Template tables must be created in order (FK chain: templates → template_regimens → template_phases)
+(async () => {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS templates (
+      id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      name       TEXT NOT NULL,
+      notes      TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS template_regimens (
+      id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      template_id   UUID NOT NULL REFERENCES templates(id) ON DELETE CASCADE,
+      supplement_id UUID NOT NULL REFERENCES supplements(id) ON DELETE CASCADE,
+      created_at    TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS template_phases (
+      id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      template_regimen_id  UUID NOT NULL REFERENCES template_regimens(id) ON DELETE CASCADE,
+      dosage               NUMERIC NOT NULL,
+      duration_days        INTEGER NOT NULL,
+      days_of_week         INTEGER[],
+      indefinite           BOOLEAN NOT NULL DEFAULT FALSE,
+      sequence_order       INTEGER NOT NULL,
+      created_at           TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+})().catch(console.error);
 
 // ── Low-stock check helper ────────────────────────────────────────────────────
 async function checkLowStock() {
