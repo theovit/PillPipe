@@ -10,7 +10,7 @@ import { formatDate } from '../utils/prefs';
 const today = new Date().toISOString().slice(0, 10);
 const inputCls = 'w-full rounded bg-gray-800 border border-gray-700 px-3 py-2.5 sm:py-1.5 text-base sm:text-sm text-gray-200 focus:outline-none focus:border-violet-500';
 
-export default function SessionPane({ session, supplements, prefs, notifStatus, onClose }) {
+export default function SessionPane({ session, supplements, prefs, notifStatus }) {
   const [regimens, setRegimens] = useState([]);
   const [phases, setPhases] = useState({});
   const [calcResults, setCalcResults] = useState({});
@@ -275,10 +275,6 @@ export default function SessionPane({ session, supplements, prefs, notifStatus, 
             className="px-5 py-3 sm:py-2 rounded-lg bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium">
             Calculate
           </button>
-          <button onClick={onClose}
-            className="text-gray-600 hover:text-gray-400 p-2 -mr-1" title="Collapse session">
-            ✕
-          </button>
         </div>
       </div>
       {totalCost !== null && (
@@ -352,7 +348,7 @@ export default function SessionPane({ session, supplements, prefs, notifStatus, 
                 onClick={() => setExpandedRegimen(isExpanded ? null : r.id)}>
                 <div className="min-w-0">
                   <h3 className="font-semibold text-white">{r.supplement_name}</h3>
-                  <p className="text-xs text-gray-500 truncate">
+                  <p className="text-xs text-gray-500">
                     {r.brand && `${r.brand} · `}
                     {r.unit === 'drops' ? `${r.pills_per_bottle} ml/bottle` : r.unit === 'ml' ? `${r.pills_per_bottle} ml/bottle` : `${r.pills_per_bottle} ${r.unit === 'tablets' ? 'tabs' : 'caps'}/bottle`}
                     {' · '}${Number(r.price).toFixed(2)}
