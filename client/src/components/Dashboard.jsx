@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../utils/api';
+import { applyPrefs, defaultTargetDate, formatDate, loadPrefs, savePrefs } from '../utils/prefs';
 import PhaseEditor from './PhaseEditor';
 import ShortfallAlert from './ShortfallAlert';
 import SupplementsPanel from './SupplementsPanel';
@@ -43,9 +44,20 @@ export default function Dashboard() {
   const [driveWorking, setDriveWorking] = useState(false); // backing up or restoring
   const [driveMsg, setDriveMsg] = useState(''); // status message
   const [showDriveBackups, setShowDriveBackups] = useState(false);
+  const [prefs, setPrefs] = useState(() => loadPrefs());
   function toggleSection(name) { setOpenSections(p => ({ ...p, [name]: !p[name] })); }
 
+  function updatePref(key, value) {
+    setPrefs(p => {
+      const next = { ...p, [key]: value };
+      savePrefs(next);
+      applyPrefs(next);
+      return next;
+    });
+  }
+
   useEffect(() => {
+    applyPrefs(prefs);
     loadSupplements();
     loadSessions();
     api.getVersion().then(d => setAppVersion(d.version)).catch(() => {});
@@ -255,7 +267,7 @@ export default function Dashboard() {
       return;
     }
     const s = await api.createSession(sessionForm);
-    setSessionForm({ start_date: today, target_date: '', notes: '', template_id: '' });
+    setSessionForm({ start_date: today, target_date: defaultTargetDate(prefs.defaultDuration), notes: '', template_id: '' });
     setSessions(prev => [s, ...prev]);
     setActiveSession(s);
     setAddingSession(false);
@@ -337,12 +349,12 @@ export default function Dashboard() {
 
   function downloadCSV() {
     const esc = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
-    const sessionStart  = new Date(activeSession.start_date).toLocaleDateString();
-    const sessionTarget = new Date(activeSession.target_date).toLocaleDateString();
+    const sessionStart  = formatDate(activeSession.start_date, prefs.dateFormat);
+    const sessionTarget = formatDate(activeSession.target_date, prefs.dateFormat);
     const lines = [
       `PillPipe Shortfall Export`,
       `${esc('Session')},${esc(`${sessionStart} → ${sessionTarget} (${sessionTotalDays} days)`)}`,
-      `${esc('Generated')},${esc(new Date().toLocaleDateString())}`,
+      `${esc('Generated')},${esc(formatDate(today, prefs.dateFormat))}`,
       '',
       'Supplement,Brand,Unit,"On Hand","Total Needed",Shortfall,"Bottles to Buy","Est. Cost","Days Short",Status',
     ];
@@ -643,27 +655,99 @@ export default function Dashboard() {
             )}
           </div>
 
-          {/* Appearance — coming soon */}
-          <div className="rounded-xl bg-gray-900 border border-gray-800 overflow-hidden opacity-50">
+          {/* Appearance */}
+          <div className="rounded-xl bg-gray-900 border border-gray-800 overflow-hidden">
             <button onClick={() => toggleSection('appearance')}
-              className="w-full flex items-center justify-between px-5 py-4 text-left cursor-not-allowed">
+              className="w-full flex items-center justify-between px-5 py-4 text-left">
               <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Appearance</h2>
               <span className="text-gray-600 text-xs">{openSections.appearance ? '▲' : '▼'}</span>
             </button>
             {openSections.appearance && (
-              <p className="px-5 pb-4 text-xs text-gray-600 border-t border-gray-800 pt-3">Font size, theme color — coming soon.</p>
+              <div className="px-5 pb-5 space-y-5 border-t border-gray-800 pt-4">
+                {/* Theme color */}
+                <div>
+                  <p className="text-sm text-gray-200 font-medium mb-3">Theme color</p>
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      { key: 'violet', bg: 'bg-violet-600',  label: 'Violet'  },
+                      { key: 'blue',   bg: 'bg-blue-600',    label: 'Blue'    },
+                      { key: 'cyan',   bg: 'bg-cyan-600',    label: 'Cyan'    },
+                      { key: 'green',  bg: 'bg-green-600',   label: 'Green'   },
+                      { key: 'amber',  bg: 'bg-amber-500',   label: 'Amber'   },
+                      { key: 'rose',   bg: 'bg-rose-600',    label: 'Rose'    },
+                    ].map(({ key, bg, label }) => (
+                      <button key={key} onClick={() => updatePref('accentColor', key)}
+                        title={label}
+                        className={`w-8 h-8 rounded-full ${bg} transition-transform ${prefs.accentColor === key ? 'ring-2 ring-offset-2 ring-offset-gray-900 ring-white scale-110' : 'opacity-60 hover:opacity-100'}`} />
+                    ))}
+                  </div>
+                </div>
+                {/* Font size */}
+                <div>
+                  <p className="text-sm text-gray-200 font-medium mb-3">Font size</p>
+                  <div className="flex gap-2">
+                    {[
+                      { key: 'small',  label: 'Small'  },
+                      { key: 'medium', label: 'Medium' },
+                      { key: 'large',  label: 'Large'  },
+                    ].map(({ key, label }) => (
+                      <button key={key} onClick={() => updatePref('fontSize', key)}
+                        className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${prefs.fontSize === key ? 'bg-violet-600 text-white' : 'bg-gray-800 text-gray-400 hover:text-gray-200'}`}>
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
             )}
           </div>
 
-          {/* Preferences — coming soon */}
-          <div className="rounded-xl bg-gray-900 border border-gray-800 overflow-hidden opacity-50">
+          {/* Preferences */}
+          <div className="rounded-xl bg-gray-900 border border-gray-800 overflow-hidden">
             <button onClick={() => toggleSection('preferences')}
-              className="w-full flex items-center justify-between px-5 py-4 text-left cursor-not-allowed">
+              className="w-full flex items-center justify-between px-5 py-4 text-left">
               <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Preferences</h2>
               <span className="text-gray-600 text-xs">{openSections.preferences ? '▲' : '▼'}</span>
             </button>
             {openSections.preferences && (
-              <p className="px-5 pb-4 text-xs text-gray-600 border-t border-gray-800 pt-3">Date format, default session duration — coming soon.</p>
+              <div className="px-5 pb-5 space-y-5 border-t border-gray-800 pt-4">
+                {/* Date format */}
+                <div>
+                  <p className="text-sm text-gray-200 font-medium mb-3">Date format</p>
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      { key: 'locale', label: 'Browser default' },
+                      { key: 'mdy',    label: 'MM/DD/YYYY'      },
+                      { key: 'dmy',    label: 'DD/MM/YYYY'      },
+                      { key: 'ymd',    label: 'YYYY-MM-DD'      },
+                    ].map(({ key, label }) => (
+                      <button key={key} onClick={() => updatePref('dateFormat', key)}
+                        className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${prefs.dateFormat === key ? 'bg-violet-600 text-white' : 'bg-gray-800 text-gray-400 hover:text-gray-200'}`}>
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {/* Default session duration */}
+                <div>
+                  <p className="text-sm text-gray-200 font-medium mb-1">Default session duration</p>
+                  <p className="text-xs text-gray-500 mb-3">Pre-fills the target date when creating a new session.</p>
+                  <div className="flex flex-wrap gap-2">
+                    {[
+                      { key: 0,   label: 'None'    },
+                      { key: 30,  label: '30 days' },
+                      { key: 60,  label: '60 days' },
+                      { key: 90,  label: '90 days' },
+                      { key: 120, label: '120 days'},
+                    ].map(({ key, label }) => (
+                      <button key={key} onClick={() => updatePref('defaultDuration', key)}
+                        className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${prefs.defaultDuration === key ? 'bg-violet-600 text-white' : 'bg-gray-800 text-gray-400 hover:text-gray-200'}`}>
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
             )}
           </div>
 
@@ -815,7 +899,7 @@ export default function Dashboard() {
           <div className="rounded-xl bg-gray-900 border border-gray-800 p-4">
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Session</h2>
-              <button onClick={() => { if (!addingSession) loadTemplates(); setAddingSession(a => !a); setEditingSession(null); }}
+              <button onClick={() => { if (!addingSession) { loadTemplates(); setSessionForm(f => ({ ...f, target_date: defaultTargetDate(prefs.defaultDuration) })); } setAddingSession(a => !a); setEditingSession(null); }}
                 className="text-sm text-violet-400 hover:text-violet-300 font-medium">
                 {addingSession ? 'Cancel' : '+ New'}
               </button>
@@ -891,10 +975,10 @@ export default function Dashboard() {
                       <div className="flex items-start gap-1">
                         <div className="flex-1 min-w-0">
                           <div className="font-medium text-violet-300 flex items-center gap-2 flex-wrap text-sm">
-                            <span className="font-mono">→ {new Date(activeSession.target_date).toLocaleDateString()}</span>
+                            <span className="font-mono">→ {formatDate(activeSession.target_date, prefs.dateFormat)}</span>
                             {daysLeftBadge(activeSession.target_date)}
                           </div>
-                          <div className="text-xs text-gray-500 mt-0.5 font-mono">from {new Date(activeSession.start_date).toLocaleDateString()}</div>
+                          <div className="text-xs text-gray-500 mt-0.5 font-mono">from {formatDate(activeSession.start_date, prefs.dateFormat)}</div>
                           {activeSession.notes && <div className="text-xs text-gray-400 mt-1.5 leading-relaxed">{activeSession.notes}</div>}
                         </div>
                         <button onClick={e => { e.stopPropagation(); setCopyingSession(activeSession.id); setCopyForm({ start_date: today, target_date: '' }); }}
