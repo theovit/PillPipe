@@ -47,7 +47,7 @@ const w = fn => (req, res, next) => fn(req, res, next).catch(next);
 // ── Google Drive on-change backup middleware ──────────────────────────────────
 app.use((req, res, next) => {
   const mutating = ['POST', 'PUT', 'PATCH', 'DELETE'];
-  const excluded = ['/auth/', '/drive/', '/push/', '/dose-log', '/backup', '/restore', '/data', '/version', '/health'];
+  const excluded = ['/auth/', '/drive/', '/push/', '/dose-log', '/backup', '/restore', '/data', '/version', '/health', '/settings/'];
   if (mutating.includes(req.method) && !excluded.some(p => req.path.startsWith(p))) {
     res.on('finish', () => {
       if (res.statusCode >= 200 && res.statusCode < 300) {
@@ -354,11 +354,13 @@ app.get('/backup', w(async (req, res) => {
   const { rows: templates } = await pool.query('SELECT * FROM templates');
   const { rows: template_regimens } = await pool.query('SELECT * FROM template_regimens');
   const { rows: template_phases } = await pool.query('SELECT * FROM template_phases');
-  res.json({ version: 1, exported_at: new Date().toISOString(), supplements, sessions, regimens, phases, templates, template_regimens, template_phases });
+  const { rows: settingsRows } = await pool.query('SELECT prefs FROM user_settings WHERE singleton = TRUE');
+  const prefs = settingsRows[0]?.prefs ?? {};
+  res.json({ version: 1, exported_at: new Date().toISOString(), supplements, sessions, regimens, phases, templates, template_regimens, template_phases, prefs });
 }));
 
 app.post('/restore', w(async (req, res) => {
-  const { supplements = [], sessions = [], regimens = [], phases = [], templates = [], template_regimens = [], template_phases = [] } = req.body;
+  const { supplements = [], sessions = [], regimens = [], phases = [], templates = [], template_regimens = [], template_phases = [], prefs = null } = req.body;
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -398,8 +400,15 @@ app.post('/restore', w(async (req, res) => {
         'INSERT INTO template_phases (id,template_regimen_id,dosage,duration_days,days_of_week,indefinite,sequence_order,created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)',
         [tp.id, tp.template_regimen_id, tp.dosage, tp.duration_days, tp.days_of_week, tp.indefinite, tp.sequence_order, tp.created_at]
       );
+    if (prefs) {
+      await client.query(`
+        INSERT INTO user_settings (singleton, prefs, updated_at)
+        VALUES (TRUE, $1, NOW())
+        ON CONFLICT (singleton) DO UPDATE SET prefs = $1, updated_at = NOW()
+      `, [prefs]);
+    }
     await client.query('COMMIT');
-    res.json({ ok: true });
+    res.json({ ok: true, prefs });
   } catch (e) {
     await client.query('ROLLBACK');
     throw e;
@@ -410,6 +419,22 @@ app.post('/restore', w(async (req, res) => {
 
 app.delete('/data', w(async (req, res) => {
   await pool.query('TRUNCATE supplements, sessions CASCADE');
+  res.json({ ok: true });
+}));
+
+// ── User Settings (prefs) ─────────────────────────────────────────────────────
+app.get('/settings/prefs', w(async (req, res) => {
+  const { rows } = await pool.query('SELECT prefs FROM user_settings WHERE singleton = TRUE');
+  res.json(rows[0]?.prefs ?? {});
+}));
+
+app.put('/settings/prefs', w(async (req, res) => {
+  const prefs = req.body;
+  await pool.query(`
+    INSERT INTO user_settings (singleton, prefs, updated_at)
+    VALUES (TRUE, $1, NOW())
+    ON CONFLICT (singleton) DO UPDATE SET prefs = $1, updated_at = NOW()
+  `, [prefs]);
   res.json({ ok: true });
 }));
 
@@ -523,6 +548,13 @@ app.post('/drive/restore/:fileId', w(async (req, res) => {
       await client.query('INSERT INTO template_regimens (id,template_id,supplement_id,created_at) VALUES ($1,$2,$3,$4)', [tr.id, tr.template_id, tr.supplement_id, tr.created_at]);
     for (const tp of template_phases)
       await client.query('INSERT INTO template_phases (id,template_regimen_id,dosage,duration_days,days_of_week,indefinite,sequence_order,created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)', [tp.id, tp.template_regimen_id, tp.dosage, tp.duration_days, tp.days_of_week, tp.indefinite, tp.sequence_order, tp.created_at]);
+    if (prefs) {
+      await client.query(`
+        INSERT INTO user_settings (singleton, prefs, updated_at)
+        VALUES (TRUE, $1, NOW())
+        ON CONFLICT (singleton) DO UPDATE SET prefs = $1, updated_at = NOW()
+      `, [prefs]);
+    }
     await client.query('COMMIT');
     res.json({ ok: true, prefs });
   } catch (e) {
@@ -712,7 +744,7 @@ async function driveBackup() {
   }
 
   // Build backup payload
-  const [supp, sess, reg, ph, tmpl, tr, tp] = await Promise.all([
+  const [supp, sess, reg, ph, tmpl, tr, tp, settingsRows] = await Promise.all([
     pool.query('SELECT * FROM supplements'),
     pool.query('SELECT * FROM sessions'),
     pool.query('SELECT * FROM regimens'),
@@ -720,11 +752,14 @@ async function driveBackup() {
     pool.query('SELECT * FROM templates'),
     pool.query('SELECT * FROM template_regimens'),
     pool.query('SELECT * FROM template_phases'),
+    pool.query('SELECT prefs FROM user_settings WHERE singleton = TRUE'),
   ]);
+  const prefs = settingsRows.rows[0]?.prefs ?? {};
   const payload = JSON.stringify({
     version: 1, exported_at: new Date().toISOString(),
     supplements: supp.rows, sessions: sess.rows, regimens: reg.rows, phases: ph.rows,
     templates: tmpl.rows, template_regimens: tr.rows, template_phases: tp.rows,
+    prefs,
   });
 
   const filename = `pillpipe-backup-${new Date().toISOString().slice(0,19).replace(/:/g,'-')}.json`;
@@ -842,6 +877,13 @@ async function checkLowStock() {
       last_backup_at       TIMESTAMPTZ,
       last_backup_file_id  TEXT,
       updated_at           TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS user_settings (
+      singleton   BOOLEAN PRIMARY KEY DEFAULT TRUE CHECK (singleton),
+      prefs       JSONB NOT NULL DEFAULT '{}',
+      updated_at  TIMESTAMPTZ DEFAULT NOW()
     )
   `);
 })().catch(console.error);

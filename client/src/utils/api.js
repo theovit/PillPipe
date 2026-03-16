@@ -69,6 +69,10 @@ export const api = {
   saveAsTemplate: (sessionId, body) => request(`/sessions/${sessionId}/save-as-template`, { method: 'POST', body }),
   deleteTemplate: (id) => request(`/templates/${id}`, { method: 'DELETE' }),
 
+  // User Settings (prefs)
+  getPrefs: () => request('/settings/prefs'),
+  savePrefs: (prefs) => request('/settings/prefs', { method: 'PUT', body: prefs }),
+
   // Google Drive Backup
   getDriveStatus: () => request('/drive/status'),
   setDriveFrequency: (frequency) => request('/drive/settings', { method: 'PATCH', body: { frequency } }),

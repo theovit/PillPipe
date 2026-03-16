@@ -52,6 +52,7 @@ export default function Dashboard() {
       const next = { ...p, [key]: value };
       savePrefs(next);
       applyPrefs(next);
+      api.savePrefs(next).catch(() => {});
       return next;
     });
   }
@@ -62,12 +63,25 @@ export default function Dashboard() {
       const next = { ...p, accentColor: key };
       savePrefs(next);
       applyPrefs(next);
+      api.savePrefs(next).catch(() => {});
       return next;
     });
   }
 
   useEffect(() => {
-    applyPrefs(prefs);
+    // Load prefs from server on startup; server is source of truth, localStorage is the fallback
+    api.getPrefs().then(serverPrefs => {
+      if (serverPrefs && Object.keys(serverPrefs).length > 0) {
+        const merged = { ...loadPrefs(), ...serverPrefs };
+        savePrefs(merged);
+        setPrefs(merged);
+        applyPrefs(merged);
+      } else {
+        applyPrefs(prefs);
+        // Seed the server with whatever is in localStorage
+        api.savePrefs(prefs).catch(() => {});
+      }
+    }).catch(() => { applyPrefs(prefs); });
     loadSupplements();
     loadSessions();
     api.getVersion().then(d => setAppVersion(d.version)).catch(() => {});
@@ -416,9 +430,7 @@ export default function Dashboard() {
 
   async function downloadBackup() {
     const data = await api.getBackup();
-    // Merge client-side prefs into the backup so a full restore is possible
-    const fullBackup = { ...data, prefs: loadPrefs() };
-    const blob = new Blob([JSON.stringify(fullBackup, null, 2)], { type: 'application/json' });
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -710,6 +722,7 @@ export default function Dashboard() {
                           savePrefs(next);
                           applyAccentColor('custom', hex);
                           setPrefs(next);
+                          api.savePrefs(next).catch(() => {});
                         }} />
                     </label>
                   </div>
