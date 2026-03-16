@@ -9,7 +9,7 @@ function fmtAmt(value, unit, drops_per_ml = 20) {
 export default function ShortfallAlert({ result, supplementName, unit = 'capsules', drops_per_ml = 20 }) {
   if (!result) return null;
 
-  const { status, shortfall, pillsNeeded, inventory, bottlesNeeded, estimatedCost, waste } = result;
+  const { status, shortfall, pillsNeeded, inventory, currentOnHand, bottlesNeeded, estimatedCost, waste } = result;
 
   if (status === 'covered') {
     return (
@@ -38,7 +38,7 @@ export default function ShortfallAlert({ result, supplementName, unit = 'capsule
       </div>
       <div className="text-gray-500 text-xs font-mono">
         need <span className="text-gray-400">{fmtAmt(pillsNeeded, unit, drops_per_ml)}</span>
-        {' · '}have <span className="text-gray-400">{fmtAmt(inventory, unit, drops_per_ml)}</span>
+        {' · '}have <span className="text-gray-400">{fmtAmt(currentOnHand ?? inventory, unit, drops_per_ml)}</span>
         {waste > 0 && <span> · <span className="text-gray-400">{fmtAmt(waste, unit, drops_per_ml)}</span> leftover</span>}
       </div>
     </div>

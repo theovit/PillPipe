@@ -294,7 +294,7 @@ export default function Dashboard() {
     }
     const tc = Object.values(calcResults).reduce((s, r) => s + (r.estimatedCost || 0), 0);
     lines.push('');
-    lines.push(`,,,,,,,,$${tc.toFixed(2)},,Total Est. Cost`);
+    lines.push(`,,,,,,,$${tc.toFixed(2)},,Total Est. Cost`);
     const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement('a');

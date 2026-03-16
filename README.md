@@ -30,8 +30,13 @@ PillPipe answers both questions.
 - **Session notes** — attach notes to sessions for top-level context.
 - **Collapse/expand** — regimen cards and the sessions sidebar can be collapsed to reduce visual clutter.
 - **Supplements panel** — manage your supplement catalog with inventory, pricing, and type (maintenance vs. protocol).
+- **Liquid & drops support** — dose and track supplements by ml or drops (with configurable drops-per-ml conversion). Labels and shortfall calculations adapt automatically.
+- **Dose reminders & Web Push notifications** — per-regimen reminder times; respects days-of-week schedules; server-driven cron delivery; subscribe/unsubscribe in Settings; test notification button.
+- **Running Low alerts** — set a reorder threshold per supplement; a warning badge appears on the row and a push notification fires daily when stock is low.
+- **Adherence tracking** — 30-day dot grid (green=taken, red=skipped, gray=missed), adherence % stat, quick-log buttons on regimen cards, bulk "Mark all taken / Skip all" bar, and undo support.
+- **Shortfall Export (CSV)** — download calculation results as a CSV after running Calculate; includes per-regimen rows and grand total.
 - **Mobile touch-friendly UI** — tap to edit, hidden icons, action buttons optimized for phone use.
-- **Settings page** — full-screen tab with data backup, restore, and clear; version info; and appearance/preference placeholders.
+- **Settings page** — full-screen tab with data backup, restore, and clear; notification preferences; version info; and appearance/preference placeholders.
 - **Data backup & restore** — export all your data as JSON and restore it later from Settings → Data.
 - **Version display** — app version shown in the Settings footer, pulled live from the server.
 
@@ -143,10 +148,14 @@ That's it. No port forwarding, no DNS, no certificates required. Only devices on
 | id | UUID | Primary key |
 | name | Text | |
 | brand | Text | |
-| pills_per_bottle | Integer | |
+| pills_per_bottle | Numeric | Bottle size (units or ml) |
 | price | Decimal | |
 | type | Enum | `maintenance` or `protocol` |
-| current_inventory | Integer | Current pill count on hand |
+| current_inventory | Numeric | Current on-hand count |
+| unit | Enum | `capsules` (default), `tablets`, `ml`, `drops` |
+| drops_per_ml | Numeric | Default 20; overridable per supplement |
+| reorder_threshold | Numeric | Optional low-stock alert level (raw units) |
+| reorder_threshold_mode | Varchar | `units` (default) |
 
 **sessions** — a treatment window
 
@@ -164,6 +173,8 @@ That's it. No port forwarding, no DNS, no certificates required. Only devices on
 | id | UUID | Primary key |
 | session_id | UUID | FK → sessions |
 | supplement_id | UUID | FK → supplements |
+| notes | Text | Optional per-regimen notes |
+| reminder_time | Time | Daily push notification time for this regimen |
 
 **phases** — ordered dosage steps within a regimen
 
@@ -171,11 +182,13 @@ That's it. No port forwarding, no DNS, no certificates required. Only devices on
 |---|---|---|
 | id | UUID | Primary key |
 | regimen_id | UUID | FK → regimens |
-| dosage | Integer | Pills per dose |
+| dosage | Numeric | Amount per dose (supports decimals for ml/drops) |
 | duration_days | Integer | Length of this phase |
 | days_of_week | Integer[] | Null = every day; 0=Sun … 6=Sat |
 | indefinite | Boolean | Fills remaining session days automatically |
 | sequence_order | Integer | 1, 2, 3… |
+
+Additional runtime tables (created by server on startup): `push_subscriptions`, `dose_log`.
 
 ---
 
@@ -193,12 +206,6 @@ PillPipe is fully self-hosted. Your data never leaves your own machine.
 ## Roadmap
 
 ### Near Term
-- [ ] **Dose reminders & notifications** — push alerts at the right time, per regimen, respecting days-of-week schedules
-- [ ] **About modal** — app version, description, GitHub link, and license info accessible from the nav
-- [ ] **Shortfall export** — download calculation results as PDF or CSV for doctor visits
-
-### Medium Term
-- [ ] **Adherence tracking** — log taken/skipped/snoozed doses; calendar and percentage views per regimen
 - [ ] **Session templates** — save a regimen structure as a reusable template for recurring protocols
 
 ### Later
@@ -207,31 +214,3 @@ PillPipe is fully self-hosted. Your data never leaves your own machine.
 - [ ] **Android app** — offline-first with local SQLite; shortfall engine runs entirely on-device
 - [ ] **Doctor portal** — multi-tenant support for providers to push sessions to patients
 
----
-
-## WIP: Dose Reminders & Notifications
-
-> **Status:** Planned — not yet implemented.
-
-The goal is push notifications that remind you to take each supplement at the right time, based on your active session and dosing schedule.
-
-### Planned behavior
-
-- Per-regimen reminder times (e.g. Magnesium at 9pm, LDN at 3am)
-- Respects `days_of_week` — only fires on scheduled days
-- Skips automatically when a phase ends or a session expires
-- Snooze and mark-as-taken actions from the notification
-
-### Delivery options under consideration
-
-| Option | Pros | Cons |
-|---|---|---|
-| **Web Push (PWA)** | Works on mobile via browser, no app store | Requires HTTPS + service worker |
-| **ntfy (self-hosted)** | Free, self-hostable, simple API | Requires extra Docker container |
-| **Pushover** | Reliable, dead simple | $5 one-time fee per platform |
-| **Telegram Bot** | Rich interaction, free | Requires Telegram account |
-
-### Open questions
-
-- Should taken/skipped doses be logged for adherence tracking?
-- Should reminders be server-driven (cron job) or client-driven (service worker)?
