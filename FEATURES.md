@@ -18,37 +18,7 @@
 
 ### P3 — Medium Term
 
-*Shortfall Export, Adherence Tracking, and Session Templates complete. See Completed section.*
-
----
-
-#### Appearance Settings
-**Effort:** Low | **Value:** Medium — personalization and accessibility
-
-Flesh out the Appearance section in Settings (currently a "coming soon" stub).
-
-**Planned options**
-- **Theme color** — accent color picker (replace the hardcoded violet; a few curated options or a free picker)
-- **Font size** — small / medium / large; affects the entire UI for accessibility
-
-**Notes**
-- Settings stored in `localStorage` (device-local, no server sync needed for now)
-- Theme color should update the Tailwind accent utility classes dynamically (CSS variable swap)
-
----
-
-#### Preferences Settings
-**Effort:** Low | **Value:** Low-Medium — quality of life
-
-Flesh out the Preferences section in Settings (currently a "coming soon" stub).
-
-**Planned options**
-- **Date format** — e.g. MM/DD/YYYY vs DD/MM/YYYY vs YYYY-MM-DD; applies everywhere dates are displayed
-- **Default session duration** — pre-fill the target date field when creating a new session (e.g. 30 days, 60 days, 90 days)
-
-**Notes**
-- Settings stored in `localStorage`
-- Date format preference needs to be applied consistently: session cards, phase editors, shortfall output, CSV export
+*All P3 items complete. See Completed section.*
 
 ---
 
@@ -158,3 +128,5 @@ Multi-tenant support allowing healthcare providers to create sessions and push t
 - [x] Shortfall Export — "↓ CSV" button appears after Calculate runs; exports session header, per-regimen rows (on-hand, needed, shortfall, bottles, cost, days short, status), and grand total; zero new dependencies
 - [x] Session Templates — save any session as a named template (☆ button); apply when creating a new session to pre-populate all regimens + phases; manage/delete templates in Settings → Templates; backup/restore includes template data
 - [x] Google Drive Backup — OAuth2 connect via Google; manual, daily, or on-change backup modes; JSON backup uploaded to Drive with timestamped filenames; view and restore any previous backup from Settings → Data; tokens stored in DB; server-side cron for scheduled backups; on-change middleware triggers backup after successful mutations
+- [x] Appearance Settings — theme color picker (6 presets: violet/blue/cyan/green/orange/rose + custom color via HSL shade derivation); font size (small/medium/large via root font-size); CSS variable swap applies across all components instantly; persisted to localStorage
+- [x] Preferences Settings — date format (locale/MM-DD-YYYY/DD-MM-YYYY/YYYY-MM-DD) applied to session card dates and CSV export; default session duration (none/30/60/90/120 days) pre-fills target date when new session form opens; persisted to localStorage

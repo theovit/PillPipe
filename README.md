@@ -37,7 +37,9 @@ PillPipe answers both questions.
 - **Adherence tracking** — 30-day dot grid (green=taken, red=skipped, gray=missed), adherence % stat, quick-log buttons on regimen cards, bulk "Mark all taken / Skip all" bar, and undo support.
 - **Shortfall Export (CSV)** — download calculation results as a CSV after running Calculate; includes per-regimen rows and grand total.
 - **Mobile touch-friendly UI** — tap to edit, hidden icons, action buttons optimized for phone use.
-- **Settings page** — full-screen tab with data backup, restore, and clear; notification preferences; version info; and appearance/preference placeholders.
+- **Settings page** — full-screen tab with collapsible sections for data, templates, appearance, preferences, notifications, and about.
+- **Appearance settings** — theme color (6 presets + custom color picker), font size (small/medium/large); persisted to localStorage, applied instantly across the entire UI.
+- **Preference settings** — date format (browser default, MM/DD/YYYY, DD/MM/YYYY, YYYY-MM-DD) and default session duration (pre-fills target date on new sessions).
 - **Google Drive backup** — connect your Google account in Settings → Data to back up automatically (daily or on every change) or manually. Restore any previous backup from Drive with one click.
 - **Data backup & restore** — export all your data as JSON and restore it later from Settings → Data.
 - **Version display** — app version shown in the Settings footer, pulled live from the server.
