@@ -30,9 +30,9 @@ See Completed section and README → Google Drive Backup Setup.
 
 ---
 
-#### ~~Donate Section~~ — ✅ Shipped
+#### Donate Section — 🚧 WIP (hidden)
 
-See Completed section.
+Code is in place (`false &&` guard in Settings). Hidden until Ko-fi / GitHub Sponsors pages are set up. Re-enable by removing the `false &&` in Dashboard.jsx.
 
 ---
 
@@ -123,4 +123,4 @@ Multi-tenant support allowing healthcare providers to create sessions and push t
 - [x] Google Drive Backup — OAuth2 connect via Google; manual, daily, or on-change backup modes; JSON backup uploaded to Drive with timestamped filenames; view and restore any previous backup from Settings → Data; tokens stored in DB; server-side cron for scheduled backups; on-change middleware triggers backup after successful mutations
 - [x] Appearance Settings — theme color picker (6 presets: violet/blue/cyan/green/orange/rose + custom color via HSL shade derivation); font size (small/medium/large via root font-size); CSS variable swap applies across all components instantly; persisted to localStorage
 - [x] Preferences Settings — date format (locale/MM-DD-YYYY/DD-MM-YYYY/YYYY-MM-DD) applied to session card dates and CSV export; default session duration (none/30/60/90/120 days) pre-fills target date when new session form opens; persisted to localStorage
-- [x] Donate / Support Section — collapsible "Support the Project" section in Settings; Ko-fi button + GitHub Sponsors button; short note on what donations fund
+- [ ] Donate / Support Section — code complete, hidden behind `false &&` guard; activate once Ko-fi / GitHub Sponsors pages are live

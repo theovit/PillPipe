@@ -885,8 +885,8 @@ export default function Dashboard() {
             )}
           </div>
 
-          {/* Support */}
-          <div className="rounded-xl bg-gray-900 border border-gray-800 overflow-hidden">
+          {/* Support — WIP: hidden until donation pages are set up; re-enable by removing the false && */}
+          {false && <div className="rounded-xl bg-gray-900 border border-gray-800 overflow-hidden">
             <button onClick={() => toggleSection('support')}
               className="w-full flex items-center justify-between px-5 py-4 text-left">
               <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Support the Project</h2>
@@ -916,7 +916,7 @@ export default function Dashboard() {
                 <p className="text-xs text-gray-600">Donations go toward hosting costs and development time. No pressure — the app is free either way.</p>
               </div>
             )}
-          </div>
+          </div>}
 
           {/* About */}
           <div className="rounded-xl bg-gray-900 border border-gray-800 overflow-hidden">
