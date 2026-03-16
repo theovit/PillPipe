@@ -35,6 +35,9 @@ html.light {
   --color-gray-400: #475569;
   --color-gray-500: #64748b;
   --color-gray-600: #64748b;  /* same floor as 500 — #9ca3af was unreadable */
+  /* type badge colors — blue-400/amber-400 are too light on light backgrounds */
+  --color-blue-400:  #1e3a8a;  /* → blue-900 equivalent, 5:1 contrast on badge bg */
+  --color-amber-400: #78350f;  /* → amber-900 equivalent */
   /* background/border grays — light */
   --color-gray-700: #cbd5e1;
   --color-gray-800: #e2e8f0;
