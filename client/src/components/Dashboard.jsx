@@ -15,7 +15,7 @@ export default function Dashboard() {
   const [regimens, setRegimens] = useState([]);
   const [phases, setPhases] = useState({});
   const [calcResults, setCalcResults] = useState({});
-  const [sessionForm, setSessionForm] = useState({ start_date: today, target_date: '', notes: '' });
+  const [sessionForm, setSessionForm] = useState({ start_date: today, target_date: '', notes: '', template_id: '' });
   const [editingSession, setEditingSession] = useState(null);
   const [copyingSession, setCopyingSession] = useState(null);
   const [copyForm, setCopyForm] = useState({ start_date: today, target_date: '' });
@@ -35,6 +35,9 @@ export default function Dashboard() {
   const [reminderTimes, setReminderTimes] = useState({}); // regimenId → HH:MM
   const [testResult, setTestResult] = useState(''); // '' | 'sending' | 'sent' | error string
   const [todayLogs, setTodayLogs] = useState({}); // regimenId → 'taken' | 'skipped'
+  const [templates, setTemplates] = useState([]);
+  const [savingTemplate, setSavingTemplate] = useState(null); // session id
+  const [templateNameInput, setTemplateNameInput] = useState('');
   function toggleSection(name) { setOpenSections(p => ({ ...p, [name]: !p[name] })); }
 
   useEffect(() => {
@@ -119,6 +122,18 @@ export default function Dashboard() {
     setSupplements(await api.getSupplements());
   }
 
+  async function loadTemplates() {
+    try { setTemplates(await api.getTemplates()); } catch { /* non-critical */ }
+  }
+
+  async function saveSessionAsTemplate(sessionId) {
+    if (!templateNameInput.trim()) return;
+    await api.saveAsTemplate(sessionId, { name: templateNameInput.trim() });
+    setSavingTemplate(null);
+    setTemplateNameInput('');
+    loadTemplates();
+  }
+
   async function loadSessions() {
     const data = await api.getSessions();
     setSessions(data);
@@ -183,7 +198,7 @@ export default function Dashboard() {
       return;
     }
     const s = await api.createSession(sessionForm);
-    setSessionForm({ start_date: today, target_date: '', notes: '' });
+    setSessionForm({ start_date: today, target_date: '', notes: '', template_id: '' });
     setSessions(prev => [s, ...prev]);
     setActiveSession(s);
     setAddingSession(false);
@@ -438,6 +453,35 @@ export default function Dashboard() {
             )}
           </div>
 
+          {/* Templates */}
+          <div className="rounded-xl bg-gray-900 border border-gray-800 overflow-hidden">
+            <button onClick={() => { toggleSection('templates'); if (!openSections.templates) loadTemplates(); }}
+              className="w-full flex items-center justify-between px-5 py-4 text-left">
+              <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Templates</h2>
+              <span className="text-gray-600 text-xs">{openSections.templates ? '▲' : '▼'}</span>
+            </button>
+            {openSections.templates && (
+              <div className="px-5 pb-5 border-t border-gray-800 pt-4">
+                {templates.length === 0 ? (
+                  <p className="text-sm text-gray-500">No saved templates.</p>
+                ) : (
+                  <ul className="space-y-2">
+                    {templates.map(t => (
+                      <li key={t.id} className="flex items-center justify-between gap-3">
+                        <span className="text-sm text-gray-200 truncate">{t.name}</span>
+                        <button
+                          onClick={async () => { await api.deleteTemplate(t.id); loadTemplates(); }}
+                          className="shrink-0 text-xs text-red-400 hover:text-red-300 px-2 py-1 rounded hover:bg-gray-800 transition-colors">
+                          Delete
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            )}
+          </div>
+
           {/* Appearance — coming soon */}
           <div className="rounded-xl bg-gray-900 border border-gray-800 overflow-hidden opacity-50">
             <button onClick={() => toggleSection('appearance')}
@@ -610,7 +654,7 @@ export default function Dashboard() {
           <div className="rounded-xl bg-gray-900 border border-gray-800 p-4">
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Session</h2>
-              <button onClick={() => { setAddingSession(a => !a); setEditingSession(null); }}
+              <button onClick={() => { if (!addingSession) loadTemplates(); setAddingSession(a => !a); setEditingSession(null); }}
                 className="text-sm text-violet-400 hover:text-violet-300 font-medium">
                 {addingSession ? 'Cancel' : '+ New'}
               </button>
@@ -638,6 +682,17 @@ export default function Dashboard() {
                     className={`${inputCls} resize-none`}
                     placeholder="e.g. Dr. Smith — taper off LDN after 3mo" />
                 </div>
+                {templates.length > 0 && (
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">From template <span className="text-gray-600">(optional)</span></label>
+                    <select value={sessionForm.template_id}
+                      onChange={e => setSessionForm(f => ({ ...f, template_id: e.target.value }))}
+                      className={inputCls}>
+                      <option value="">Blank session</option>
+                      {templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                    </select>
+                  </div>
+                )}
                 <button type="submit" className="w-full py-2.5 sm:py-2 rounded bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium">
                   Create Session
                 </button>
@@ -683,6 +738,8 @@ export default function Dashboard() {
                         </div>
                         <button onClick={e => { e.stopPropagation(); setCopyingSession(activeSession.id); setCopyForm({ start_date: today, target_date: '' }); }}
                           className="hidden sm:block text-gray-500 hover:text-gray-300 p-2 shrink-0" title="Copy to new session">⧉</button>
+                        <button onClick={e => { e.stopPropagation(); setSavingTemplate(activeSession.id); setTemplateNameInput(''); }}
+                          className="hidden sm:block text-gray-500 hover:text-gray-300 p-2 shrink-0" title="Save as template">☆</button>
                         <button onClick={e => { e.stopPropagation(); setEditingSession({ ...activeSession, start_date: activeSession.start_date.slice(0, 10), target_date: activeSession.target_date.slice(0, 10), notes: activeSession.notes || '' }); }}
                           className="hidden sm:block text-gray-500 hover:text-gray-300 p-2 shrink-0">✎</button>
                         <button onClick={e => { e.stopPropagation(); deleteSession(activeSession.id); }}
@@ -703,6 +760,21 @@ export default function Dashboard() {
                           <button type="button" onClick={() => setCopyingSession(null)} className="px-3 py-2 sm:py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm">Cancel</button>
                         </div>
                       </form>
+                    )}
+                    {savingTemplate === activeSession.id && (
+                      <div className="mt-2 space-y-1.5 pt-2">
+                        <p className="text-xs text-gray-400 font-medium">Save as template</p>
+                        <input type="text" placeholder="Template name" value={templateNameInput}
+                          onChange={e => setTemplateNameInput(e.target.value)}
+                          className={inputCls} autoFocus />
+                        <div className="flex gap-2 pt-0.5">
+                          <button type="button" onClick={() => saveSessionAsTemplate(activeSession.id)}
+                            disabled={!templateNameInput.trim()}
+                            className="px-3 py-2 sm:py-1 rounded bg-violet-600 hover:bg-violet-500 disabled:opacity-40 text-white text-sm">Save</button>
+                          <button type="button" onClick={() => setSavingTemplate(null)}
+                            className="px-3 py-2 sm:py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm">Cancel</button>
+                        </div>
+                      </div>
                     )}
                   </>
                 )}
@@ -755,6 +827,8 @@ export default function Dashboard() {
                               </button>
                               <button onClick={() => { setCopyingSession(s.id); setCopyForm({ start_date: today, target_date: '' }); }}
                                 className="hidden sm:block text-gray-500 hover:text-gray-300 p-2 shrink-0" title="Copy to new session">⧉</button>
+                              <button onClick={() => { setSavingTemplate(s.id); setTemplateNameInput(''); }}
+                                className="hidden sm:block text-gray-500 hover:text-gray-300 p-2 shrink-0" title="Save as template">☆</button>
                               <button onClick={() => setEditingSession({ ...s, start_date: s.start_date.slice(0, 10), target_date: s.target_date.slice(0, 10), notes: s.notes || '' })}
                                 className="hidden sm:block text-gray-500 hover:text-gray-300 p-2 shrink-0">✎</button>
                               <button onClick={() => deleteSession(s.id)}
@@ -776,6 +850,21 @@ export default function Dashboard() {
                               <button type="button" onClick={() => setCopyingSession(null)} className="px-3 py-2 sm:py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm">Cancel</button>
                             </div>
                           </form>
+                        )}
+                        {savingTemplate === s.id && (
+                          <div className="mt-1 space-y-1.5 px-3 py-3 bg-gray-800/50 rounded border border-gray-700">
+                            <p className="text-xs text-gray-400 font-medium">Save as template</p>
+                            <input type="text" placeholder="Template name" value={templateNameInput}
+                              onChange={e => setTemplateNameInput(e.target.value)}
+                              className={inputCls} autoFocus />
+                            <div className="flex gap-2 pt-0.5">
+                              <button type="button" onClick={() => saveSessionAsTemplate(s.id)}
+                                disabled={!templateNameInput.trim()}
+                                className="px-3 py-2 sm:py-1 rounded bg-violet-600 hover:bg-violet-500 disabled:opacity-40 text-white text-sm">Save</button>
+                              <button type="button" onClick={() => setSavingTemplate(null)}
+                                className="px-3 py-2 sm:py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm">Cancel</button>
+                            </div>
+                          </div>
                         )}
                       </div>
                     ))}

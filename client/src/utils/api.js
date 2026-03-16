@@ -63,4 +63,9 @@ export const api = {
   // Dose log
   logDose: (body) => request('/dose-log', { method: 'POST', body }),
   getDoseLog: (params = {}) => request(`/dose-log?${new URLSearchParams(params)}`),
+
+  // Templates
+  getTemplates: () => request('/templates'),
+  saveAsTemplate: (sessionId, body) => request(`/sessions/${sessionId}/save-as-template`, { method: 'POST', body }),
+  deleteTemplate: (id) => request(`/templates/${id}`, { method: 'DELETE' }),
 };
