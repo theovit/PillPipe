@@ -4,6 +4,7 @@ const DEFAULTS = {
   accentColor: 'violet',
   customColor: null,   // hex string, only used when accentColor === 'custom'
   fontSize: 'medium',
+  colorScheme: 'system', // 'dark' | 'light' | 'system'
   dateFormat: 'locale',
   defaultDuration: 0,
 };
@@ -111,9 +112,16 @@ export function applyFontSize(size) {
   document.documentElement.style.fontSize = map[size] ?? '16px';
 }
 
+export function applyColorScheme(mode) {
+  const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+  const useDark = mode === 'dark' || (mode === 'system' && prefersDark);
+  document.documentElement.classList.toggle('light', !useDark);
+}
+
 export function applyPrefs(prefs) {
   applyAccentColor(prefs.accentColor, prefs.customColor);
   applyFontSize(prefs.fontSize);
+  applyColorScheme(prefs.colorScheme ?? 'system');
 }
 
 // ── Storage ───────────────────────────────────────────────────────────────────

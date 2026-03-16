@@ -1,4 +1,6 @@
 import { useState, useEffect } from 'react';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 import { api } from '../utils/api';
 import PhaseEditor from './PhaseEditor';
 import ShortfallAlert from './ShortfallAlert';
@@ -19,6 +21,8 @@ export default function SessionPane({ session, supplements, prefs, notifStatus, 
   const [addingRegimen, setAddingRegimen] = useState(false);
   const [regimenForm, setRegimenForm] = useState({ supplement_id: '' });
   const [calcError, setCalcError] = useState('');
+  const [showShoppingList, setShowShoppingList] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   async function loadRegimens() {
     const data = await api.getRegimens(session.id);
@@ -163,6 +167,75 @@ export default function SessionPane({ session, supplements, prefs, notifStatus, 
     return () => navigator.serviceWorker.removeEventListener('message', handler);
   }, []);
 
+  function downloadPDF() {
+    const doc = new jsPDF();
+    const sessionStart  = formatDate(session.start_date, prefs.dateFormat);
+    const sessionTarget = formatDate(session.target_date, prefs.dateFormat);
+
+    doc.setFontSize(16);
+    doc.setFont('helvetica', 'bold');
+    doc.text('PillPipe — Shortfall Report', 14, 20);
+
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(100);
+    doc.text(`Session: ${sessionStart} → ${sessionTarget} (${sessionTotalDays} days)`, 14, 29);
+    doc.text(`Generated: ${formatDate(today, prefs.dateFormat)}`, 14, 35);
+
+    const rows = regimens.map(r => {
+      const res = calcResults[r.id];
+      if (!res) return null;
+      const u = r.unit || 'capsules';
+      const ul = u === 'ml' ? 'ml' : u === 'drops' ? 'drops' : u === 'tablets' ? 'tabs' : 'caps';
+      return [
+        r.supplement_name,
+        r.brand || '—',
+        `${Number(res.currentOnHand)} ${ul}`,
+        `${Number(res.pillsNeeded)} ${ul}`,
+        res.shortfall > 0 ? `${Number(res.shortfall)} ${ul}` : '—',
+        res.bottlesNeeded > 0 ? String(Number(res.bottlesNeeded)) : '—',
+        `$${(res.estimatedCost || 0).toFixed(2)}`,
+        res.status,
+      ];
+    }).filter(Boolean);
+
+    const tc = Object.values(calcResults).reduce((s, r) => s + (r.estimatedCost || 0), 0);
+
+    autoTable(doc, {
+      startY: 42,
+      head: [['Supplement', 'Brand', 'On Hand', 'Needed', 'Shortfall', 'Bottles', 'Est. Cost', 'Status']],
+      body: rows,
+      foot: [['', '', '', '', '', '', `$${tc.toFixed(2)}`, 'Total']],
+      styles: { fontSize: 8, cellPadding: 2 },
+      headStyles: { fillColor: [109, 40, 217], textColor: 255 },
+      footStyles: { fillColor: [243, 244, 246], textColor: [50, 50, 50], fontStyle: 'bold' },
+      alternateRowStyles: { fillColor: [249, 250, 251] },
+    });
+
+    doc.save(`pillpipe-shortfall-${session.target_date.slice(0, 10)}.pdf`);
+  }
+
+  function copyShoppingList() {
+    const items = regimens
+      .map(r => ({ r, res: calcResults[r.id] }))
+      .filter(({ res }) => res && res.bottlesNeeded > 0);
+    const lines = [
+      `Shopping List — ${formatDate(session.target_date, prefs.dateFormat)}`,
+      `Generated ${formatDate(today, prefs.dateFormat)}`,
+      '',
+      ...items.map(({ r, res }) => {
+        const name = r.brand ? `${r.supplement_name} (${r.brand})` : r.supplement_name;
+        return `• ${name} — ${res.bottlesNeeded} bottle${res.bottlesNeeded !== 1 ? 's' : ''} — $${(res.estimatedCost || 0).toFixed(2)}`;
+      }),
+      '',
+      `Total: $${items.reduce((s, { res }) => s + (res.estimatedCost || 0), 0).toFixed(2)}`,
+    ];
+    navigator.clipboard.writeText(lines.join('\n')).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
+
   const totalCost = Object.keys(calcResults).length > 0
     ? Object.values(calcResults).reduce((sum, r) => sum + (r.estimatedCost || 0), 0)
     : null;
@@ -203,6 +276,20 @@ export default function SessionPane({ session, supplements, prefs, notifStatus, 
               className="px-4 py-3 sm:py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm font-medium"
               title="Export results as CSV">
               ↓ CSV
+            </button>
+          )}
+          {totalCost !== null && (
+            <button onClick={downloadPDF}
+              className="px-4 py-3 sm:py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm font-medium"
+              title="Export results as PDF">
+              ↓ PDF
+            </button>
+          )}
+          {totalCost !== null && regimens.some(r => calcResults[r.id]?.bottlesNeeded > 0) && (
+            <button onClick={() => setShowShoppingList(true)}
+              className="px-4 py-3 sm:py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm font-medium"
+              title="View shopping list">
+              🛒 List
             </button>
           )}
           <button onClick={runCalculate}
@@ -391,6 +478,52 @@ export default function SessionPane({ session, supplements, prefs, notifStatus, 
       {regimens.length === 0 && (
         <p className="text-center text-gray-600 py-8">No regimens yet. Use + Add above.</p>
       )}
+
+      {/* Shopping List Modal */}
+      {showShoppingList && (() => {
+        const items = regimens
+          .map(r => ({ r, res: calcResults[r.id] }))
+          .filter(({ res }) => res && res.bottlesNeeded > 0);
+        const listTotal = items.reduce((s, { res }) => s + (res.estimatedCost || 0), 0);
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60"
+            onClick={() => setShowShoppingList(false)}>
+            <div className="w-full max-w-sm rounded-xl bg-gray-900 border border-gray-700 p-5 shadow-xl"
+              onClick={e => e.stopPropagation()}>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-sm font-semibold text-gray-300 uppercase tracking-wider">Shopping List</h3>
+                <button onClick={() => setShowShoppingList(false)}
+                  className="text-gray-600 hover:text-gray-400 p-1">✕</button>
+              </div>
+              <p className="text-xs text-gray-500 mb-3">
+                {formatDate(session.target_date, prefs.dateFormat)} · {items.length} item{items.length !== 1 ? 's' : ''}
+              </p>
+              <ul className="space-y-2 mb-4">
+                {items.map(({ r, res }) => (
+                  <li key={r.id} className="flex items-center justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="text-sm text-gray-200 truncate">{r.supplement_name}</p>
+                      {r.brand && <p className="text-xs text-gray-500 truncate">{r.brand}</p>}
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-sm text-gray-200 font-mono">{res.bottlesNeeded} × bottle</p>
+                      <p className="text-xs text-violet-400 font-mono">${(res.estimatedCost || 0).toFixed(2)}</p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+              <div className="border-t border-gray-700 pt-3 flex items-center justify-between mb-4">
+                <span className="text-sm text-gray-400">Total</span>
+                <span className="text-sm font-semibold text-violet-300 font-mono">${listTotal.toFixed(2)}</span>
+              </div>
+              <button onClick={copyShoppingList}
+                className="w-full py-2.5 rounded-lg bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium">
+                {copied ? '✓ Copied!' : 'Copy to Clipboard'}
+              </button>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }

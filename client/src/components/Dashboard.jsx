@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../utils/api';
-import { applyAccentColor, applyPrefs, defaultTargetDate, formatDate, loadPrefs, PRESET_COLORS, savePrefs } from '../utils/prefs';
+import { applyAccentColor, applyColorScheme, applyPrefs, defaultTargetDate, formatDate, loadPrefs, PRESET_COLORS, savePrefs } from '../utils/prefs';
 import SessionPane from './SessionPane';
 import SupplementsPanel from './SupplementsPanel';
 
@@ -91,6 +91,15 @@ export default function Dashboard() {
       }
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Re-apply color scheme when system preference changes (only relevant in 'system' mode)
+  useEffect(() => {
+    if (prefs.colorScheme !== 'system') return;
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    const handler = () => applyColorScheme('system');
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, [prefs.colorScheme]);
 
   async function initServiceWorker() {
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
@@ -565,6 +574,22 @@ export default function Dashboard() {
                     ].map(({ key, label }) => (
                       <button key={key} onClick={() => updatePref('fontSize', key)}
                         className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${prefs.fontSize === key ? 'bg-violet-600 text-white' : 'bg-gray-800 text-gray-400 hover:text-gray-200'}`}>
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {/* Color scheme */}
+                <div>
+                  <p className="text-sm text-gray-200 font-medium mb-3">Color scheme</p>
+                  <div className="flex gap-2">
+                    {[
+                      { key: 'system', label: 'System' },
+                      { key: 'dark',   label: 'Dark'   },
+                      { key: 'light',  label: 'Light'  },
+                    ].map(({ key, label }) => (
+                      <button key={key} onClick={() => updatePref('colorScheme', key)}
+                        className={`px-4 py-1.5 rounded-lg text-sm font-medium transition-colors ${(prefs.colorScheme ?? 'system') === key ? 'bg-violet-600 text-white' : 'bg-gray-800 text-gray-400 hover:text-gray-200'}`}>
                         {label}
                       </button>
                     ))}
