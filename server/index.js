@@ -1,9 +1,34 @@
 const express = require('express');
 const cron = require('node-cron');
 const webpush = require('web-push');
+const { google } = require('googleapis');
+const { Readable } = require('stream');
 const pool = require('./db');
 const { calculate } = require('./calculator');
 const { version } = require('./package.json');
+
+// ── Google OAuth2 setup ───────────────────────────────────────────────────────
+const oauth2Client = new google.auth.OAuth2(
+  process.env.GOOGLE_CLIENT_ID,
+  process.env.GOOGLE_CLIENT_SECRET,
+  process.env.GOOGLE_REDIRECT_URI
+);
+// Auto-persist refreshed access tokens back to the DB
+oauth2Client.on('tokens', async (tokens) => {
+  try {
+    if (tokens.refresh_token) {
+      await pool.query(
+        'UPDATE google_tokens SET access_token=$1, refresh_token=$2, expiry_date=$3, updated_at=NOW()',
+        [tokens.access_token, tokens.refresh_token, tokens.expiry_date]
+      );
+    } else {
+      await pool.query(
+        'UPDATE google_tokens SET access_token=$1, expiry_date=$2, updated_at=NOW()',
+        [tokens.access_token, tokens.expiry_date]
+      );
+    }
+  } catch (e) { console.error('Token refresh persist error:', e.message); }
+});
 
 // ── Web Push / VAPID setup ────────────────────────────────────────────────────
 if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
@@ -18,6 +43,20 @@ const app = express();
 app.use(express.json());
 
 const w = fn => (req, res, next) => fn(req, res, next).catch(next);
+
+// ── Google Drive on-change backup middleware ──────────────────────────────────
+app.use((req, res, next) => {
+  const mutating = ['POST', 'PUT', 'PATCH', 'DELETE'];
+  const excluded = ['/auth/', '/drive/', '/push/', '/dose-log', '/backup', '/restore', '/data', '/version', '/health'];
+  if (mutating.includes(req.method) && !excluded.some(p => req.path.startsWith(p))) {
+    res.on('finish', () => {
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        triggerDriveBackup('on_change').catch(e => console.error('Drive on-change:', e.message));
+      }
+    });
+  }
+  next();
+});
 
 // ── Health ────────────────────────────────────────────────────────────────────
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
@@ -374,6 +413,125 @@ app.delete('/data', w(async (req, res) => {
   res.json({ ok: true });
 }));
 
+// ── Google OAuth ──────────────────────────────────────────────────────────────
+app.get('/auth/google', (req, res) => {
+  if (!process.env.GOOGLE_CLIENT_ID) return res.status(503).json({ error: 'Google not configured' });
+  const url = oauth2Client.generateAuthUrl({
+    access_type: 'offline',
+    scope: [
+      'https://www.googleapis.com/auth/drive.file',
+      'https://www.googleapis.com/auth/userinfo.email',
+    ],
+    prompt: 'consent', // always get refresh token
+  });
+  res.redirect(url);
+});
+
+app.get('/auth/google/callback', w(async (req, res) => {
+  const { code, error } = req.query;
+  if (error || !code) return res.redirect('/?drive=error');
+  const { tokens } = await oauth2Client.getToken(code);
+  oauth2Client.setCredentials(tokens);
+  const oauth2 = google.oauth2({ version: 'v2', auth: oauth2Client });
+  const { data: userInfo } = await oauth2.userinfo.get();
+  await pool.query('DELETE FROM google_tokens');
+  await pool.query(
+    'INSERT INTO google_tokens (access_token, refresh_token, expiry_date, email) VALUES ($1,$2,$3,$4)',
+    [tokens.access_token, tokens.refresh_token, tokens.expiry_date, userInfo.email]
+  );
+  res.redirect('/?drive=connected');
+}));
+
+app.delete('/auth/google', w(async (req, res) => {
+  await pool.query('DELETE FROM google_tokens');
+  res.json({ ok: true });
+}));
+
+// ── Google Drive Backup ───────────────────────────────────────────────────────
+app.get('/drive/status', w(async (req, res) => {
+  const { rows: tok } = await pool.query('SELECT email FROM google_tokens LIMIT 1');
+  const { rows: cfg } = await pool.query('SELECT * FROM google_drive_settings LIMIT 1');
+  res.json({
+    connected: tok.length > 0,
+    email: tok[0]?.email || null,
+    frequency: cfg[0]?.frequency || 'manual',
+    last_backup_at: cfg[0]?.last_backup_at || null,
+  });
+}));
+
+app.patch('/drive/settings', w(async (req, res) => {
+  const { frequency } = req.body;
+  if (!['manual', 'daily', 'on_change'].includes(frequency))
+    return res.status(400).json({ error: 'Invalid frequency' });
+  await pool.query(`
+    INSERT INTO google_drive_settings (singleton, frequency)
+    VALUES (TRUE, $1)
+    ON CONFLICT (singleton) DO UPDATE SET frequency=$1, updated_at=NOW()
+  `, [frequency]);
+  res.json({ ok: true, frequency });
+}));
+
+app.post('/drive/backup', w(async (req, res) => {
+  const result = await driveBackup();
+  if (!result) return res.status(400).json({ error: 'Not connected to Google Drive' });
+  res.json({ ok: true, file: result });
+}));
+
+app.get('/drive/backups', w(async (req, res) => {
+  const drive = await getDriveClient();
+  if (!drive) return res.json({ files: [] });
+  const folderRes = await drive.files.list({
+    q: "name='PillPipe' and mimeType='application/vnd.google-apps.folder' and trashed=false",
+    fields: 'files(id)',
+  });
+  if (!folderRes.data.files.length) return res.json({ files: [] });
+  const folderId = folderRes.data.files[0].id;
+  const filesRes = await drive.files.list({
+    q: `'${folderId}' in parents and trashed=false`,
+    fields: 'files(id,name,createdTime,size)',
+    orderBy: 'createdTime desc',
+    pageSize: 20,
+  });
+  res.json({ files: filesRes.data.files });
+}));
+
+app.post('/drive/restore/:fileId', w(async (req, res) => {
+  const drive = await getDriveClient();
+  if (!drive) return res.status(400).json({ error: 'Not connected to Google Drive' });
+  const response = await drive.files.get(
+    { fileId: req.params.fileId, alt: 'media' },
+    { responseType: 'text' }
+  );
+  const { supplements=[], sessions=[], regimens=[], phases=[], templates=[], template_regimens=[], template_phases=[] } = JSON.parse(response.data);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('TRUNCATE supplements, sessions, templates CASCADE');
+    for (const s of supplements)
+      await client.query('INSERT INTO supplements (id,name,brand,pills_per_bottle,price,type,current_inventory,unit,drops_per_ml,reorder_threshold,reorder_threshold_mode) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)',
+        [s.id, s.name, s.brand, s.pills_per_bottle, s.price, s.type, s.current_inventory, s.unit||'capsules', s.drops_per_ml??20, s.reorder_threshold??null, s.reorder_threshold_mode||'units']);
+    for (const s of sessions)
+      await client.query('INSERT INTO sessions (id,start_date,target_date,notes) VALUES ($1,$2,$3,$4)', [s.id, s.start_date, s.target_date, s.notes]);
+    for (const r of regimens)
+      await client.query('INSERT INTO regimens (id,session_id,supplement_id,notes) VALUES ($1,$2,$3,$4)', [r.id, r.session_id, r.supplement_id, r.notes]);
+    for (const p of phases)
+      await client.query('INSERT INTO phases (id,regimen_id,dosage,duration_days,days_of_week,indefinite,sequence_order) VALUES ($1,$2,$3,$4,$5,$6,$7)', [p.id, p.regimen_id, p.dosage, p.duration_days, p.days_of_week, p.indefinite, p.sequence_order]);
+    for (const t of templates)
+      await client.query('INSERT INTO templates (id,name,notes,created_at) VALUES ($1,$2,$3,$4)', [t.id, t.name, t.notes??null, t.created_at]);
+    for (const tr of template_regimens)
+      await client.query('INSERT INTO template_regimens (id,template_id,supplement_id,created_at) VALUES ($1,$2,$3,$4)', [tr.id, tr.template_id, tr.supplement_id, tr.created_at]);
+    for (const tp of template_phases)
+      await client.query('INSERT INTO template_phases (id,template_regimen_id,dosage,duration_days,days_of_week,indefinite,sequence_order,created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)', [tp.id, tp.template_regimen_id, tp.dosage, tp.duration_days, tp.days_of_week, tp.indefinite, tp.sequence_order, tp.created_at]);
+    await client.query('COMMIT');
+    res.json({ ok: true });
+  } catch (e) {
+    await client.query('ROLLBACK');
+    throw e;
+  } finally {
+    client.release();
+  }
+}));
+
 // ── Push Notifications ────────────────────────────────────────────────────────
 app.get('/push/vapid-key', (req, res) => {
   res.json({ publicKey: process.env.VAPID_PUBLIC_KEY || null });
@@ -519,6 +677,77 @@ pool.query(`
   `);
 })().catch(console.error);
 
+// ── Google Drive helpers ──────────────────────────────────────────────────────
+async function getDriveClient() {
+  const { rows } = await pool.query('SELECT * FROM google_tokens LIMIT 1');
+  if (!rows.length) return null;
+  const tok = rows[0];
+  oauth2Client.setCredentials({
+    access_token: tok.access_token,
+    refresh_token: tok.refresh_token,
+    expiry_date: tok.expiry_date ? Number(tok.expiry_date) : null,
+  });
+  return google.drive({ version: 'v3', auth: oauth2Client });
+}
+
+async function driveBackup() {
+  const drive = await getDriveClient();
+  if (!drive) return null;
+
+  // Get or create PillPipe folder
+  let folderId;
+  const folderRes = await drive.files.list({
+    q: "name='PillPipe' and mimeType='application/vnd.google-apps.folder' and trashed=false",
+    fields: 'files(id)',
+  });
+  if (folderRes.data.files.length) {
+    folderId = folderRes.data.files[0].id;
+  } else {
+    const created = await drive.files.create({
+      requestBody: { name: 'PillPipe', mimeType: 'application/vnd.google-apps.folder' },
+      fields: 'id',
+    });
+    folderId = created.data.id;
+  }
+
+  // Build backup payload
+  const [supp, sess, reg, ph, tmpl, tr, tp] = await Promise.all([
+    pool.query('SELECT * FROM supplements'),
+    pool.query('SELECT * FROM sessions'),
+    pool.query('SELECT * FROM regimens'),
+    pool.query('SELECT * FROM phases'),
+    pool.query('SELECT * FROM templates'),
+    pool.query('SELECT * FROM template_regimens'),
+    pool.query('SELECT * FROM template_phases'),
+  ]);
+  const payload = JSON.stringify({
+    version: 1, exported_at: new Date().toISOString(),
+    supplements: supp.rows, sessions: sess.rows, regimens: reg.rows, phases: ph.rows,
+    templates: tmpl.rows, template_regimens: tr.rows, template_phases: tp.rows,
+  });
+
+  const filename = `pillpipe-backup-${new Date().toISOString().slice(0,19).replace(/:/g,'-')}.json`;
+  const file = await drive.files.create({
+    requestBody: { name: filename, parents: [folderId] },
+    media: { mimeType: 'application/json', body: Readable.from([payload]) },
+    fields: 'id,name,createdTime',
+  });
+
+  await pool.query(`
+    INSERT INTO google_drive_settings (singleton, last_backup_at, last_backup_file_id)
+    VALUES (TRUE, NOW(), $1)
+    ON CONFLICT (singleton) DO UPDATE SET last_backup_at=NOW(), last_backup_file_id=$1, updated_at=NOW()
+  `, [file.data.id]);
+
+  return file.data;
+}
+
+async function triggerDriveBackup(requiredMode) {
+  const { rows } = await pool.query('SELECT frequency FROM google_drive_settings LIMIT 1');
+  if (!rows.length || rows[0].frequency !== requiredMode) return;
+  await driveBackup();
+}
+
 // ── Low-stock check helper ────────────────────────────────────────────────────
 async function checkLowStock() {
   if (!process.env.VAPID_PUBLIC_KEY) return;
@@ -591,6 +820,33 @@ async function checkLowStock() {
     ));
   }
 }
+
+// ── Google Drive table migrations ─────────────────────────────────────────────
+(async () => {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS google_tokens (
+      id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      access_token  TEXT NOT NULL,
+      refresh_token TEXT NOT NULL,
+      expiry_date   BIGINT,
+      email         TEXT,
+      created_at    TIMESTAMPTZ DEFAULT NOW(),
+      updated_at    TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS google_drive_settings (
+      singleton            BOOLEAN PRIMARY KEY DEFAULT TRUE CHECK (singleton),
+      frequency            TEXT NOT NULL DEFAULT 'manual',
+      last_backup_at       TIMESTAMPTZ,
+      last_backup_file_id  TEXT,
+      updated_at           TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+})().catch(console.error);
+
+// ── Daily Google Drive backup cron (runs at 2am) ──────────────────────────────
+cron.schedule('0 2 * * *', () => triggerDriveBackup('daily').catch(e => console.error('Drive daily backup error:', e.message)));
 
 // ── Daily low-stock cron (runs at 8am every day) ──────────────────────────────
 cron.schedule('0 8 * * *', () => checkLowStock().catch(e => console.error('Low-stock cron error:', e.message)));

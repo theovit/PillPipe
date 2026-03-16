@@ -35,9 +35,15 @@ Sign in with Google to enable automatic cloud backup of all data to Google Drive
 - Backup triggered manually or on a configurable schedule
 - Restore from Drive after a data loss event or on a new device
 
-**Open questions**
-- Should Google login gate the whole app or just the backup feature?
-- How often should auto-backup run — daily, on every change, or on demand only?
+**Decisions made**
+- Google login gates **backup only** — the app works exactly as it does today without signing in. Login is an optional button in Settings → Data.
+- Backup frequency is **user-controlled** with three options presented clearly in Settings so the user understands what they're choosing:
+
+| Option | Description shown to user |
+|---|---|
+| **Manual only** | You control when backups happen. Tap "Backup to Drive" whenever you want. Nothing runs automatically. |
+| **Daily** | A backup runs automatically once a day in the background. Good set-it-and-forget-it protection. |
+| **On every change** | A backup runs automatically whenever your data changes. Maximum protection — more Drive history and slightly more data usage. |
 
 ---
 

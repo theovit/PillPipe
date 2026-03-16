@@ -68,4 +68,12 @@ export const api = {
   getTemplates: () => request('/templates'),
   saveAsTemplate: (sessionId, body) => request(`/sessions/${sessionId}/save-as-template`, { method: 'POST', body }),
   deleteTemplate: (id) => request(`/templates/${id}`, { method: 'DELETE' }),
+
+  // Google Drive Backup
+  getDriveStatus: () => request('/drive/status'),
+  setDriveFrequency: (frequency) => request('/drive/settings', { method: 'PATCH', body: { frequency } }),
+  driveBackupNow: () => request('/drive/backup', { method: 'POST' }),
+  getDriveBackups: () => request('/drive/backups'),
+  restoreFromDrive: (fileId) => request(`/drive/restore/${fileId}`, { method: 'POST' }),
+  disconnectGoogle: () => request('/auth/google', { method: 'DELETE' }),
 };

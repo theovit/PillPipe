@@ -38,6 +38,11 @@ export default function Dashboard() {
   const [templates, setTemplates] = useState([]);
   const [savingTemplate, setSavingTemplate] = useState(null); // session id
   const [templateNameInput, setTemplateNameInput] = useState('');
+  const [driveStatus, setDriveStatus] = useState(null); // null | { connected, email, frequency, last_backup_at }
+  const [driveBackups, setDriveBackups] = useState([]);
+  const [driveWorking, setDriveWorking] = useState(false); // backing up or restoring
+  const [driveMsg, setDriveMsg] = useState(''); // status message
+  const [showDriveBackups, setShowDriveBackups] = useState(false);
   function toggleSection(name) { setOpenSections(p => ({ ...p, [name]: !p[name] })); }
 
   useEffect(() => {
@@ -45,6 +50,22 @@ export default function Dashboard() {
     loadSessions();
     api.getVersion().then(d => setAppVersion(d.version)).catch(() => {});
     initServiceWorker();
+    // Handle Google OAuth callback redirect
+    const params = new URLSearchParams(window.location.search);
+    const driveParam = params.get('drive');
+    if (driveParam) {
+      window.history.replaceState({}, '', window.location.pathname);
+      if (driveParam === 'connected') {
+        setView('settings');
+        setOpenSections(s => ({ ...s, data: true }));
+        setDriveMsg('✓ Google Drive connected successfully.');
+        loadDriveStatus();
+      } else if (driveParam === 'error') {
+        setView('settings');
+        setOpenSections(s => ({ ...s, data: true }));
+        setDriveMsg('Google Drive connection failed. Please try again.');
+      }
+    }
   }, []);
 
   // Handle Taken/Skip actions tapped from push notifications
@@ -124,6 +145,42 @@ export default function Dashboard() {
 
   async function loadTemplates() {
     try { setTemplates(await api.getTemplates()); } catch { /* non-critical */ }
+  }
+
+  async function loadDriveStatus() {
+    try { setDriveStatus(await api.getDriveStatus()); } catch { /* non-critical */ }
+  }
+
+  async function loadDriveBackups() {
+    try { setDriveBackups((await api.getDriveBackups()).files); } catch { setDriveBackups([]); }
+  }
+
+  async function driveBackupNow() {
+    setDriveWorking(true); setDriveMsg('');
+    try {
+      const r = await api.driveBackupNow();
+      setDriveMsg(`✓ Backed up: ${r.file.name}`);
+      await loadDriveStatus();
+    } catch (e) { setDriveMsg(`Backup failed: ${e.message}`); }
+    finally { setDriveWorking(false); }
+  }
+
+  async function driveRestoreFile(fileId, filename) {
+    if (!confirm(`Restore from "${filename}"? This will replace all current data.`)) return;
+    setDriveWorking(true); setDriveMsg('');
+    try {
+      await api.restoreFromDrive(fileId);
+      setDriveMsg('✓ Restored successfully. Reloading…');
+      setTimeout(() => window.location.reload(), 1200);
+    } catch (e) { setDriveMsg(`Restore failed: ${e.message}`); setDriveWorking(false); }
+  }
+
+  async function disconnectGoogle() {
+    if (!confirm('Disconnect Google Drive? Automatic backups will stop.')) return;
+    await api.disconnectGoogle();
+    setDriveStatus(s => ({ ...s, connected: false, email: null }));
+    setDriveMsg('');
+    setShowDriveBackups(false);
   }
 
   async function saveSessionAsTemplate(sessionId) {
@@ -412,7 +469,7 @@ export default function Dashboard() {
         <div className="max-w-lg space-y-3">
           {/* Data */}
           <div className="rounded-xl bg-gray-900 border border-gray-800 overflow-hidden">
-            <button onClick={() => toggleSection('data')}
+            <button onClick={() => { toggleSection('data'); if (!openSections.data) loadDriveStatus(); }}
               className="w-full flex items-center justify-between px-5 py-4 text-left">
               <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Data</h2>
               <span className="text-gray-600 text-xs">{openSections.data ? '▲' : '▼'}</span>
@@ -448,6 +505,110 @@ export default function Dashboard() {
                     className="shrink-0 px-4 py-2 rounded-lg border border-red-900 text-red-400 hover:bg-red-900/20 text-sm font-medium">
                     Clear
                   </button>
+                </div>
+
+                {/* Google Drive Backup */}
+                <div className="border-t border-gray-800 pt-3 space-y-3">
+                  <div className="flex items-center justify-between gap-4">
+                    <div>
+                      <p className="text-sm text-gray-200 font-medium">Google Drive Backup</p>
+                      <p className="text-xs text-gray-500 mt-0.5">
+                        {driveStatus?.connected
+                          ? `Connected as ${driveStatus.email}`
+                          : 'Automatically back up your data to Google Drive.'}
+                      </p>
+                    </div>
+                    {driveStatus?.connected
+                      ? <button onClick={disconnectGoogle}
+                          className="shrink-0 px-4 py-2 rounded-lg border border-gray-700 text-gray-400 hover:bg-gray-800 text-sm font-medium">
+                          Disconnect
+                        </button>
+                      : <a href="/api/auth/google"
+                          className="shrink-0 px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium">
+                          Connect
+                        </a>
+                    }
+                  </div>
+
+                  {driveMsg && (
+                    <p className={`text-xs px-3 py-2 rounded ${driveMsg.startsWith('✓') ? 'bg-green-900/30 text-green-400' : 'bg-red-900/30 text-red-400'}`}>
+                      {driveMsg}
+                    </p>
+                  )}
+
+                  {driveStatus?.connected && (
+                    <div className="space-y-3 pt-1">
+                      {/* Frequency picker */}
+                      <div>
+                        <p className="text-xs text-gray-400 font-medium mb-2">Backup frequency</p>
+                        <div className="space-y-1.5">
+                          {[
+                            { value: 'manual', label: 'Manual only', desc: 'You control when backups happen. Nothing runs automatically.' },
+                            { value: 'daily', label: 'Daily', desc: 'A backup runs automatically once a day at 2am. Set-it-and-forget-it protection.' },
+                            { value: 'on_change', label: 'On every change', desc: 'A backup runs whenever your data changes. Maximum protection — more Drive history.' },
+                          ].map(opt => (
+                            <label key={opt.value} className="flex items-start gap-3 cursor-pointer group">
+                              <input type="radio" name="driveFrequency" value={opt.value}
+                                checked={driveStatus.frequency === opt.value}
+                                onChange={async () => {
+                                  await api.setDriveFrequency(opt.value);
+                                  setDriveStatus(s => ({ ...s, frequency: opt.value }));
+                                }}
+                                className="mt-0.5 accent-violet-500" />
+                              <div>
+                                <p className="text-sm text-gray-200">{opt.label}</p>
+                                <p className="text-xs text-gray-500">{opt.desc}</p>
+                              </div>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Last backup + manual trigger */}
+                      <div className="flex items-center justify-between gap-4 pt-1">
+                        <p className="text-xs text-gray-500">
+                          {driveStatus.last_backup_at
+                            ? `Last backup: ${new Date(driveStatus.last_backup_at).toLocaleString()}`
+                            : 'No backups yet.'}
+                        </p>
+                        <button onClick={driveBackupNow} disabled={driveWorking}
+                          className="shrink-0 px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 disabled:opacity-40 text-gray-200 text-sm font-medium">
+                          {driveWorking ? 'Working…' : 'Backup Now'}
+                        </button>
+                      </div>
+
+                      {/* Restore from Drive */}
+                      <div className="pt-1">
+                        <button onClick={async () => {
+                            if (!showDriveBackups) await loadDriveBackups();
+                            setShowDriveBackups(s => !s);
+                          }}
+                          className="text-xs text-violet-400 hover:text-violet-300">
+                          {showDriveBackups ? '▲ Hide Drive backups' : '▼ View & restore Drive backups'}
+                        </button>
+                        {showDriveBackups && (
+                          <div className="mt-2 space-y-1.5">
+                            {driveBackups.length === 0
+                              ? <p className="text-xs text-gray-500">No backups found in Drive.</p>
+                              : driveBackups.map(f => (
+                                  <div key={f.id} className="flex items-center justify-between gap-3 py-1 border-b border-gray-800/50 last:border-0">
+                                    <div>
+                                      <p className="text-xs text-gray-300 truncate">{f.name}</p>
+                                      <p className="text-xs text-gray-600">{new Date(f.createdTime).toLocaleString()}</p>
+                                    </div>
+                                    <button onClick={() => driveRestoreFile(f.id, f.name)}
+                                      disabled={driveWorking}
+                                      className="shrink-0 text-xs text-amber-400 hover:text-amber-300 px-2 py-1 rounded hover:bg-gray-800 disabled:opacity-40">
+                                      Restore
+                                    </button>
+                                  </div>
+                                ))
+                            }
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
