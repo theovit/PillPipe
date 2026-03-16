@@ -55,22 +55,11 @@ Push notifications that remind you to take each supplement at the right time, ba
 | **Pushover** | Reliable, simple | $5 one-time fee per platform |
 | **Telegram Bot** | Rich interaction, free | Requires Telegram account |
 
-**Running Low — On-Hand Alerts**
-
-A companion notification type for supplements that aren't part of a structured session but are used on an ongoing or indefinite maintenance basis. Unlike the shortfall system (which calculates based on a session's end date), this alert fires purely based on remaining on-hand quantity falling below a threshold — no session math needed.
-
-- Each supplement can have an optional **reorder threshold** set (e.g. alert when fewer than 14 days of supply remain)
-- Notification fires when on-hand drops at or below the threshold, prompting the user to reorder before running out
-- Designed for indefinite-use items: daily maintenance supplements, liquids, drops, or anything not tied to a fixed protocol end date
-- Alert includes supplement name, current on-hand quantity, and a reminder of the usual dose so the user knows how urgent the reorder is
-- Threshold is per-supplement and opt-in — does not fire by default
-
 **Decisions made**
 - Delivery: Web Push (PWA) for now; Android push notifications will replace it when the mobile app ships
 - Dose logging: Yes — taken/skipped doses will be logged (feeds into P3 Adherence Tracking)
 - Scheduling: Server-driven cron job (more reliable than service worker)
 - Settings: Notification preferences will live in the Settings page
-- Running low threshold: TBD — days of supply or raw units
 
 ---
 
@@ -201,3 +190,4 @@ Multi-tenant support allowing healthcare providers to create sessions and push t
 - [x] About section — collapsible Settings section; pill icon, version, description, GitHub link, MIT license
 - [x] Liquid & Drops support — `unit` field (capsules/tablets/ml/drops), `drops_per_ml` override, dynamic labels throughout UI, decimal dosage/inventory for ml, drops↔ml conversion in calculator route
 - [x] Dose Reminders & Notifications — Web Push (VAPID), service worker, subscribe/unsubscribe in Settings, server-side cron (checks every minute), per-regimen reminder time picker, dose_log table, `push_subscriptions` table, test notification button
+- [x] Running Low — On-Hand Alerts — per-supplement `reorder_threshold` (raw units, opt-in), ⚠ low badge on supplement rows, daily 8am server cron fires push notification with on-hand count + days remaining (calculated from active regimen phase dosage)

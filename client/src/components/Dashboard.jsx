@@ -44,7 +44,10 @@ export default function Dashboard() {
 
   async function initServiceWorker() {
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
-      setNotifStatus('unsupported'); return;
+      // PushManager is blocked on HTTP (non-localhost) — distinguish from truly unsupported
+      const isHttp = location.protocol === 'http:' && location.hostname !== 'localhost' && location.hostname !== '127.0.0.1';
+      setNotifStatus(isHttp ? 'needs-https' : 'unsupported');
+      return;
     }
     try {
       const reg = await navigator.serviceWorker.register('/sw.js');
@@ -387,10 +390,21 @@ export default function Dashboard() {
             </button>
             {openSections.notifications && (
               <div className="px-5 pb-5 space-y-4 border-t border-gray-800 pt-4">
+                {notifStatus === 'needs-https' && (
+                  <div className="space-y-1.5">
+                    <p className="text-xs text-yellow-400 font-medium">HTTPS required for push notifications</p>
+                    <p className="text-xs text-gray-400">
+                      Your browser blocks Web Push over plain HTTP. To enable notifications, access PillPipe via HTTPS — enable HTTPS in your Tailscale settings (Serve / Funnel), or use a reverse proxy with a TLS certificate.
+                    </p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      The Android app will use native push notifications and won't have this limitation.
+                    </p>
+                  </div>
+                )}
                 {notifStatus === 'unsupported' && (
                   <p className="text-xs text-gray-500">Push notifications are not supported in this browser.</p>
                 )}
-                {notifStatus !== 'unsupported' && (
+                {notifStatus !== 'unsupported' && notifStatus !== 'needs-https' && (
                   <>
                     <div className="flex items-center justify-between gap-4">
                       <div>

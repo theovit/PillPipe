@@ -55,6 +55,7 @@ export const api = {
   pushSubscribe: (subscription) => request('/push/subscribe', { method: 'POST', body: subscription }),
   pushUnsubscribe: (endpoint) => request('/push/subscribe', { method: 'DELETE', body: { endpoint } }),
   pushTest: () => request('/push/test', { method: 'POST' }),
+  pushLowStockCheck: () => request('/push/low-stock-check', { method: 'POST' }),
 
   // Reminder time
   setReminderTime: (regimenId, reminder_time) => request(`/regimens/${regimenId}/reminder`, { method: 'PATCH', body: { reminder_time } }),

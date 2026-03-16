@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { api } from '../utils/api';
 
-const EMPTY = { name: '', brand: '', pills_per_bottle: '', price: '', type: 'maintenance', current_inventory: '', unit: 'capsules', drops_per_ml: 20 };
+const EMPTY = { name: '', brand: '', pills_per_bottle: '', price: '', type: 'maintenance', current_inventory: '', unit: 'capsules', drops_per_ml: 20, reorder_threshold: '', reorder_threshold_mode: 'units' };
 const inputCls = 'rounded bg-gray-800 border border-gray-700 px-3 py-2.5 sm:py-1.5 text-base sm:text-sm text-gray-200 focus:outline-none focus:border-violet-500';
 
 // ── Unit helpers ──────────────────────────────────────────────────────────────
@@ -29,6 +29,12 @@ function formatInventoryRow(value, unit, drops_per_ml = 20) {
   if (unit === 'ml') return `${v} ml`;
   if (unit === 'tablets') return `${v} tab${v !== 1 ? 's' : ''}`;
   return `${v} cap${v !== 1 ? 's' : ''}`;
+}
+function unitShortLabel(unit) {
+  if (unit === 'ml') return 'ml';
+  if (unit === 'drops') return 'drops';
+  if (unit === 'tablets') return 'tabs';
+  return 'caps';
 }
 function formatBottleRow(ppb, unit) {
   const v = Number(ppb);
@@ -68,6 +74,8 @@ export default function SupplementsPanel({ supplements, onUpdate }) {
       current_inventory: s.current_inventory,
       unit: s.unit || 'capsules',
       drops_per_ml: s.drops_per_ml ?? 20,
+      reorder_threshold: s.reorder_threshold ?? '',
+      reorder_threshold_mode: s.reorder_threshold_mode || 'units',
     });
   }
 
@@ -80,6 +88,8 @@ export default function SupplementsPanel({ supplements, onUpdate }) {
       price: parseFloat(editForm.price),
       current_inventory: parseInv(editForm.current_inventory, unit),
       drops_per_ml: parseFloat(editForm.drops_per_ml) || 20,
+      reorder_threshold: editForm.reorder_threshold !== '' ? parseFloat(editForm.reorder_threshold) : null,
+      reorder_threshold_mode: editForm.reorder_threshold_mode || 'units',
     });
     setEditingId(null);
     onUpdate();
@@ -94,6 +104,8 @@ export default function SupplementsPanel({ supplements, onUpdate }) {
       price: parseFloat(form.price),
       current_inventory: parseInv(form.current_inventory, unit),
       drops_per_ml: parseFloat(form.drops_per_ml) || 20,
+      reorder_threshold: form.reorder_threshold !== '' ? parseFloat(form.reorder_threshold) : null,
+      reorder_threshold_mode: form.reorder_threshold_mode || 'units',
     });
     setForm(EMPTY);
     setAdding(false);
@@ -185,6 +197,35 @@ export default function SupplementsPanel({ supplements, onUpdate }) {
           <p className="text-xs text-gray-600 mt-1">≈ {(Number(f.current_inventory) / Number(f.drops_per_ml)).toFixed(1)} ml</p>
         )}
       </div>
+      <div className="col-span-2">
+        <label className="block text-xs text-gray-500 mb-1">
+          Reorder alert <span className="text-gray-600">— optional</span>
+        </label>
+        <div className="flex gap-2 items-stretch">
+          <input type="number" min="0"
+            step={f.reorder_threshold_mode === 'days' ? '1' : (f.unit === 'ml' ? '0.1' : '1')}
+            value={f.reorder_threshold}
+            onChange={e => setF(p => ({ ...p, reorder_threshold: e.target.value }))}
+            className={`flex-1 ${inputCls}`} placeholder="Leave blank to disable" />
+          <div className="flex rounded border border-gray-700 overflow-hidden shrink-0">
+            <button type="button"
+              onClick={() => setF(p => ({ ...p, reorder_threshold_mode: 'units' }))}
+              className={`px-2.5 py-2 sm:py-1.5 text-xs font-medium transition-colors ${f.reorder_threshold_mode === 'units' ? 'bg-violet-600 text-white' : 'bg-gray-800 text-gray-400 hover:text-gray-200'}`}>
+              {unitShortLabel(f.unit)}
+            </button>
+            <button type="button"
+              onClick={() => setF(p => ({ ...p, reorder_threshold_mode: 'days' }))}
+              className={`px-2.5 py-2 sm:py-1.5 text-xs font-medium transition-colors border-l border-gray-700 ${f.reorder_threshold_mode === 'days' ? 'bg-violet-600 text-white' : 'bg-gray-800 text-gray-400 hover:text-gray-200'}`}>
+              days
+            </button>
+          </div>
+        </div>
+        <p className="text-xs text-gray-600 mt-1">
+          {f.reorder_threshold_mode === 'days'
+            ? 'Alert when days of supply remaining drops to or below this number.'
+            : 'Alert when on-hand drops to or below this amount.'}
+        </p>
+      </div>
     </div>
   );
 
@@ -239,11 +280,20 @@ export default function SupplementsPanel({ supplements, onUpdate }) {
                       <span> · </span>
                       <span className="font-mono">${Number(s.price).toFixed(2)}</span>
                     </div>
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex items-center gap-1.5 flex-wrap">
                       <span className="text-gray-300 font-mono">
                         {formatInventoryRow(getInventory(s), s.unit || 'capsules', s.drops_per_ml || 20)}
                       </span>
                       <span className="text-gray-500"> on hand</span>
+                      {s.reorder_threshold != null && (() => {
+                        const mode = s.reorder_threshold_mode || 'units';
+                        const isLow = mode === 'days'
+                          ? (s.days_remaining != null && Number(s.days_remaining) <= Number(s.reorder_threshold))
+                          : Number(getInventory(s)) <= Number(s.reorder_threshold);
+                        return isLow
+                          ? <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-amber-900/50 text-amber-400">⚠ low</span>
+                          : null;
+                      })()}
                       <span className={`px-1.5 py-0.5 rounded text-xs font-medium tracking-wide ${s.type === 'maintenance' ? 'bg-blue-900/40 text-blue-400' : 'bg-amber-900/40 text-amber-400'}`}>
                         {s.type}
                       </span>

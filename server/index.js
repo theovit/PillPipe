@@ -25,26 +25,42 @@ app.get('/version', (req, res) => res.json({ version }));
 
 // ── Supplements ───────────────────────────────────────────────────────────────
 app.get('/supplements', w(async (req, res) => {
-  const { rows } = await pool.query('SELECT * FROM supplements ORDER BY name');
+  // Include computed days_remaining from the first active-session phase for each supplement
+  const { rows } = await pool.query(`
+    SELECT s.*,
+      (
+        SELECT FLOOR(s.current_inventory / NULLIF(p.dosage * (COALESCE(array_length(p.days_of_week, 1), 7) / 7.0), 0))
+        FROM phases p
+        JOIN regimens r ON r.id = p.regimen_id
+        JOIN sessions sess ON sess.id = r.session_id
+        WHERE r.supplement_id = s.id
+          AND sess.start_date <= CURRENT_DATE
+          AND sess.target_date >= CURRENT_DATE
+        ORDER BY p.sequence_order
+        LIMIT 1
+      ) AS days_remaining
+    FROM supplements s
+    ORDER BY s.name
+  `);
   res.json(rows);
 }));
 
 app.post('/supplements', w(async (req, res) => {
-  const { name, brand, pills_per_bottle, price, type, current_inventory, unit, drops_per_ml } = req.body;
+  const { name, brand, pills_per_bottle, price, type, current_inventory, unit, drops_per_ml, reorder_threshold, reorder_threshold_mode } = req.body;
   const { rows } = await pool.query(
-    `INSERT INTO supplements (name, brand, pills_per_bottle, price, type, current_inventory, unit, drops_per_ml)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
-    [name, brand, pills_per_bottle, price, type, current_inventory ?? 0, unit || 'capsules', drops_per_ml ?? 20]
+    `INSERT INTO supplements (name, brand, pills_per_bottle, price, type, current_inventory, unit, drops_per_ml, reorder_threshold, reorder_threshold_mode)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
+    [name, brand, pills_per_bottle, price, type, current_inventory ?? 0, unit || 'capsules', drops_per_ml ?? 20, reorder_threshold ?? null, reorder_threshold_mode || 'units']
   );
   res.status(201).json(rows[0]);
 }));
 
 app.put('/supplements/:id', w(async (req, res) => {
-  const { name, brand, pills_per_bottle, price, type, current_inventory, unit, drops_per_ml } = req.body;
+  const { name, brand, pills_per_bottle, price, type, current_inventory, unit, drops_per_ml, reorder_threshold, reorder_threshold_mode } = req.body;
   const { rows } = await pool.query(
-    `UPDATE supplements SET name=$1, brand=$2, pills_per_bottle=$3, price=$4, type=$5, current_inventory=$6, unit=$7, drops_per_ml=$8
-     WHERE id=$9 RETURNING *`,
-    [name, brand, pills_per_bottle, price, type, current_inventory ?? 0, unit || 'capsules', drops_per_ml ?? 20, req.params.id]
+    `UPDATE supplements SET name=$1, brand=$2, pills_per_bottle=$3, price=$4, type=$5, current_inventory=$6, unit=$7, drops_per_ml=$8, reorder_threshold=$9, reorder_threshold_mode=$10
+     WHERE id=$11 RETURNING *`,
+    [name, brand, pills_per_bottle, price, type, current_inventory ?? 0, unit || 'capsules', drops_per_ml ?? 20, reorder_threshold ?? null, reorder_threshold_mode || 'units', req.params.id]
   );
   if (!rows.length) return res.status(404).json({ error: 'Not found' });
   res.json(rows[0]);
@@ -248,8 +264,8 @@ app.post('/restore', w(async (req, res) => {
     await client.query('TRUNCATE supplements, sessions CASCADE');
     for (const s of supplements)
       await client.query(
-        'INSERT INTO supplements (id,name,brand,pills_per_bottle,price,type,current_inventory,unit,drops_per_ml) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)',
-        [s.id, s.name, s.brand, s.pills_per_bottle, s.price, s.type, s.current_inventory, s.unit || 'capsules', s.drops_per_ml ?? 20]
+        'INSERT INTO supplements (id,name,brand,pills_per_bottle,price,type,current_inventory,unit,drops_per_ml,reorder_threshold,reorder_threshold_mode) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)',
+        [s.id, s.name, s.brand, s.pills_per_bottle, s.price, s.type, s.current_inventory, s.unit || 'capsules', s.drops_per_ml ?? 20, s.reorder_threshold ?? null, s.reorder_threshold_mode || 'units']
       );
     for (const s of sessions)
       await client.query(
@@ -351,6 +367,12 @@ app.get('/dose-log', w(async (req, res) => {
   res.json(rows);
 }));
 
+// ── Low-stock alert endpoint (manual trigger) ─────────────────────────────────
+app.post('/push/low-stock-check', w(async (req, res) => {
+  await checkLowStock();
+  res.json({ ok: true });
+}));
+
 // ── Error handler ─────────────────────────────────────────────────────────────
 app.use((err, req, res, next) => {
   console.error(err.stack);
@@ -363,6 +385,8 @@ pool.query('ALTER TABLE phases ADD COLUMN IF NOT EXISTS indefinite BOOLEAN DEFAU
 pool.query('ALTER TABLE regimens ADD COLUMN IF NOT EXISTS notes TEXT').catch(console.error);
 pool.query("ALTER TABLE supplements ADD COLUMN IF NOT EXISTS unit VARCHAR(10) DEFAULT 'capsules'").catch(console.error);
 pool.query('ALTER TABLE supplements ADD COLUMN IF NOT EXISTS drops_per_ml NUMERIC DEFAULT 20').catch(console.error);
+pool.query('ALTER TABLE supplements ADD COLUMN IF NOT EXISTS reorder_threshold NUMERIC').catch(console.error);
+pool.query("ALTER TABLE supplements ADD COLUMN IF NOT EXISTS reorder_threshold_mode VARCHAR(10) DEFAULT 'units'").catch(console.error);
 pool.query('ALTER TABLE supplements ALTER COLUMN pills_per_bottle TYPE NUMERIC').catch(console.error);
 pool.query('ALTER TABLE supplements ALTER COLUMN current_inventory TYPE NUMERIC').catch(console.error);
 pool.query('ALTER TABLE phases ALTER COLUMN dosage TYPE NUMERIC').catch(console.error);
@@ -386,6 +410,82 @@ pool.query(`
     UNIQUE (regimen_id, date)
   )
 `).catch(console.error);
+
+// ── Low-stock check helper ────────────────────────────────────────────────────
+async function checkLowStock() {
+  if (!process.env.VAPID_PUBLIC_KEY) return;
+  const { rows: candidates } = await pool.query(
+    'SELECT * FROM supplements WHERE reorder_threshold IS NOT NULL'
+  );
+  if (!candidates.length) return;
+  const { rows: subs } = await pool.query('SELECT * FROM push_subscriptions');
+  if (!subs.length) return;
+
+  for (const supp of candidates) {
+    const unit = supp.unit || 'capsules';
+    const dpm = Number(supp.drops_per_ml) || 20;
+    const inv = Number(supp.current_inventory);
+    const threshold = Number(supp.reorder_threshold);
+    const mode = supp.reorder_threshold_mode || 'units';
+
+    // Get dosage from active session phase (needed for days mode + notification body)
+    const { rows: phases } = await pool.query(`
+      SELECT p.dosage, p.days_of_week
+      FROM phases p
+      JOIN regimens r ON r.id = p.regimen_id
+      JOIN sessions s ON s.id = r.session_id
+      WHERE r.supplement_id = $1
+        AND s.start_date <= CURRENT_DATE
+        AND s.target_date >= CURRENT_DATE
+      ORDER BY p.sequence_order
+      LIMIT 1
+    `, [supp.id]);
+
+    let daysRemaining = null;
+    if (phases.length) {
+      const dosage = Number(phases[0].dosage);
+      const dow = phases[0].days_of_week;
+      const daysPerWeek = dow ? dow.length : 7;
+      const dailyDose = dosage * (daysPerWeek / 7);
+      if (dailyDose > 0) daysRemaining = Math.floor(inv / dailyDose);
+    }
+
+    // Check threshold against the chosen mode
+    const isLow = mode === 'days'
+      ? (daysRemaining !== null && daysRemaining <= threshold)
+      : (inv <= threshold);
+    if (!isLow) continue;
+
+    // Build notification body
+    let invStr;
+    if (unit === 'drops') invStr = `${inv} drops (~${(inv / dpm).toFixed(1)} ml)`;
+    else if (unit === 'ml') invStr = `${inv} ml`;
+    else if (unit === 'tablets') invStr = `${inv} tab${inv !== 1 ? 's' : ''}`;
+    else invStr = `${inv} cap${inv !== 1 ? 's' : ''}`;
+
+    const daysStr = daysRemaining !== null
+      ? ` · ~${daysRemaining} day${daysRemaining !== 1 ? 's' : ''} remaining`
+      : '';
+
+    const payload = JSON.stringify({
+      title: `⚠️ Low stock: ${supp.name}`,
+      body: `${invStr} on hand${daysStr}`,
+      tag: `low-stock-${supp.id}`,
+    });
+
+    await Promise.allSettled(subs.map(sub =>
+      webpush.sendNotification(
+        { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+        payload
+      ).catch(async (err) => {
+        if (err.statusCode === 410) await pool.query('DELETE FROM push_subscriptions WHERE endpoint=$1', [sub.endpoint]);
+      })
+    ));
+  }
+}
+
+// ── Daily low-stock cron (runs at 8am every day) ──────────────────────────────
+cron.schedule('0 8 * * *', () => checkLowStock().catch(e => console.error('Low-stock cron error:', e.message)));
 
 // ── Notification cron (runs every minute) ─────────────────────────────────────
 cron.schedule('* * * * *', async () => {
