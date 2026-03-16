@@ -22,28 +22,41 @@
 
 ---
 
+#### Appearance Settings
+**Effort:** Low | **Value:** Medium — personalization and accessibility
+
+Flesh out the Appearance section in Settings (currently a "coming soon" stub).
+
+**Planned options**
+- **Theme color** — accent color picker (replace the hardcoded violet; a few curated options or a free picker)
+- **Font size** — small / medium / large; affects the entire UI for accessibility
+
+**Notes**
+- Settings stored in `localStorage` (device-local, no server sync needed for now)
+- Theme color should update the Tailwind accent utility classes dynamically (CSS variable swap)
+
+---
+
+#### Preferences Settings
+**Effort:** Low | **Value:** Low-Medium — quality of life
+
+Flesh out the Preferences section in Settings (currently a "coming soon" stub).
+
+**Planned options**
+- **Date format** — e.g. MM/DD/YYYY vs DD/MM/YYYY vs YYYY-MM-DD; applies everywhere dates are displayed
+- **Default session duration** — pre-fill the target date field when creating a new session (e.g. 30 days, 60 days, 90 days)
+
+**Notes**
+- Settings stored in `localStorage`
+- Date format preference needs to be applied consistently: session cards, phase editors, shortfall output, CSV export
+
+---
+
 ### P4 — Later
 
-#### Google SSO + Drive Backup
-**Effort:** High | **Value:** Medium — convenience over local backup
+#### ~~Google SSO + Drive Backup~~ — ✅ Shipped
 
-Sign in with Google to enable automatic cloud backup of all data to Google Drive. Builds on the Data Backup foundation. OAuth2 adds auth infrastructure that could later support multi-user features.
-
-**Planned behavior**
-- OAuth2 login via Google — no separate PillPipe account needed
-- Data exported as JSON and saved to a dedicated PillPipe folder in Drive
-- Backup triggered manually or on a configurable schedule
-- Restore from Drive after a data loss event or on a new device
-
-**Decisions made**
-- Google login gates **backup only** — the app works exactly as it does today without signing in. Login is an optional button in Settings → Data.
-- Backup frequency is **user-controlled** with three options presented clearly in Settings so the user understands what they're choosing:
-
-| Option | Description shown to user |
-|---|---|
-| **Manual only** | You control when backups happen. Tap "Backup to Drive" whenever you want. Nothing runs automatically. |
-| **Daily** | A backup runs automatically once a day in the background. Good set-it-and-forget-it protection. |
-| **On every change** | A backup runs automatically whenever your data changes. Maximum protection — more Drive history and slightly more data usage. |
+See Completed section and README → Google Drive Backup Setup.
 
 ---
 
@@ -135,7 +148,7 @@ Multi-tenant support allowing healthcare providers to create sessions and push t
 - [x] Grand total cost across all regimens
 - [x] Quick inventory adjustment (+/− buttons on supplement rows)
 - [x] Data backup, restore, and clear (Settings → Data section)
-- [x] Settings page — full-screen tab with collapsible sections; SVG cog icon in nav; Appearance + Preferences placeholders ready
+- [x] Settings page — full-screen tab with collapsible sections; SVG cog icon in nav; Appearance + Preferences section shells present (content tracked in backlog)
 - [x] Version handling — `GET /version` endpoint; version read from `package.json`; displayed in Settings footer
 - [x] About section — collapsible Settings section; pill icon, version, description, GitHub link, MIT license
 - [x] Liquid & Drops support — `unit` field (capsules/tablets/ml/drops), `drops_per_ml` override, dynamic labels throughout UI, decimal dosage/inventory for ml, drops↔ml conversion in calculator route
@@ -144,3 +157,4 @@ Multi-tenant support allowing healthcare providers to create sessions and push t
 - [x] Adherence Tracking — 30-day dot grid per regimen (green=taken, red=skipped, gray=missed), adherence % stat, "Taken today / Skip today" log buttons, change/undo support; SW message listener logs doses tapped from push notifications; `AdherenceCalendar` component in expanded regimen card; quick-log buttons on collapsed cards; "Mark all taken / Skip all" bulk bar
 - [x] Shortfall Export — "↓ CSV" button appears after Calculate runs; exports session header, per-regimen rows (on-hand, needed, shortfall, bottles, cost, days short, status), and grand total; zero new dependencies
 - [x] Session Templates — save any session as a named template (☆ button); apply when creating a new session to pre-populate all regimens + phases; manage/delete templates in Settings → Templates; backup/restore includes template data
+- [x] Google Drive Backup — OAuth2 connect via Google; manual, daily, or on-change backup modes; JSON backup uploaded to Drive with timestamped filenames; view and restore any previous backup from Settings → Data; tokens stored in DB; server-side cron for scheduled backups; on-change middleware triggers backup after successful mutations
