@@ -34,6 +34,7 @@ export default function Dashboard() {
   const [pushSub, setPushSub] = useState(null);
   const [reminderTimes, setReminderTimes] = useState({}); // regimenId → HH:MM
   const [testResult, setTestResult] = useState(''); // '' | 'sending' | 'sent' | error string
+  const [todayLogs, setTodayLogs] = useState({}); // regimenId → 'taken' | 'skipped'
   function toggleSection(name) { setOpenSections(p => ({ ...p, [name]: !p[name] })); }
 
   useEffect(() => {
@@ -54,6 +55,7 @@ export default function Dashboard() {
       const date      = tag.slice(-10);
       const status    = action === 'taken' ? 'taken' : 'skipped';
       await api.logDose({ regimen_id: regimenId, date, status }).catch(console.error);
+      if (date === today) setTodayLogs(p => ({ ...p, [regimenId]: status }));
     };
     navigator.serviceWorker.addEventListener('message', handler);
     return () => navigator.serviceWorker.removeEventListener('message', handler);
@@ -141,11 +143,32 @@ export default function Dashboard() {
     const timesMap = {};
     for (const r of data) if (r.reminder_time) timesMap[r.id] = r.reminder_time.slice(0, 5);
     setReminderTimes(timesMap);
+    // Load today's dose logs for quick-log buttons on collapsed cards
+    try {
+      const entries = await api.getDoseLog({ since: today });
+      const logsMap = {};
+      for (const e of entries) if (e.date.slice(0, 10) === today) logsMap[e.regimen_id] = e.status;
+      setTodayLogs(logsMap);
+    } catch { /* non-critical */ }
   }
 
   async function saveRegimenNotes(id) {
     await api.updateRegimen(id, { notes: regimenNotes[id] || null });
     setRegimens(prev => prev.map(r => r.id === id ? { ...r, notes: regimenNotes[id] || null } : r));
+  }
+
+  async function logTodayDose(regimenId, status) {
+    setTodayLogs(p => ({ ...p, [regimenId]: status }));
+    await api.logDose({ regimen_id: regimenId, date: today, status }).catch(console.error);
+  }
+
+  async function logAllToday(status) {
+    const updated = {};
+    for (const r of regimens) updated[r.id] = status;
+    setTodayLogs(p => ({ ...p, ...updated }));
+    await Promise.all(regimens.map(r =>
+      api.logDose({ regimen_id: r.id, date: today, status }).catch(console.error)
+    ));
   }
 
   async function loadPhases(regimenId) {
@@ -779,8 +802,23 @@ export default function Dashboard() {
                 </form>
               )}
 
+              {/* Bulk log bar */}
+              {regimens.length > 0 && (
+                <div className="flex items-center gap-2 mt-3">
+                  <span className="text-xs text-gray-600 shrink-0">Today:</span>
+                  <button onClick={() => logAllToday('taken')}
+                    className="px-3 py-1.5 rounded bg-green-800/70 hover:bg-green-700 text-green-200 text-xs font-medium">
+                    ✓ Mark all taken
+                  </button>
+                  <button onClick={() => logAllToday('skipped')}
+                    className="px-3 py-1.5 rounded bg-gray-800 hover:bg-gray-700 text-gray-400 text-xs font-medium">
+                    ✗ Skip all
+                  </button>
+                </div>
+              )}
+
               {/* Regimen cards */}
-              <div className="space-y-3 mt-4">
+              <div className="space-y-3 mt-3">
                 {regimens.map(r => {
                   const isExpanded = expandedRegimen === r.id;
                   return (
@@ -814,11 +852,36 @@ export default function Dashboard() {
                         </div>
                       </div>
 
-                      {/* Collapsed: phase summary + notes preview */}
+                      {/* Collapsed: phase summary + notes preview + quick log */}
                       {!isExpanded && (
-                        <div className="mt-2 space-y-1">
+                        <div className="mt-2 space-y-1.5">
                           <p className="text-xs text-gray-600">{phaseSummary(phases[r.id])}</p>
                           {r.notes && <p className="text-xs text-gray-500 italic line-clamp-1">{r.notes}</p>}
+                          {/* Quick log buttons */}
+                          <div className="flex items-center gap-2 pt-0.5" onClick={e => e.stopPropagation()}>
+                            {!todayLogs[r.id] ? (
+                              <>
+                                <button onClick={() => logTodayDose(r.id, 'taken')}
+                                  className="px-2.5 py-1 rounded bg-green-800/70 hover:bg-green-700 text-green-200 text-xs font-medium">
+                                  ✓ Taken
+                                </button>
+                                <button onClick={() => logTodayDose(r.id, 'skipped')}
+                                  className="px-2.5 py-1 rounded bg-gray-800 hover:bg-gray-700 text-gray-400 text-xs font-medium">
+                                  ✗ Skip
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                <span className={`text-xs font-medium ${todayLogs[r.id] === 'taken' ? 'text-green-400' : 'text-gray-400'}`}>
+                                  {todayLogs[r.id] === 'taken' ? '✓ Taken today' : '✗ Skipped today'}
+                                </span>
+                                <button onClick={() => logTodayDose(r.id, todayLogs[r.id] === 'taken' ? 'skipped' : 'taken')}
+                                  className="text-xs text-gray-600 hover:text-gray-400">
+                                  change
+                                </button>
+                              </>
+                            )}
+                          </div>
                         </div>
                       )}
 
@@ -863,6 +926,8 @@ export default function Dashboard() {
                             <AdherenceCalendar
                               regimenId={r.id}
                               sessionStartDate={activeSession?.start_date}
+                              todayStatus={todayLogs[r.id] ?? null}
+                              onLogToday={(status) => logTodayDose(r.id, status)}
                             />
                           </div>
 

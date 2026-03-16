@@ -3,8 +3,10 @@ import { api } from '../utils/api';
 
 function isoDate(d) { return d.toISOString().slice(0, 10); }
 
-export default function AdherenceCalendar({ regimenId, sessionStartDate }) {
-  const [log, setLog] = useState({});   // date → 'taken' | 'skipped'
+// todayStatus prop: 'taken' | 'skipped' | null (no log) | undefined (self-managed)
+// onLogToday prop: (status) => void  — called instead of direct API when provided
+export default function AdherenceCalendar({ regimenId, sessionStartDate, todayStatus: todayStatusProp, onLogToday }) {
+  const [log, setLog] = useState({});   // date → 'taken' | 'skipped'  (historical + self-managed today)
   const [logging, setLogging] = useState(null);
 
   const today        = isoDate(new Date());
@@ -21,11 +23,15 @@ export default function AdherenceCalendar({ regimenId, sessionStartDate }) {
       .catch(() => {});
   }, [regimenId, since]);
 
-  async function logDose(status) {
+  async function handleLogToday(status) {
     setLogging(status);
     try {
-      const entry = await api.logDose({ regimen_id: regimenId, date: today, status });
-      setLog(p => ({ ...p, [today]: entry.status }));
+      if (onLogToday) {
+        await onLogToday(status);
+      } else {
+        const entry = await api.logDose({ regimen_id: regimenId, date: today, status });
+        setLog(p => ({ ...p, [today]: entry.status }));
+      }
     } finally {
       setLogging(null);
     }
@@ -37,18 +43,30 @@ export default function AdherenceCalendar({ regimenId, sessionStartDate }) {
     days.push(isoDate(new Date(d)));
   }
 
-  const takenCount   = days.filter(d => log[d] === 'taken').length;
-  const skippedCount = days.filter(d => log[d] === 'skipped').length;
+  // When todayStatusProp is provided (even null), it overrides internal log for today.
+  // undefined means self-contained mode (no parent managing today's state).
+  const todayStatus = todayStatusProp !== undefined ? todayStatusProp : log[today];
+
+  // Effective log: internal log with today overridden by prop (for accurate stats)
+  const effectiveLog = (() => {
+    if (todayStatusProp === undefined) return log;
+    const base = { ...log };
+    if (todayStatusProp) base[today] = todayStatusProp;
+    else delete base[today];
+    return base;
+  })();
+
+  const takenCount   = days.filter(d => effectiveLog[d] === 'taken').length;
+  const skippedCount = days.filter(d => effectiveLog[d] === 'skipped').length;
   const loggedCount  = takenCount + skippedCount;
   const pct          = loggedCount > 0 ? Math.round((takenCount / loggedCount) * 100) : null;
-  const todayStatus  = log[today];
 
   return (
     <div className="space-y-2.5">
       {/* 30-day dot grid */}
       <div className="flex flex-wrap gap-1">
         {days.map(day => {
-          const status  = log[day];
+          const status  = day === today ? todayStatus : effectiveLog[day];
           const isPast  = day < today;
           const isToday = day === today;
           let cls = 'w-4 h-4 rounded-sm flex-shrink-0 ';
@@ -81,13 +99,13 @@ export default function AdherenceCalendar({ regimenId, sessionStartDate }) {
         <div className="flex gap-2">
           <button
             disabled={!!logging}
-            onClick={() => logDose('taken')}
+            onClick={() => handleLogToday('taken')}
             className="px-3 py-1.5 rounded bg-green-800 hover:bg-green-700 disabled:opacity-40 text-green-200 text-xs font-medium">
             {logging === 'taken' ? '…' : '✓ Taken today'}
           </button>
           <button
             disabled={!!logging}
-            onClick={() => logDose('skipped')}
+            onClick={() => handleLogToday('skipped')}
             className="px-3 py-1.5 rounded bg-gray-700 hover:bg-gray-600 disabled:opacity-40 text-gray-300 text-xs font-medium">
             {logging === 'skipped' ? '…' : '✗ Skip today'}
           </button>
@@ -99,7 +117,7 @@ export default function AdherenceCalendar({ regimenId, sessionStartDate }) {
           </span>
           <button
             disabled={!!logging}
-            onClick={() => logDose(todayStatus === 'taken' ? 'skipped' : 'taken')}
+            onClick={() => handleLogToday(todayStatus === 'taken' ? 'skipped' : 'taken')}
             className="text-xs text-gray-600 hover:text-gray-400 disabled:opacity-40">
             change
           </button>
