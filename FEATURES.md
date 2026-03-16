@@ -89,9 +89,35 @@ Sign in with Google to enable automatic cloud backup of all data to Google Drive
 ---
 
 #### Flexible Ads
-**Effort:** TBD | **Value:** TBD
+**Effort:** Medium | **Value:** Medium — supports the project without forcing users into a paywall
 
-*(Details to be provided — more scoping needed before this can be designed.)*
+User-controlled ad experience. Most people don't like ads — that's fine, the default is ad-free. But for users who want to support the project passively, they can opt into progressively more ads. Critically, **ad-free is always free** — there is no "pay to remove ads" model.
+
+**Ad levels (user's choice, persisted in Settings)**
+
+| Level | Name | Description |
+|---|---|---|
+| 0 | **Ad-Free** *(default)* | No ads anywhere. Expected to be where most users stay. |
+| 1 | **Light** | Small, non-intrusive placements — banners, sidebars where space exists. Never interrupts workflow. |
+| 2 | **Normal** | Ads wherever they fit. More cluttered but nothing that blocks content or requires interaction. |
+| 3 | **Max** | Everything from Normal plus intrusive formats — full-screen takeovers, unskippable interstitials. For users who really want to support the project. |
+
+**Design principles**
+- Ad-free is the default. No opt-out required — users opt *in* to ads.
+- No paywalls. The app is fully functional at level 0, forever.
+- The user is always in control. Level can be changed at any time in Settings.
+- Levels are additive — higher levels include all placements from lower levels.
+- Level 3 is intentionally over-the-top; it exists for users who want maximum contribution, not as a dark pattern.
+
+**Decisions made**
+- Ad network: **Google AdSense** for now. Affiliate links are appealing but require active management — revisit later if there's demand.
+- Privacy warning: enabling any ad level (1+) shows a one-time confirmation dialog informing the user that AdSense will send data to Google. User must explicitly accept before ads activate.
+- Confirmation dialogs: **every level change** requires confirmation, not just level 3. Users should never feel tricked into turning ads on.
+- Level 3 confirmation is extra explicit — describes exactly what "intrusive" means (full-screen takeovers, unskippable interstitials) before the user commits.
+- Ad level stored in **localStorage** (local to device). No server sync for now — revisit if multi-device demand comes up.
+
+**Open questions**
+- Where does ad revenue go? (hosting costs, development, donate pool?) — revisit alongside the Donate Section design.
 
 ---
 
