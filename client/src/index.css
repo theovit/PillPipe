@@ -24,24 +24,27 @@ input[type="date"]::-webkit-calendar-picker-indicator {
   cursor: pointer;
 }
 
-/* Light mode — invert the gray scale */
+/* Light mode */
 html.light {
-  --color-gray-50:  #030712;
-  --color-gray-100: #111827;
-  --color-gray-200: #1f2937;
-  --color-gray-300: #374151;
-  --color-gray-400: #4b5563;
-  --color-gray-500: #6b7280;
-  --color-gray-600: #9ca3af;
-  --color-gray-700: #d1d5db;
-  --color-gray-800: #e5e7eb;
-  --color-gray-900: #f3f4f6;
-  --color-gray-950: #f9fafb;
+  /* text grays — kept dark enough to read on light backgrounds */
+  --color-white:    #1e293b;  /* prevents text-white being invisible on light bg */
+  --color-gray-50:  #020617;
+  --color-gray-100: #0f172a;
+  --color-gray-200: #1e293b;
+  --color-gray-300: #334155;
+  --color-gray-400: #475569;
+  --color-gray-500: #64748b;
+  --color-gray-600: #64748b;  /* same floor as 500 — #9ca3af was unreadable */
+  /* background/border grays — light */
+  --color-gray-700: #cbd5e1;
+  --color-gray-800: #e2e8f0;
+  --color-gray-900: #f1f5f9;
+  --color-gray-950: #f8fafc;
 }
 
 html.light body {
-  background: #f3f4f6;
-  color: #1f2937;
+  background: #f1f5f9;
+  color: #1e293b;
 }
 
 html.light ::-webkit-scrollbar-thumb { background: #d1d5db; }
