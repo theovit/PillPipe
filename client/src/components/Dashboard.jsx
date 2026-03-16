@@ -32,6 +32,7 @@ export default function Dashboard() {
   const [swReg, setSwReg] = useState(null);
   const [pushSub, setPushSub] = useState(null);
   const [reminderTimes, setReminderTimes] = useState({}); // regimenId → HH:MM
+  const [testResult, setTestResult] = useState(''); // '' | 'sending' | 'sent' | error string
   function toggleSection(name) { setOpenSections(p => ({ ...p, [name]: !p[name] })); }
 
   useEffect(() => {
@@ -412,15 +413,38 @@ export default function Dashboard() {
                       )}
                     </div>
                     {notifStatus === 'granted' && (
-                      <div className="border-t border-gray-800 pt-3 flex items-center justify-between gap-4">
-                        <div>
-                          <p className="text-sm text-gray-200 font-medium">Send Test</p>
-                          <p className="text-xs text-gray-500 mt-0.5">Fire a test notification right now.</p>
+                      <div className="border-t border-gray-800 pt-3 space-y-2">
+                        <div className="flex items-center justify-between gap-4">
+                          <div>
+                            <p className="text-sm text-gray-200 font-medium">Send Test</p>
+                            <p className="text-xs text-gray-500 mt-0.5">
+                              Fire a test notification right now.
+                              {' '}<span className="text-gray-600">If the app is open, check your OS notification tray.</span>
+                            </p>
+                          </div>
+                          <button
+                            disabled={testResult === 'sending'}
+                            onClick={async () => {
+                              setTestResult('sending');
+                              try {
+                                await api.pushTest();
+                                setTestResult('sent');
+                                setTimeout(() => setTestResult(''), 4000);
+                              } catch (e) {
+                                setTestResult(e.message || 'Failed');
+                                setTimeout(() => setTestResult(''), 5000);
+                              }
+                            }}
+                            className="shrink-0 px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 disabled:opacity-50 text-gray-200 text-sm font-medium">
+                            {testResult === 'sending' ? 'Sending…' : 'Test'}
+                          </button>
                         </div>
-                        <button onClick={() => api.pushTest().catch(() => {})}
-                          className="shrink-0 px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-200 text-sm font-medium">
-                          Test
-                        </button>
+                        {testResult === 'sent' && (
+                          <p className="text-xs text-green-400">✓ Notification sent — check your notification tray if the app is in focus.</p>
+                        )}
+                        {testResult && testResult !== 'sent' && testResult !== 'sending' && (
+                          <p className="text-xs text-red-400">✕ {testResult}</p>
+                        )}
                       </div>
                     )}
                     <div className="border-t border-gray-800 pt-3">
