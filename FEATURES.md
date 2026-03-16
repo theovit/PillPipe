@@ -69,19 +69,6 @@ Push notifications that remind you to take each supplement at the right time, ba
 
 ---
 
-#### Session Templates
-**Effort:** Medium | **Value:** Medium — power user feature
-
-Save a session's regimen structure (supplements + phases) as a named template that can be reused when creating future sessions. Different from "Copy session" which copies to a specific new date — templates are generic and reusable indefinitely.
-
-**Planned behavior**
-- "Save as template" button on any session
-- Templates listed when creating a new session ("Start from template")
-- Templates store regimen + phase structure but not dates or on-hand counts
-- Useful for recurring protocols that repeat every appointment cycle
-
----
-
 ### P4 — Later
 
 #### Google SSO + Drive Backup
@@ -171,3 +158,4 @@ Multi-tenant support allowing healthcare providers to create sessions and push t
 - [x] Running Low — On-Hand Alerts — per-supplement `reorder_threshold` (raw units, opt-in), ⚠ low badge on supplement rows, daily 8am server cron fires push notification with on-hand count + days remaining (calculated from active regimen phase dosage)
 - [x] Adherence Tracking — 30-day dot grid per regimen (green=taken, red=skipped, gray=missed), adherence % stat, "Taken today / Skip today" log buttons, change/undo support; SW message listener logs doses tapped from push notifications; `AdherenceCalendar` component in expanded regimen card; quick-log buttons on collapsed cards; "Mark all taken / Skip all" bulk bar
 - [x] Shortfall Export — "↓ CSV" button appears after Calculate runs; exports session header, per-regimen rows (on-hand, needed, shortfall, bottles, cost, days short, status), and grand total; zero new dependencies
+- [x] Session Templates — save any session as a named template (☆ button); apply when creating a new session to pre-populate all regimens + phases; manage/delete templates in Settings → Templates; backup/restore includes template data
