@@ -38,6 +38,7 @@ PillPipe answers both questions.
 - **Shortfall Export (CSV)** — download calculation results as a CSV after running Calculate; includes per-regimen rows and grand total.
 - **Mobile touch-friendly UI** — tap to edit, hidden icons, action buttons optimized for phone use.
 - **Settings page** — full-screen tab with data backup, restore, and clear; notification preferences; version info; and appearance/preference placeholders.
+- **Google Drive backup** — connect your Google account in Settings → Data to back up automatically (daily or on every change) or manually. Restore any previous backup from Drive with one click.
 - **Data backup & restore** — export all your data as JSON and restore it later from Settings → Data.
 - **Version display** — app version shown in the Settings footer, pulled live from the server.
 
@@ -127,16 +128,113 @@ The schema in `db/init.sql` runs automatically on first startup.
 
 Tailscale lets you access PillPipe from your phone or any device without exposing it to the public internet.
 
-### Setup
+### Basic setup (HTTP)
 
 1. Install [Tailscale](https://tailscale.com/download) on the machine running Docker and on your phone.
 2. Sign in on both devices — they'll appear on the same private network automatically.
 3. Find your machine's Tailscale IP in the Tailscale admin console (e.g. `100.x.x.x`).
 4. Open `http://100.x.x.x:5173` on your phone.
 
-That's it. No port forwarding, no DNS, no certificates required. Only devices on your Tailscale network can reach the app.
+Only devices on your Tailscale network can reach the app. No port forwarding or DNS required.
 
 > **Note:** The backend (port 3000) and database (port 5432) are not exposed outside Docker — only the Vite frontend on port 5173 is reachable.
+
+### HTTPS setup (required for push notifications)
+
+Web Push notifications and service workers require a secure context (HTTPS). Plain HTTP over Tailscale IP works for browsing but won't allow notification subscriptions. Use `tailscale serve` to get a free, automatically-managed TLS certificate on your Tailscale hostname.
+
+**1. Enable MagicDNS and HTTPS certificates**
+
+In the [Tailscale admin console](https://login.tailscale.com/admin/dns):
+- **DNS tab** → enable **MagicDNS**
+- **DNS tab** → enable **HTTPS Certificates**
+
+Your machine will get a stable hostname like `desktop-abc123.tailnet-name.ts.net`.
+
+**2. Run `tailscale serve` on the host machine**
+
+```bash
+tailscale serve --bg http://localhost:5173
+```
+
+This creates an HTTPS reverse proxy at `https://<your-tailscale-hostname>` that forwards to PillPipe on port 5173. The `--bg` flag keeps it running in the background across reboots.
+
+To confirm it's running:
+```bash
+tailscale serve status
+```
+
+**3. Access PillPipe over HTTPS**
+
+Open `https://<your-tailscale-hostname>` on your phone. Push notification subscription will now work.
+
+**4. Update your Google Drive redirect URI (if using Drive backup)**
+
+If you set up Google Drive backup, add your HTTPS Tailscale URL as an additional redirect URI in Google Cloud Console:
+```
+https://<your-tailscale-hostname>/api/auth/google/callback
+```
+And update `GOOGLE_REDIRECT_URI` in `.env` to match whichever URL you use when connecting.
+
+---
+
+## Google Drive Backup Setup
+
+PillPipe can back up your data to Google Drive automatically. Because this is a self-hosted app, **each deployment needs its own Google Cloud credentials** — you register a free OAuth app once and paste the keys into your `.env`. This takes about 10 minutes.
+
+### 1. Create a Google Cloud project
+
+1. Go to [console.cloud.google.com](https://console.cloud.google.com)
+2. Click the project dropdown → **New Project** → name it (e.g. "PillPipe") → **Create**
+
+### 2. Enable the Google Drive API
+
+1. In the left menu go to **APIs & Services → Library**
+2. Search for **Google Drive API** → click it → **Enable**
+
+### 3. Configure the OAuth consent screen
+
+1. Go to **APIs & Services → OAuth consent screen** (now called **Google Auth Platform** in newer consoles)
+2. Choose **External** → **Create**
+3. Fill in **App name** (e.g. "PillPipe") and your email for the support and developer fields → **Save and Continue** through the remaining steps
+4. On the **Audience** page, publishing status will be **Testing** by default. Either:
+   - Click **Publish app** to make it available to any Google account (recommended for personal use — `drive.file` is a non-sensitive scope and requires no Google review), or
+   - Stay in Testing and click **+ Add users** → add your Gmail address
+
+### 4. Create OAuth credentials
+
+1. Go to **APIs & Services → Credentials** (or **Google Auth Platform → Clients**)
+2. Click **+ Create Credentials → OAuth 2.0 Client ID**
+3. Application type: **Web application**
+4. Under **Authorized redirect URIs**, add:
+   ```
+   http://localhost:5173/api/auth/google/callback
+   ```
+   If you use Tailscale remote access, also add:
+   ```
+   https://<your-tailscale-hostname>/api/auth/google/callback
+   ```
+5. Click **Create** — copy the **Client ID** and **Client Secret**
+
+### 5. Add credentials to `.env`
+
+```env
+GOOGLE_CLIENT_ID=your_client_id_here
+GOOGLE_CLIENT_SECRET=your_client_secret_here
+GOOGLE_REDIRECT_URI=http://localhost:5173/api/auth/google/callback
+```
+
+If accessing via Tailscale, set `GOOGLE_REDIRECT_URI` to your Tailscale URL instead.
+
+### 6. Restart and connect
+
+```bash
+docker compose down && docker compose up --build
+```
+
+Open PillPipe → **Settings → Data → Google Drive Backup → Connect**. Sign in with Google, grant Drive access, and you're done.
+
+> **What Google can access:** PillPipe uses the `drive.file` scope, which only grants access to files that PillPipe itself creates. It cannot read, modify, or delete any other files in your Drive.
 
 ---
 
@@ -195,19 +293,19 @@ Additional runtime tables (created by server on startup): `push_subscriptions`, 
 
 ## Privacy & Security
 
-PillPipe is fully self-hosted. Your data never leaves your own machine.
+PillPipe is fully self-hosted. Your data never leaves your own machine unless you opt in to Google Drive backup.
 
 - Backend API is internal to Docker — not exposed on the host
 - Database is internal to Docker — not exposed on the host
 - Credentials are stored in `.env` (gitignored)
 - Error responses never leak internal details
+- Google Drive backup is entirely opt-in; uses the `drive.file` scope (PillPipe-created files only); OAuth tokens are stored locally in your own database
 
 ---
 
 ## Roadmap
 
 ### Later
-- [ ] **Google SSO + Drive backup** — sign in with Google; auto-backup data to Drive on a configurable schedule
 - [ ] **Flexible Ads** — see below
 - [ ] **Donate section** — one-time or recurring support via Ko-fi / GitHub Sponsors; revenue direction TBD alongside ads
 - [ ] **JWT authentication** — multi-user or public hosting support
