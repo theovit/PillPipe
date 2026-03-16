@@ -344,33 +344,33 @@ export default function SessionPane({ session, supplements, prefs, notifStatus }
           const isExpanded = expandedRegimen === r.id;
           return (
             <div key={r.id} className="rounded-xl bg-gray-800/60 border border-gray-700/60 p-4">
-              <div className="flex items-start justify-between gap-3 cursor-pointer"
+              <div className="cursor-pointer"
                 onClick={() => setExpandedRegimen(isExpanded ? null : r.id)}>
-                <div className="min-w-0">
+                <div className="flex items-center justify-between gap-3">
                   <h3 className="font-semibold text-white">{r.supplement_name}</h3>
-                  <p className="text-xs text-gray-500">
-                    {r.brand && `${r.brand} · `}
-                    {r.unit === 'drops' ? `${r.pills_per_bottle} ml/bottle` : r.unit === 'ml' ? `${r.pills_per_bottle} ml/bottle` : `${r.pills_per_bottle} ${r.unit === 'tablets' ? 'tabs' : 'caps'}/bottle`}
-                    {' · '}${Number(r.price).toFixed(2)}
-                  </p>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <span className="text-sm text-gray-400 whitespace-nowrap mr-1">
+                      <span className="font-mono">{(() => {
+                        const v = calcResults[r.id] != null ? calcResults[r.id].currentOnHand : r.current_inventory;
+                        const u = r.unit || 'capsules';
+                        if (u === 'drops') return `${Number(v)} drops`;
+                        if (u === 'ml') return `${Number(v)} ml`;
+                        if (u === 'tablets') return `${Number(v)} tabs`;
+                        return `${Number(v)} caps`;
+                      })()}</span> on hand
+                    </span>
+                    <button onClick={e => { e.stopPropagation(); setExpandedRegimen(isExpanded ? null : r.id); }}
+                      className={`hidden sm:block p-2 transition-colors ${isExpanded ? 'text-violet-400 hover:text-violet-300' : 'text-gray-500 hover:text-gray-300'}`}>
+                      ✎
+                    </button>
+                    <button onClick={e => { e.stopPropagation(); deleteRegimen(r.id); }} className="hidden sm:block text-red-500 hover:text-red-400 p-2">✕</button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-1 shrink-0">
-                  <span className="text-sm text-gray-400 whitespace-nowrap mr-1">
-                    <span className="font-mono">{(() => {
-                      const v = calcResults[r.id] != null ? calcResults[r.id].currentOnHand : r.current_inventory;
-                      const u = r.unit || 'capsules';
-                      if (u === 'drops') return `${Number(v)} drops`;
-                      if (u === 'ml') return `${Number(v)} ml`;
-                      if (u === 'tablets') return `${Number(v)} tabs`;
-                      return `${Number(v)} caps`;
-                    })()}</span> on hand
-                  </span>
-                  <button onClick={e => { e.stopPropagation(); setExpandedRegimen(isExpanded ? null : r.id); }}
-                    className={`hidden sm:block p-2 transition-colors ${isExpanded ? 'text-violet-400 hover:text-violet-300' : 'text-gray-500 hover:text-gray-300'}`}>
-                    ✎
-                  </button>
-                  <button onClick={e => { e.stopPropagation(); deleteRegimen(r.id); }} className="hidden sm:block text-red-500 hover:text-red-400 p-2">✕</button>
-                </div>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  {r.brand && <><span className="whitespace-nowrap">{r.brand}</span>{' · '}</>}
+                  <span className="whitespace-nowrap">{r.unit === 'drops' ? `${r.pills_per_bottle} ml/bottle` : r.unit === 'ml' ? `${r.pills_per_bottle} ml/bottle` : `${r.pills_per_bottle} ${r.unit === 'tablets' ? 'tabs' : 'caps'}/bottle`}</span>
+                  {' · '}<span className="whitespace-nowrap">${Number(r.price).toFixed(2)}</span>
+                </p>
               </div>
 
               {/* Collapsed: phase summary + notes preview + quick log */}
