@@ -24,7 +24,7 @@ export default function ShortfallAlert({ result, unit = 'capsules', drops_per_ml
 
   return (
     <div className="rounded-lg border border-amber-700/40 bg-amber-900/10 px-4 py-3 text-sm space-y-1.5">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
         <div className="flex items-center gap-2 text-amber-400 font-medium">
           <svg viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 shrink-0">
             <path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
@@ -34,7 +34,7 @@ export default function ShortfallAlert({ result, unit = 'capsules', drops_per_ml
             <span className="text-amber-300 font-semibold font-mono">${estimatedCost.toFixed(2)}</span>
           )}
         </div>
-        <span className="text-red-400 text-xs font-mono shrink-0">{fmtAmt(shortfall, unit, drops_per_ml)} short</span>
+        <span className="text-red-400 text-xs font-mono">{fmtAmt(shortfall, unit, drops_per_ml)} short</span>
       </div>
       <div className="text-gray-500 text-xs font-mono">
         need <span className="text-gray-400">{fmtAmt(pillsNeeded, unit, drops_per_ml)}</span>
