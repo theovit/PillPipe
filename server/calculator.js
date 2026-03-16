@@ -33,7 +33,8 @@ function calculate({ phases, inventory, startDate, targetDate, pillsPerBottle, p
 
   for (const phase of sorted) {
     const dow = phase.days_of_week && phase.days_of_week.length > 0 ? phase.days_of_week : null;
-    const phaseDays = phase.indefinite ? (totalDays - currentDay) : phase.duration_days;
+    const phaseDays = phase.indefinite ? (totalDays - currentDay) : Number(phase.duration_days);
+    const dosage = Number(phase.dosage); // pg returns NUMERIC columns as strings; coerce to number
 
     for (let d = 0; d < phaseDays; d++) {
       if (currentDay >= totalDays) break;
@@ -46,10 +47,10 @@ function calculate({ phases, inventory, startDate, targetDate, pillsPerBottle, p
       const isDosing = dow ? dow.includes(dayOfWeek) : true;
 
       if (isDosing) {
-        pillsNeeded += phase.dosage;
-        if (currentDay < daysElapsed) pillsConsumedToDate += phase.dosage;
-        if (remaining >= phase.dosage) {
-          remaining -= phase.dosage;
+        pillsNeeded += dosage;
+        if (currentDay < daysElapsed) pillsConsumedToDate += dosage;
+        if (remaining >= dosage) {
+          remaining -= dosage;
           daysCovered = currentDay + 1;
         } else if (runOutDay === null) {
           runOutDay = currentDay;
