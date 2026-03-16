@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { api } from '../utils/api';
-import { applyPrefs, defaultTargetDate, formatDate, loadPrefs, savePrefs } from '../utils/prefs';
+import { applyAccentColor, applyPrefs, defaultTargetDate, formatDate, generateShades, loadPrefs, PRESET_COLORS, savePrefs } from '../utils/prefs';
 import PhaseEditor from './PhaseEditor';
 import ShortfallAlert from './ShortfallAlert';
 import SupplementsPanel from './SupplementsPanel';
@@ -50,6 +50,16 @@ export default function Dashboard() {
   function updatePref(key, value) {
     setPrefs(p => {
       const next = { ...p, [key]: value };
+      savePrefs(next);
+      applyPrefs(next);
+      return next;
+    });
+  }
+
+  // When switching away from custom, clear customColor so the picker resets cleanly
+  function selectPresetColor(key) {
+    setPrefs(p => {
+      const next = { ...p, accentColor: key };
       savePrefs(next);
       applyPrefs(next);
       return next;
@@ -667,19 +677,28 @@ export default function Dashboard() {
                 {/* Theme color */}
                 <div>
                   <p className="text-sm text-gray-200 font-medium mb-3">Theme color</p>
-                  <div className="flex flex-wrap gap-2">
-                    {[
-                      { key: 'violet', bg: 'bg-violet-600',  label: 'Violet'  },
-                      { key: 'blue',   bg: 'bg-blue-600',    label: 'Blue'    },
-                      { key: 'cyan',   bg: 'bg-cyan-600',    label: 'Cyan'    },
-                      { key: 'green',  bg: 'bg-green-600',   label: 'Green'   },
-                      { key: 'amber',  bg: 'bg-amber-500',   label: 'Amber'   },
-                      { key: 'rose',   bg: 'bg-rose-600',    label: 'Rose'    },
-                    ].map(({ key, bg, label }) => (
-                      <button key={key} onClick={() => updatePref('accentColor', key)}
-                        title={label}
-                        className={`w-8 h-8 rounded-full ${bg} transition-transform ${prefs.accentColor === key ? 'ring-2 ring-offset-2 ring-offset-gray-900 ring-white scale-110' : 'opacity-60 hover:opacity-100'}`} />
+                  <div className="flex flex-wrap gap-2 items-center">
+                    {PRESET_COLORS.map(({ key, hex }) => (
+                      <button key={key} onClick={() => selectPresetColor(key)}
+                        title={key.charAt(0).toUpperCase() + key.slice(1)}
+                        style={{ backgroundColor: hex }}
+                        className={`w-8 h-8 rounded-full transition-transform ${prefs.accentColor === key ? 'ring-2 ring-offset-2 ring-offset-gray-900 ring-white scale-110' : 'opacity-60 hover:opacity-100'}`} />
                     ))}
+                    {/* Custom color picker */}
+                    <label title="Custom color"
+                      className={`w-8 h-8 rounded-full flex items-center justify-center cursor-pointer transition-transform overflow-hidden border-2 ${prefs.accentColor === 'custom' ? 'border-white scale-110' : 'border-gray-600 opacity-60 hover:opacity-100'}`}
+                      style={prefs.accentColor === 'custom' && prefs.customColor ? { backgroundColor: prefs.customColor } : { background: 'conic-gradient(red, yellow, lime, cyan, blue, magenta, red)' }}>
+                      <input type="color"
+                        className="opacity-0 absolute w-0 h-0"
+                        value={prefs.customColor || '#ffffff'}
+                        onChange={e => {
+                          const hex = e.target.value;
+                          const next = { ...prefs, accentColor: 'custom', customColor: hex };
+                          savePrefs(next);
+                          applyAccentColor('custom', hex);
+                          setPrefs(next);
+                        }} />
+                    </label>
                   </div>
                 </div>
                 {/* Font size */}
