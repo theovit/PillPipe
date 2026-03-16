@@ -3,6 +3,7 @@ import { api } from '../utils/api';
 import PhaseEditor from './PhaseEditor';
 import ShortfallAlert from './ShortfallAlert';
 import SupplementsPanel from './SupplementsPanel';
+import AdherenceCalendar from './AdherenceCalendar';
 
 const today = new Date().toISOString().slice(0, 10);
 const inputCls = 'w-full rounded bg-gray-800 border border-gray-700 px-3 py-2.5 sm:py-1.5 text-base sm:text-sm text-gray-200 focus:outline-none focus:border-violet-500';
@@ -40,6 +41,22 @@ export default function Dashboard() {
     loadSessions();
     api.getVersion().then(d => setAppVersion(d.version)).catch(() => {});
     initServiceWorker();
+  }, []);
+
+  // Handle Taken/Skip actions tapped from push notifications
+  useEffect(() => {
+    if (!('serviceWorker' in navigator)) return;
+    const handler = async (event) => {
+      if (event.data?.type !== 'DOSE_ACTION') return;
+      const { action, tag } = event.data;
+      // tag format: "dose-{uuid}-{YYYY-MM-DD}"
+      const regimenId = tag.slice(5, -11);  // strip "dose-" prefix and "-YYYY-MM-DD" suffix
+      const date      = tag.slice(-10);
+      const status    = action === 'taken' ? 'taken' : 'skipped';
+      await api.logDose({ regimen_id: regimenId, date, status }).catch(console.error);
+    };
+    navigator.serviceWorker.addEventListener('message', handler);
+    return () => navigator.serviceWorker.removeEventListener('message', handler);
   }, []);
 
   async function initServiceWorker() {
@@ -840,6 +857,15 @@ export default function Dashboard() {
                               )}
                             </div>
                           )}
+                          {/* Adherence */}
+                          <div className="border-t border-gray-800 pt-3">
+                            <p className="text-xs text-gray-500 font-medium uppercase tracking-wider mb-2">Adherence</p>
+                            <AdherenceCalendar
+                              regimenId={r.id}
+                              sessionStartDate={activeSession?.start_date}
+                            />
+                          </div>
+
                           <div className="sm:hidden flex gap-2 pt-2 border-t border-gray-700/50">
                             <button onClick={() => setExpandedRegimen(null)}
                               className="flex-1 py-2.5 rounded bg-gray-700 hover:bg-gray-600 text-gray-200 text-sm font-medium">Done</button>

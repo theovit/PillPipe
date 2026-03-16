@@ -65,16 +65,7 @@ Push notifications that remind you to take each supplement at the right time, ba
 
 ### P3 — Medium Term
 
-#### Adherence Tracking
-**Effort:** Medium | **Value:** High — depends on reminders
-
-Log whether each dose was taken, skipped, or snoozed over time. Gives users and their doctors a real history of how well a protocol was followed. Depends on the dose reminder feature being built first since reminders are the natural trigger for logging.
-
-**Planned behavior**
-- Each reminder notification has "Taken" and "Skip" actions
-- Dose events are stored in a new `dose_log` table (regimen_id, date, status)
-- Adherence view per regimen: calendar or percentage breakdown
-- Data included in session export / shortfall report
+*Adherence Tracking complete. See Completed section.*
 
 ---
 
@@ -191,3 +182,4 @@ Multi-tenant support allowing healthcare providers to create sessions and push t
 - [x] Liquid & Drops support — `unit` field (capsules/tablets/ml/drops), `drops_per_ml` override, dynamic labels throughout UI, decimal dosage/inventory for ml, drops↔ml conversion in calculator route
 - [x] Dose Reminders & Notifications — Web Push (VAPID), service worker, subscribe/unsubscribe in Settings, server-side cron (checks every minute), per-regimen reminder time picker, dose_log table, `push_subscriptions` table, test notification button
 - [x] Running Low — On-Hand Alerts — per-supplement `reorder_threshold` (raw units, opt-in), ⚠ low badge on supplement rows, daily 8am server cron fires push notification with on-hand count + days remaining (calculated from active regimen phase dosage)
+- [x] Adherence Tracking — 30-day dot grid per regimen (green=taken, red=skipped, gray=missed), adherence % stat, "Taken today / Skip today" log buttons, change/undo support; SW message listener logs doses tapped from push notifications; `AdherenceCalendar` component in expanded regimen card
