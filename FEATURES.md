@@ -200,3 +200,4 @@ Multi-tenant support allowing healthcare providers to create sessions and push t
 - [x] Version handling — `GET /version` endpoint; version read from `package.json`; displayed in Settings footer
 - [x] About section — collapsible Settings section; pill icon, version, description, GitHub link, MIT license
 - [x] Liquid & Drops support — `unit` field (capsules/tablets/ml/drops), `drops_per_ml` override, dynamic labels throughout UI, decimal dosage/inventory for ml, drops↔ml conversion in calculator route
+- [x] Dose Reminders & Notifications — Web Push (VAPID), service worker, subscribe/unsubscribe in Settings, server-side cron (checks every minute), per-regimen reminder time picker, dose_log table, `push_subscriptions` table, test notification button

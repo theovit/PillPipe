@@ -49,4 +49,17 @@ export const api = {
   getBackup: () => request('/backup'),
   restore: (body) => request('/restore', { method: 'POST', body }),
   clearData: () => request('/data', { method: 'DELETE' }),
+
+  // Push Notifications
+  getVapidKey: () => request('/push/vapid-key'),
+  pushSubscribe: (subscription) => request('/push/subscribe', { method: 'POST', body: subscription }),
+  pushUnsubscribe: (endpoint) => request('/push/subscribe', { method: 'DELETE', body: { endpoint } }),
+  pushTest: () => request('/push/test', { method: 'POST' }),
+
+  // Reminder time
+  setReminderTime: (regimenId, reminder_time) => request(`/regimens/${regimenId}/reminder`, { method: 'PATCH', body: { reminder_time } }),
+
+  // Dose log
+  logDose: (body) => request('/dose-log', { method: 'POST', body }),
+  getDoseLog: (params = {}) => request(`/dose-log?${new URLSearchParams(params)}`),
 };

@@ -28,13 +28,69 @@ export default function Dashboard() {
   const [calcError, setCalcError] = useState('');
   const [openSections, setOpenSections] = useState({});
   const [appVersion, setAppVersion] = useState('');
+  const [notifStatus, setNotifStatus] = useState('idle'); // idle | requesting | granted | denied | unsupported
+  const [swReg, setSwReg] = useState(null);
+  const [pushSub, setPushSub] = useState(null);
+  const [reminderTimes, setReminderTimes] = useState({}); // regimenId → HH:MM
   function toggleSection(name) { setOpenSections(p => ({ ...p, [name]: !p[name] })); }
 
   useEffect(() => {
     loadSupplements();
     loadSessions();
     api.getVersion().then(d => setAppVersion(d.version)).catch(() => {});
+    initServiceWorker();
   }, []);
+
+  async function initServiceWorker() {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+      setNotifStatus('unsupported'); return;
+    }
+    try {
+      const reg = await navigator.serviceWorker.register('/sw.js');
+      setSwReg(reg);
+      const existing = await reg.pushManager.getSubscription();
+      if (existing) { setPushSub(existing); setNotifStatus('granted'); }
+      else if (Notification.permission === 'denied') setNotifStatus('denied');
+      else setNotifStatus('idle');
+    } catch { setNotifStatus('unsupported'); }
+  }
+
+  async function enableNotifications() {
+    if (!swReg) return;
+    setNotifStatus('requesting');
+    try {
+      const perm = await Notification.requestPermission();
+      if (perm !== 'granted') { setNotifStatus('denied'); return; }
+      const { publicKey } = await api.getVapidKey();
+      const sub = await swReg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(publicKey),
+      });
+      await api.pushSubscribe(sub.toJSON());
+      setPushSub(sub);
+      setNotifStatus('granted');
+    } catch (e) { console.error(e); setNotifStatus('idle'); }
+  }
+
+  async function disableNotifications() {
+    if (!pushSub) return;
+    await pushSub.unsubscribe();
+    await api.pushUnsubscribe(pushSub.endpoint).catch(() => {});
+    setPushSub(null);
+    setNotifStatus('idle');
+  }
+
+  async function setReminderTime(regimenId, time) {
+    setReminderTimes(p => ({ ...p, [regimenId]: time }));
+    await api.setReminderTime(regimenId, time || null);
+  }
+
+  function urlBase64ToUint8Array(base64String) {
+    const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+    const rawData = atob(base64);
+    return Uint8Array.from([...rawData].map(c => c.charCodeAt(0)));
+  }
 
   async function loadSupplements() {
     setSupplements(await api.getSupplements());
@@ -61,6 +117,9 @@ export default function Dashboard() {
     }
     setPhases(phasesMap);
     setRegimenNotes(notesMap);
+    const timesMap = {};
+    for (const r of data) if (r.reminder_time) timesMap[r.id] = r.reminder_time.slice(0, 5);
+    setReminderTimes(timesMap);
   }
 
   async function saveRegimenNotes(id) {
@@ -315,6 +374,61 @@ export default function Dashboard() {
             </button>
             {openSections.preferences && (
               <p className="px-5 pb-4 text-xs text-gray-600 border-t border-gray-800 pt-3">Date format, default session duration — coming soon.</p>
+            )}
+          </div>
+
+          {/* Notifications */}
+          <div className="rounded-xl bg-gray-900 border border-gray-800 overflow-hidden">
+            <button onClick={() => toggleSection('notifications')}
+              className="w-full flex items-center justify-between px-5 py-4 text-left">
+              <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Notifications</h2>
+              <span className="text-gray-600 text-xs">{openSections.notifications ? '▲' : '▼'}</span>
+            </button>
+            {openSections.notifications && (
+              <div className="px-5 pb-5 space-y-4 border-t border-gray-800 pt-4">
+                {notifStatus === 'unsupported' && (
+                  <p className="text-xs text-gray-500">Push notifications are not supported in this browser.</p>
+                )}
+                {notifStatus !== 'unsupported' && (
+                  <>
+                    <div className="flex items-center justify-between gap-4">
+                      <div>
+                        <p className="text-sm text-gray-200 font-medium">Push Notifications</p>
+                        <p className="text-xs text-gray-500 mt-0.5">
+                          {notifStatus === 'granted' ? 'Enabled — reminders will be sent to this device.' : 'Receive dose reminders on this device.'}
+                        </p>
+                        {notifStatus === 'denied' && <p className="text-xs text-red-400 mt-0.5">Permission denied — allow notifications in browser settings.</p>}
+                      </div>
+                      {notifStatus === 'granted' ? (
+                        <button onClick={disableNotifications}
+                          className="shrink-0 px-4 py-2 rounded-lg border border-gray-700 text-gray-400 hover:text-gray-200 text-sm font-medium">
+                          Disable
+                        </button>
+                      ) : (
+                        <button onClick={enableNotifications} disabled={notifStatus === 'denied' || notifStatus === 'requesting'}
+                          className="shrink-0 px-4 py-2 rounded-lg bg-violet-600 hover:bg-violet-500 disabled:opacity-40 text-white text-sm font-medium">
+                          {notifStatus === 'requesting' ? 'Requesting…' : 'Enable'}
+                        </button>
+                      )}
+                    </div>
+                    {notifStatus === 'granted' && (
+                      <div className="border-t border-gray-800 pt-3 flex items-center justify-between gap-4">
+                        <div>
+                          <p className="text-sm text-gray-200 font-medium">Send Test</p>
+                          <p className="text-xs text-gray-500 mt-0.5">Fire a test notification right now.</p>
+                        </div>
+                        <button onClick={() => api.pushTest().catch(() => {})}
+                          className="shrink-0 px-4 py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-200 text-sm font-medium">
+                          Test
+                        </button>
+                      </div>
+                    )}
+                    <div className="border-t border-gray-800 pt-3">
+                      <p className="text-xs text-gray-500">Reminder times are set per-regimen in the Regimens view.</p>
+                    </div>
+                  </>
+                )}
+              </div>
             )}
           </div>
 
@@ -674,6 +788,20 @@ export default function Dashboard() {
                             sessionTotalDays={sessionTotalDays}
                             unit={r.unit || 'capsules'}
                           />
+                          {/* Reminder time */}
+                          {notifStatus === 'granted' && (
+                            <div className="flex items-center gap-3 pt-1">
+                              <label className="text-xs text-gray-500 shrink-0">Reminder</label>
+                              <input type="time" value={reminderTimes[r.id] || ''}
+                                onChange={e => setReminderTime(r.id, e.target.value)}
+                                className="rounded bg-gray-800 border border-gray-700 px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-violet-500"
+                              />
+                              {reminderTimes[r.id] && (
+                                <button onClick={() => setReminderTime(r.id, '')}
+                                  className="text-xs text-gray-600 hover:text-gray-400">clear</button>
+                              )}
+                            </div>
+                          )}
                           <div className="sm:hidden flex gap-2 pt-2 border-t border-gray-700/50">
                             <button onClick={() => setExpandedRegimen(null)}
                               className="flex-1 py-2.5 rounded bg-gray-700 hover:bg-gray-600 text-gray-200 text-sm font-medium">Done</button>

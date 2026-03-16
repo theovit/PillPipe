@@ -1,7 +1,18 @@
 const express = require('express');
+const cron = require('node-cron');
+const webpush = require('web-push');
 const pool = require('./db');
 const { calculate } = require('./calculator');
 const { version } = require('./package.json');
+
+// ── Web Push / VAPID setup ────────────────────────────────────────────────────
+if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
+  webpush.setVapidDetails(
+    process.env.VAPID_EMAIL || 'mailto:admin@pillpipe.local',
+    process.env.VAPID_PUBLIC_KEY,
+    process.env.VAPID_PRIVATE_KEY
+  );
+}
 
 const app = express();
 app.use(express.json());
@@ -270,6 +281,76 @@ app.delete('/data', w(async (req, res) => {
   res.json({ ok: true });
 }));
 
+// ── Push Notifications ────────────────────────────────────────────────────────
+app.get('/push/vapid-key', (req, res) => {
+  res.json({ publicKey: process.env.VAPID_PUBLIC_KEY || null });
+});
+
+app.post('/push/subscribe', w(async (req, res) => {
+  const { endpoint, keys } = req.body;
+  if (!endpoint || !keys?.p256dh || !keys?.auth) return res.status(400).json({ error: 'Invalid subscription' });
+  await pool.query(
+    `INSERT INTO push_subscriptions (endpoint, p256dh, auth)
+     VALUES ($1,$2,$3) ON CONFLICT (endpoint) DO UPDATE SET p256dh=$2, auth=$3`,
+    [endpoint, keys.p256dh, keys.auth]
+  );
+  res.json({ ok: true });
+}));
+
+app.delete('/push/subscribe', w(async (req, res) => {
+  const { endpoint } = req.body;
+  await pool.query('DELETE FROM push_subscriptions WHERE endpoint=$1', [endpoint]);
+  res.json({ ok: true });
+}));
+
+app.post('/push/test', w(async (req, res) => {
+  const { rows } = await pool.query('SELECT * FROM push_subscriptions');
+  if (!rows.length) return res.status(404).json({ error: 'No subscriptions' });
+  const payload = JSON.stringify({ title: 'PillPipe Test', body: 'Notifications are working!' });
+  await Promise.allSettled(rows.map(sub =>
+    webpush.sendNotification({ endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } }, payload)
+      .catch(async (err) => {
+        if (err.statusCode === 410) await pool.query('DELETE FROM push_subscriptions WHERE endpoint=$1', [sub.endpoint]);
+      })
+  ));
+  res.json({ ok: true, sent: rows.length });
+}));
+
+// ── Reminder times ────────────────────────────────────────────────────────────
+app.patch('/regimens/:id/reminder', w(async (req, res) => {
+  const { reminder_time } = req.body; // HH:MM or null
+  const { rows } = await pool.query(
+    'UPDATE regimens SET reminder_time=$1 WHERE id=$2 RETURNING *',
+    [reminder_time || null, req.params.id]
+  );
+  if (!rows.length) return res.status(404).json({ error: 'Not found' });
+  res.json(rows[0]);
+}));
+
+// ── Dose Log ──────────────────────────────────────────────────────────────────
+app.post('/dose-log', w(async (req, res) => {
+  const { regimen_id, date, status } = req.body; // status: 'taken' | 'skipped'
+  const { rows } = await pool.query(
+    `INSERT INTO dose_log (regimen_id, date, status)
+     VALUES ($1,$2,$3)
+     ON CONFLICT (regimen_id, date) DO UPDATE SET status=$3, logged_at=NOW()
+     RETURNING *`,
+    [regimen_id, date, status]
+  );
+  res.json(rows[0]);
+}));
+
+app.get('/dose-log', w(async (req, res) => {
+  const { regimen_id, since } = req.query;
+  let q = 'SELECT * FROM dose_log WHERE 1=1';
+  const params = [];
+  if (regimen_id) { params.push(regimen_id); q += ` AND regimen_id=$${params.length}`; }
+  if (since)      { params.push(since);      q += ` AND date >= $${params.length}`; }
+  q += ' ORDER BY date DESC LIMIT 90';
+  const { rows } = await pool.query(q, params);
+  res.json(rows);
+}));
+
 // ── Error handler ─────────────────────────────────────────────────────────────
 app.use((err, req, res, next) => {
   console.error(err.stack);
@@ -285,6 +366,73 @@ pool.query('ALTER TABLE supplements ADD COLUMN IF NOT EXISTS drops_per_ml NUMERI
 pool.query('ALTER TABLE supplements ALTER COLUMN pills_per_bottle TYPE NUMERIC').catch(console.error);
 pool.query('ALTER TABLE supplements ALTER COLUMN current_inventory TYPE NUMERIC').catch(console.error);
 pool.query('ALTER TABLE phases ALTER COLUMN dosage TYPE NUMERIC').catch(console.error);
+pool.query('ALTER TABLE regimens ADD COLUMN IF NOT EXISTS reminder_time TIME').catch(console.error);
+pool.query(`
+  CREATE TABLE IF NOT EXISTS push_subscriptions (
+    id        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    endpoint  TEXT UNIQUE NOT NULL,
+    p256dh    TEXT NOT NULL,
+    auth      TEXT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+  )
+`).catch(console.error);
+pool.query(`
+  CREATE TABLE IF NOT EXISTS dose_log (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    regimen_id  UUID NOT NULL REFERENCES regimens(id) ON DELETE CASCADE,
+    date        DATE NOT NULL,
+    status      TEXT NOT NULL CHECK (status IN ('taken','skipped')),
+    logged_at   TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE (regimen_id, date)
+  )
+`).catch(console.error);
+
+// ── Notification cron (runs every minute) ─────────────────────────────────────
+cron.schedule('* * * * *', async () => {
+  if (!process.env.VAPID_PUBLIC_KEY) return;
+  try {
+    const now = new Date();
+    const hhmm = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+    const today = now.toISOString().slice(0, 10);
+
+    // Find regimens with reminder_time == now, belonging to an active session
+    const { rows: regimens } = await pool.query(`
+      SELECT r.id, r.reminder_time, s.name AS supplement_name, s.unit, s.drops_per_ml,
+             sess.start_date, sess.target_date
+      FROM regimens r
+      JOIN supplements s ON s.id = r.supplement_id
+      JOIN sessions sess ON sess.id = r.session_id
+      WHERE r.reminder_time IS NOT NULL
+        AND to_char(r.reminder_time, 'HH24:MI') = $1
+        AND sess.start_date <= CURRENT_DATE
+        AND sess.target_date >= CURRENT_DATE
+    `, [hhmm]);
+
+    if (!regimens.length) return;
+
+    const { rows: subs } = await pool.query('SELECT * FROM push_subscriptions');
+    if (!subs.length) return;
+
+    for (const r of regimens) {
+      const payload = JSON.stringify({
+        title: `Time to take ${r.supplement_name}`,
+        body: `Your ${r.supplement_name} reminder`,
+        tag: `dose-${r.id}-${today}`,
+        url: '/',
+      });
+      await Promise.allSettled(subs.map(sub =>
+        webpush.sendNotification(
+          { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+          payload
+        ).catch(async (err) => {
+          if (err.statusCode === 410) await pool.query('DELETE FROM push_subscriptions WHERE endpoint=$1', [sub.endpoint]);
+        })
+      ));
+    }
+  } catch (e) {
+    console.error('Cron notification error:', e.message);
+  }
+});
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => console.log(`PillPipe API v${version} running on port ${PORT}`));
