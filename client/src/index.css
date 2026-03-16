@@ -45,9 +45,6 @@ html.light {
   --color-green-200: #14532d;  /* button text on bg-green-800 */
   /* reds */
   --color-red-400:   #b91c1c;  /* "X short" mono text — was #f87171 (~3.1:1) */
-  /* violets — total cost / shopping list prices */
-  --color-violet-300: #5b21b6; /* total "to buy" amount — was light lavender */
-  --color-violet-400: #6d28d9; /* days-left accent, shopping list prices */
   /* background/border grays — light */
   --color-gray-700: #cbd5e1;
   --color-gray-800: #e2e8f0;

@@ -96,10 +96,10 @@ export default function Dashboard() {
   useEffect(() => {
     if (prefs.colorScheme !== 'system') return;
     const mq = window.matchMedia('(prefers-color-scheme: dark)');
-    const handler = () => applyColorScheme('system');
+    const handler = () => { applyColorScheme('system'); applyAccentColor(prefs.accentColor, prefs.customColor); };
     mq.addEventListener('change', handler);
     return () => mq.removeEventListener('change', handler);
-  }, [prefs.colorScheme]);
+  }, [prefs.colorScheme, prefs.accentColor, prefs.customColor]);
 
   async function initServiceWorker() {
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) {

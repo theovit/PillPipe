@@ -92,18 +92,32 @@ function clearShades() {
   );
 }
 
+// In light mode, text shades (300, 400) must be dark enough to read on light
+// backgrounds.  We remap them to the dark-end of the same palette: 300 → the
+// 700 value, 400 → the 600 value.  Background/button shades (500–700) are
+// left unchanged so buttons look the same in both modes.
+function toLight(shades) {
+  return { 300: shades[700], 400: shades[600], 500: shades[500], 600: shades[600], 700: shades[700] };
+}
+
 export function applyAccentColor(colorName, customHex) {
+  const isLight = document.documentElement.classList.contains('light');
+
   if (!colorName || colorName === 'violet') {
-    clearShades();
+    const s = PRESET_COLORS.find(c => c.key === 'violet').shades;
+    // In dark mode fall back to CSS defaults (clearShades); in light mode
+    // the default Tailwind shades are too pale so apply dark equivalents.
+    if (isLight) applyShades(toLight(s)); else clearShades();
     return;
   }
   if (colorName === 'custom') {
     if (!customHex) { clearShades(); return; }
-    applyShades(generateShades(customHex));
+    const s = generateShades(customHex);
+    applyShades(isLight ? toLight(s) : s);
     return;
   }
   const preset = PRESET_COLORS.find(c => c.key === colorName);
-  if (preset) applyShades(preset.shades);
+  if (preset) applyShades(isLight ? toLight(preset.shades) : preset.shades);
   else clearShades();
 }
 
@@ -119,9 +133,11 @@ export function applyColorScheme(mode) {
 }
 
 export function applyPrefs(prefs) {
+  // Color scheme must be applied first so applyAccentColor reads the correct
+  // html.light class when deciding which shade set to use.
+  applyColorScheme(prefs.colorScheme ?? 'system');
   applyAccentColor(prefs.accentColor, prefs.customColor);
   applyFontSize(prefs.fontSize);
-  applyColorScheme(prefs.colorScheme ?? 'system');
 }
 
 // ── Storage ───────────────────────────────────────────────────────────────────
