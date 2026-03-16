@@ -208,6 +208,8 @@ PillPipe is fully self-hosted. Your data never leaves your own machine.
 
 ### Later
 - [ ] **Google SSO + Drive backup** — sign in with Google; auto-backup data to Drive on a configurable schedule
+- [ ] **Flexible Ads** — opt-in ad levels (0=ad-free default → 3=max); user always in control; AdSense with privacy disclosure
+- [ ] **Donate section** — one-time or recurring support via Ko-fi / GitHub Sponsors; revenue direction TBD alongside ads
 - [ ] **JWT authentication** — multi-user or public hosting support
 - [ ] **Android app** — offline-first with local SQLite; shortfall engine runs entirely on-device
 - [ ] **Doctor portal** — multi-tenant support for providers to push sessions to patients

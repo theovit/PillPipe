@@ -35,37 +35,13 @@ Add first-class support for liquid supplements and tinctures dosed in milliliter
 
 ### P2 — Near Term
 
-#### Dose Reminders & Notifications
-**Effort:** Medium | **Value:** High — closes the "when to take it" gap
-
-Push notifications that remind you to take each supplement at the right time, based on your active session and dosing schedule. Currently the app tells you what to take and whether you'll run out — but it doesn't tell you *when* to take it. This closes that gap.
-
-**Planned behavior**
-- Per-regimen reminder times configurable in the regimen card (e.g. Magnesium at 9pm, LDN at 3am)
-- Respects `days_of_week` — only fires on days the supplement is scheduled
-- Skips automatically when a phase ends or a session expires
-- Snooze and mark-as-taken actions directly from the notification
-
-**Delivery options under consideration**
-
-| Option | Pros | Cons |
-|---|---|---|
-| **Web Push (PWA)** | Works on mobile via browser, no app store | Requires HTTPS + service worker |
-| **ntfy (self-hosted)** | Free, self-hostable, simple API | Requires extra Docker container |
-| **Pushover** | Reliable, simple | $5 one-time fee per platform |
-| **Telegram Bot** | Rich interaction, free | Requires Telegram account |
-
-**Decisions made**
-- Delivery: Web Push (PWA) for now; Android push notifications will replace it when the mobile app ships
-- Dose logging: Yes — taken/skipped doses will be logged (feeds into P3 Adherence Tracking)
-- Scheduling: Server-driven cron job (more reliable than service worker)
-- Settings: Notification preferences will live in the Settings page
+*All P2 items complete. See Completed section below.*
 
 ---
 
 ### P3 — Medium Term
 
-*Shortfall Export and Adherence Tracking complete. See Completed section.*
+*Shortfall Export, Adherence Tracking, and Session Templates complete. See Completed section.*
 
 ---
 
