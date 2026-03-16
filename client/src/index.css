@@ -35,9 +35,19 @@ html.light {
   --color-gray-400: #475569;
   --color-gray-500: #64748b;
   --color-gray-600: #64748b;  /* same floor as 500 — #9ca3af was unreadable */
-  /* type badge colors — blue-400/amber-400 are too light on light backgrounds */
-  --color-blue-400:  #1e3a8a;  /* → blue-900 equivalent, 5:1 contrast on badge bg */
-  --color-amber-400: #78350f;  /* → amber-900 equivalent */
+  /* semantic color overrides — default shades are too light on light backgrounds */
+  /* blues / ambers (badges) */
+  --color-blue-400:  #1e3a8a;  /* badge text — blue-900 equiv, ~5:1 on tinted bg */
+  --color-amber-400: #92400e;  /* shortfall "Buy N bottles" label */
+  --color-amber-300: #92400e;  /* shortfall price "$xx.xx" — was #fcd34d (~1.4:1) */
+  /* greens */
+  --color-green-400: #15803d;  /* "Covered" text — was #4ade80 (~1.3:1) */
+  --color-green-200: #14532d;  /* button text on bg-green-800 */
+  /* reds */
+  --color-red-400:   #b91c1c;  /* "X short" mono text — was #f87171 (~3.1:1) */
+  /* violets — total cost / shopping list prices */
+  --color-violet-300: #5b21b6; /* total "to buy" amount — was light lavender */
+  --color-violet-400: #6d28d9; /* days-left accent, shopping list prices */
   /* background/border grays — light */
   --color-gray-700: #cbd5e1;
   --color-gray-800: #e2e8f0;
