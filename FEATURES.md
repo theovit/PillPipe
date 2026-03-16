@@ -10,29 +10,6 @@
 
 ---
 
-#### Liquid & Drops Support (archived)
-**Effort:** Medium | **Value:** High — expands supplement types beyond capsules/tablets
-
-Add first-class support for liquid supplements and tinctures dosed in milliliters, and for drop-based supplements (e.g. iodine, vitamin D liquid, LDN compounded drops). The two unit types are related — drops are converted to milliliters using a standard average of **20 drops per milliliter**, which is the accepted pharmacological convention for a standard dropper tip.
-
-**Planned behavior**
-- New `unit` field on each supplement: `capsules` (default), `tablets`, `ml`, `drops`
-- When unit is `ml`: dose entry accepts decimal values (e.g. 1.5 ml), on-hand count tracked in ml
-- When unit is `drops`: dose entry accepts whole drop counts; displayed alongside ml equivalent (e.g. "10 drops ≈ 0.5 ml") using the 20 drops/ml conversion
-- Shortfall engine treats ml and drops as the same inventory pool for a given supplement — no separate tracking needed
-- UI label on regimen rows and supplement panel updates dynamically to reflect unit type (e.g. "2 drops/day" instead of "2 caps/day")
-- Cost-per-unit and bottles-to-buy logic adapted for volume-based units (e.g. per-ml cost, bottle size in ml)
-
-**Conversion reference**
-- 1 ml = 20 drops (standard dropper tip average)
-- Display both values in the UI wherever drops are used so users always have the ml context
-
-**Open questions**
-- Should bottle size be entered in ml or in total drop count for drop-based supplements?
-- Should the 20 drops/ml ratio be user-overridable per supplement for non-standard dropper tips?
-
----
-
 ### P2 — Near Term
 
 *All P2 items complete. See Completed section below.*
