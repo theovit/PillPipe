@@ -26,6 +26,7 @@ PillPipe answers both questions.
 - **Grand total cost** — see the total spend across all regimens after calculating.
 - **Quick inventory adjustment** — +/− buttons on supplement rows for fast on-hand count updates without leaving the panel.
 - **Copy session** — clone a session's regimens and phases to a new session at your next appointment.
+- **Session templates** — save any session as a named template; apply it when creating a new session to pre-populate all regimens and phases. Manage and delete templates in Settings → Templates.
 - **Per-regimen notes** — attach notes directly to a regimen with auto-save (doctor instructions, timing reminders, etc.).
 - **Session notes** — attach notes to sessions for top-level context.
 - **Collapse/expand** — regimen cards and the sessions sidebar can be collapsed to reduce visual clutter.
@@ -188,7 +189,7 @@ That's it. No port forwarding, no DNS, no certificates required. Only devices on
 | indefinite | Boolean | Fills remaining session days automatically |
 | sequence_order | Integer | 1, 2, 3… |
 
-Additional runtime tables (created by server on startup): `push_subscriptions`, `dose_log`.
+Additional runtime tables (created by server on startup): `push_subscriptions`, `dose_log`, `templates`, `template_regimens`, `template_phases`.
 
 ---
 
@@ -204,9 +205,6 @@ PillPipe is fully self-hosted. Your data never leaves your own machine.
 ---
 
 ## Roadmap
-
-### Near Term
-- [ ] **Session templates** — save a regimen structure as a reusable template for recurring protocols
 
 ### Later
 - [ ] **Google SSO + Drive backup** — sign in with Google; auto-backup data to Drive on a configurable schedule
