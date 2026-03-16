@@ -110,7 +110,27 @@ DB_PASSWORD=changeme
 DB_NAME=pillpipe
 ```
 
-### 2. Start the stack
+### 2. Generate VAPID keys (push notifications)
+
+Push notifications require a VAPID keypair. Generate one with the `web-push` CLI — you can run it without installing anything globally using `npx`:
+
+```bash
+npx web-push generate-vapid-keys
+```
+
+Copy the output into your `.env`:
+
+```env
+VAPID_PUBLIC_KEY=<your generated public key>
+VAPID_PRIVATE_KEY=<your generated private key>
+VAPID_EMAIL=mailto:you@example.com
+```
+
+`VAPID_EMAIL` is sent to push services for abuse contact — any valid email works. If these keys are missing, the server starts normally but push notifications are silently disabled.
+
+> **Keep your private key secret.** If you regenerate it, all existing push subscriptions are invalidated and users will need to re-subscribe in Settings.
+
+### 4. Start the stack
 
 ```bash
 docker compose up --build
