@@ -25,7 +25,6 @@ function dosageLabel(unit) {
 }
 
 function formatSchedule(phase, unit = 'capsules') {
-  const lbl = dosageLabel(unit);
   const shortLbl = unit === 'ml' ? 'ml' : unit === 'drops' ? 'drops' : unit === 'tablets' ? 'tabs' : 'caps';
   const d = Number(phase.dosage);
   const amtStr = unit === 'ml' ? `${d} ml` : `${d} ${d !== 1 ? shortLbl : shortLbl.replace(/s$/, '')}`;
@@ -87,6 +86,41 @@ function defaultUnit(duration_days) {
 const inputCls = 'rounded bg-gray-800 border border-gray-700 px-3 py-2.5 sm:py-1.5 text-base sm:text-sm text-gray-200 focus:outline-none focus:border-violet-500';
 const EMPTY_FORM = (days) => ({ dosage: '', duration_days: days ?? '', days_of_week: [], indefinite: false });
 
+function IndefiniteToggle({ checked, onChange }) {
+  return (
+    <label className="flex items-center gap-2 text-sm text-gray-400 cursor-pointer select-none py-1">
+      <input type="checkbox" checked={checked} onChange={e => onChange(e.target.checked)}
+        className="accent-violet-500 w-4 h-4" />
+      Indefinite
+    </label>
+  );
+}
+
+function SpanField({ duration_days, unit, onDurationChange, onUnitChange, indefinite, onIndefiniteChange }) {
+  return (
+    <div>
+      <label className="block text-xs text-gray-500 mb-1">Span</label>
+      {indefinite ? (
+        <div className="flex flex-col gap-1.5">
+          <span className="text-sm text-violet-400 font-medium py-2.5">∞ fills session</span>
+          <IndefiniteToggle checked={indefinite} onChange={onIndefiniteChange} />
+        </div>
+      ) : (
+        <div className="flex flex-col gap-1.5">
+          <div className="flex gap-1.5 items-center">
+            <input type="number" min="1" required={!indefinite}
+              value={durationDisplay(duration_days, unit)}
+              onChange={e => onDurationChange(durationToDays(e.target.value, unit))}
+              className={`w-24 ${inputCls}`} />
+            <UnitToggle unit={unit} onChange={onUnitChange} />
+          </div>
+          <IndefiniteToggle checked={indefinite} onChange={onIndefiniteChange} />
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function PhaseEditor({ regimenId, phases, onUpdate, sessionTotalDays, unit = 'capsules' }) {
   const definedDays = phases.filter(p => !p.indefinite).reduce((sum, p) => sum + p.duration_days, 0);
   const hasIndefinite = phases.some(p => p.indefinite);
@@ -142,41 +176,6 @@ export default function PhaseEditor({ regimenId, phases, onUpdate, sessionTotalD
   async function deletePhase(id) {
     await api.deletePhase(id);
     onUpdate();
-  }
-
-  function IndefiniteToggle({ checked, onChange }) {
-    return (
-      <label className="flex items-center gap-2 text-sm text-gray-400 cursor-pointer select-none py-1">
-        <input type="checkbox" checked={checked} onChange={e => onChange(e.target.checked)}
-          className="accent-violet-500 w-4 h-4" />
-        Indefinite
-      </label>
-    );
-  }
-
-  function SpanField({ duration_days, unit, onDurationChange, onUnitChange, indefinite, onIndefiniteChange }) {
-    return (
-      <div>
-        <label className="block text-xs text-gray-500 mb-1">Span</label>
-        {indefinite ? (
-          <div className="flex flex-col gap-1.5">
-            <span className="text-sm text-violet-400 font-medium py-2.5">∞ fills session</span>
-            <IndefiniteToggle checked={indefinite} onChange={onIndefiniteChange} />
-          </div>
-        ) : (
-          <div className="flex flex-col gap-1.5">
-            <div className="flex gap-1.5 items-center">
-              <input type="number" min="1" required={!indefinite}
-                value={durationDisplay(duration_days, unit)}
-                onChange={e => onDurationChange(durationToDays(e.target.value, unit))}
-                className={`w-24 ${inputCls}`} />
-              <UnitToggle unit={unit} onChange={onUnitChange} />
-            </div>
-            <IndefiniteToggle checked={indefinite} onChange={onIndefiniteChange} />
-          </div>
-        )}
-      </div>
-    );
   }
 
   return (

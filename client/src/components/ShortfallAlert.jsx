@@ -1,4 +1,4 @@
-function fmtAmt(value, unit, drops_per_ml = 20) {
+function fmtAmt(value, unit) {
   const v = Number(value);
   if (unit === 'drops') return `${v} drops`;
   if (unit === 'ml') return `${v} ml`;
@@ -6,7 +6,7 @@ function fmtAmt(value, unit, drops_per_ml = 20) {
   return `${v} caps`;
 }
 
-export default function ShortfallAlert({ result, supplementName, unit = 'capsules', drops_per_ml = 20 }) {
+export default function ShortfallAlert({ result, unit = 'capsules', drops_per_ml = 20 }) {
   if (!result) return null;
 
   const { status, shortfall, pillsNeeded, inventory, currentOnHand, bottlesNeeded, estimatedCost, waste } = result;
