@@ -271,27 +271,6 @@ export default function SessionPane({ session, supplements, prefs, notifStatus, 
             className="px-4 py-3 sm:py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-200 text-sm font-medium">
             {addingRegimen ? 'Cancel' : '+ Add'}
           </button>
-          {totalCost !== null && (
-            <button onClick={downloadCSV}
-              className="px-4 py-3 sm:py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm font-medium"
-              title="Export results as CSV">
-              ↓ CSV
-            </button>
-          )}
-          {totalCost !== null && (
-            <button onClick={downloadPDF}
-              className="px-4 py-3 sm:py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm font-medium"
-              title="Export results as PDF">
-              ↓ PDF
-            </button>
-          )}
-          {totalCost !== null && regimens.some(r => calcResults[r.id]?.bottlesNeeded > 0) && (
-            <button onClick={() => setShowShoppingList(true)}
-              className="px-4 py-3 sm:py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm font-medium"
-              title="View shopping list">
-              🛒 List
-            </button>
-          )}
           <button onClick={runCalculate}
             className="px-5 py-3 sm:py-2 rounded-lg bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium">
             Calculate
@@ -302,6 +281,27 @@ export default function SessionPane({ session, supplements, prefs, notifStatus, 
           </button>
         </div>
       </div>
+      {totalCost !== null && (
+        <div className="flex gap-2 flex-wrap mt-2">
+          <button onClick={downloadCSV}
+            className="px-4 py-3 sm:py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm font-medium"
+            title="Export results as CSV">
+            ↓ CSV
+          </button>
+          <button onClick={downloadPDF}
+            className="px-4 py-3 sm:py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm font-medium"
+            title="Export results as PDF">
+            ↓ PDF
+          </button>
+          {regimens.some(r => calcResults[r.id]?.bottlesNeeded > 0) && (
+            <button onClick={() => setShowShoppingList(true)}
+              className="px-4 py-3 sm:py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm font-medium"
+              title="View shopping list">
+              🛒 List
+            </button>
+          )}
+        </div>
+      )}
 
       {calcError && (
         <p className="mt-2 text-xs text-red-400 bg-red-900/20 border border-red-900/40 rounded-lg px-3 py-2">{calcError}</p>
