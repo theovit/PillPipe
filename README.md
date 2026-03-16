@@ -208,9 +208,26 @@ PillPipe is fully self-hosted. Your data never leaves your own machine.
 
 ### Later
 - [ ] **Google SSO + Drive backup** — sign in with Google; auto-backup data to Drive on a configurable schedule
-- [ ] **Flexible Ads** — opt-in ad levels (0=ad-free default → 3=max); user always in control; AdSense with privacy disclosure
+- [ ] **Flexible Ads** — see below
 - [ ] **Donate section** — one-time or recurring support via Ko-fi / GitHub Sponsors; revenue direction TBD alongside ads
 - [ ] **JWT authentication** — multi-user or public hosting support
 - [ ] **Android app** — offline-first with local SQLite; shortfall engine runs entirely on-device
 - [ ] **Doctor portal** — multi-tenant support for providers to push sessions to patients
+
+---
+
+## Advertising Philosophy
+
+PillPipe will never charge you to remove ads. **Ad-free is the default — forever.**
+
+Ads are entirely opt-in. If you want to support the project passively, you can choose a level in Settings. You can change it at any time, and every level change requires a confirmation so you never feel tricked.
+
+| Level | Name | What you get |
+|---|---|---|
+| 0 | **Ad-Free** *(default)* | No ads anywhere. This is where most people will stay. |
+| 1 | **Light** | Small, non-intrusive placements — banners and sidebars where space allows. Never interrupts your workflow. |
+| 2 | **Normal** | Ads wherever they fit. More cluttered but nothing that blocks content or requires interaction. |
+| 3 | **Max** | Everything from Normal plus intrusive formats — full-screen takeovers and unskippable interstitials. For users who really want to support the project. |
+
+**A note on privacy:** Levels 1–3 use Google AdSense. Enabling any ad level will show a clear disclosure that data is sent to Google, and you must explicitly accept before ads activate. No surprises.
 
