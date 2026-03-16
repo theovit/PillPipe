@@ -1,10 +1,8 @@
 import { useEffect, useState } from 'react';
 import { api } from '../utils/api';
 import { applyAccentColor, applyPrefs, defaultTargetDate, formatDate, loadPrefs, PRESET_COLORS, savePrefs } from '../utils/prefs';
-import PhaseEditor from './PhaseEditor';
-import ShortfallAlert from './ShortfallAlert';
+import SessionPane from './SessionPane';
 import SupplementsPanel from './SupplementsPanel';
-import AdherenceCalendar from './AdherenceCalendar';
 
 const today = new Date().toISOString().slice(0, 10);
 const inputCls = 'w-full rounded bg-gray-800 border border-gray-700 px-3 py-2.5 sm:py-1.5 text-base sm:text-sm text-gray-200 focus:outline-none focus:border-violet-500';
@@ -12,39 +10,29 @@ const inputCls = 'w-full rounded bg-gray-800 border border-gray-700 px-3 py-2.5 
 export default function Dashboard() {
   const [supplements, setSupplements] = useState([]);
   const [sessions, setSessions] = useState([]);
-  const [activeSession, setActiveSession] = useState(null);
-  const [regimens, setRegimens] = useState([]);
-  const [phases, setPhases] = useState({});
-  const [calcResults, setCalcResults] = useState({});
+  const [openSessionIds, setOpenSessionIds] = useState([]);
   const [sessionForm, setSessionForm] = useState({ start_date: today, target_date: '', notes: '', template_id: '' });
   const [editingSession, setEditingSession] = useState(null);
   const [copyingSession, setCopyingSession] = useState(null);
   const [copyForm, setCopyForm] = useState({ start_date: today, target_date: '' });
-  const [regimenForm, setRegimenForm] = useState({ supplement_id: '' });
   const [view, setView] = useState('regimens');
   const [addingSession, setAddingSession] = useState(false);
-  const [showOtherSessions, setShowOtherSessions] = useState(false);
-  const [addingRegimen, setAddingRegimen] = useState(false);
-  const [expandedRegimen, setExpandedRegimen] = useState(null);
-  const [regimenNotes, setRegimenNotes] = useState({});
-  const [calcError, setCalcError] = useState('');
   const [openSections, setOpenSections] = useState({});
   const [appVersion, setAppVersion] = useState('');
   const [notifStatus, setNotifStatus] = useState('idle'); // idle | requesting | granted | denied | unsupported
   const [swReg, setSwReg] = useState(null);
   const [pushSub, setPushSub] = useState(null);
-  const [reminderTimes, setReminderTimes] = useState({}); // regimenId → HH:MM
   const [testResult, setTestResult] = useState(''); // '' | 'sending' | 'sent' | error string
-  const [todayLogs, setTodayLogs] = useState({}); // regimenId → 'taken' | 'skipped'
   const [templates, setTemplates] = useState([]);
   const [savingTemplate, setSavingTemplate] = useState(null); // session id
   const [templateNameInput, setTemplateNameInput] = useState('');
   const [driveStatus, setDriveStatus] = useState(null); // null | { connected, email, frequency, last_backup_at }
   const [driveBackups, setDriveBackups] = useState([]);
-  const [driveWorking, setDriveWorking] = useState(false); // backing up or restoring
-  const [driveMsg, setDriveMsg] = useState(''); // status message
+  const [driveWorking, setDriveWorking] = useState(false);
+  const [driveMsg, setDriveMsg] = useState('');
   const [showDriveBackups, setShowDriveBackups] = useState(false);
   const [prefs, setPrefs] = useState(() => loadPrefs());
+
   function toggleSection(name) { setOpenSections(p => ({ ...p, [name]: !p[name] })); }
 
   function updatePref(key, value) {
@@ -102,24 +90,7 @@ export default function Dashboard() {
         setDriveMsg('Google Drive connection failed. Please try again.');
       }
     }
-  }, []);
-
-  // Handle Taken/Skip actions tapped from push notifications
-  useEffect(() => {
-    if (!('serviceWorker' in navigator)) return;
-    const handler = async (event) => {
-      if (event.data?.type !== 'DOSE_ACTION') return;
-      const { action, tag } = event.data;
-      // tag format: "dose-{uuid}-{YYYY-MM-DD}"
-      const regimenId = tag.slice(5, -11);  // strip "dose-" prefix and "-YYYY-MM-DD" suffix
-      const date      = tag.slice(-10);
-      const status    = action === 'taken' ? 'taken' : 'skipped';
-      await api.logDose({ regimen_id: regimenId, date, status }).catch(console.error);
-      if (date === today) setTodayLogs(p => ({ ...p, [regimenId]: status }));
-    };
-    navigator.serviceWorker.addEventListener('message', handler);
-    return () => navigator.serviceWorker.removeEventListener('message', handler);
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function initServiceWorker() {
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
@@ -161,11 +132,6 @@ export default function Dashboard() {
     await api.pushUnsubscribe(pushSub.endpoint).catch(() => {});
     setPushSub(null);
     setNotifStatus('idle');
-  }
-
-  async function setReminderTime(regimenId, time) {
-    setReminderTimes(p => ({ ...p, [regimenId]: time }));
-    await api.setReminderTime(regimenId, time || null);
   }
 
   function urlBase64ToUint8Array(base64String) {
@@ -234,58 +200,7 @@ export default function Dashboard() {
   async function loadSessions() {
     const data = await api.getSessions();
     setSessions(data);
-    if (data.length && !activeSession) setActiveSession(data[0]);
-  }
-
-  useEffect(() => {
-    if (activeSession) loadRegimens();
-  }, [activeSession]);
-
-  async function loadRegimens() {
-    const data = await api.getRegimens(activeSession.id);
-    setRegimens(data);
-    const phasesMap = {};
-    const notesMap = {};
-    for (const r of data) {
-      phasesMap[r.id] = await api.getPhases(r.id);
-      notesMap[r.id] = r.notes || '';
-    }
-    setPhases(phasesMap);
-    setRegimenNotes(notesMap);
-    const timesMap = {};
-    for (const r of data) if (r.reminder_time) timesMap[r.id] = r.reminder_time.slice(0, 5);
-    setReminderTimes(timesMap);
-    // Load today's dose logs for quick-log buttons on collapsed cards
-    try {
-      const entries = await api.getDoseLog({ since: today });
-      const logsMap = {};
-      for (const e of entries) if (e.date.slice(0, 10) === today) logsMap[e.regimen_id] = e.status;
-      setTodayLogs(logsMap);
-    } catch { /* non-critical */ }
-  }
-
-  async function saveRegimenNotes(id) {
-    await api.updateRegimen(id, { notes: regimenNotes[id] || null });
-    setRegimens(prev => prev.map(r => r.id === id ? { ...r, notes: regimenNotes[id] || null } : r));
-  }
-
-  async function logTodayDose(regimenId, status) {
-    setTodayLogs(p => ({ ...p, [regimenId]: status }));
-    await api.logDose({ regimen_id: regimenId, date: today, status }).catch(console.error);
-  }
-
-  async function logAllToday(status) {
-    const updated = {};
-    for (const r of regimens) updated[r.id] = status;
-    setTodayLogs(p => ({ ...p, ...updated }));
-    await Promise.all(regimens.map(r =>
-      api.logDose({ regimen_id: r.id, date: today, status }).catch(console.error)
-    ));
-  }
-
-  async function loadPhases(regimenId) {
-    const data = await api.getPhases(regimenId);
-    setPhases(p => ({ ...p, [regimenId]: data }));
+    if (data.length) setOpenSessionIds(prev => prev.length ? prev : [data[0].id]);
   }
 
   async function createSession(e) {
@@ -297,36 +212,8 @@ export default function Dashboard() {
     const s = await api.createSession(sessionForm);
     setSessionForm({ start_date: today, target_date: defaultTargetDate(prefs.defaultDuration), notes: '', template_id: '' });
     setSessions(prev => [s, ...prev]);
-    setActiveSession(s);
+    setOpenSessionIds(prev => [s.id, ...prev]);
     setAddingSession(false);
-  }
-
-  async function createRegimen(e) {
-    e.preventDefault();
-    await api.createRegimen(activeSession.id, { supplement_id: regimenForm.supplement_id });
-    setRegimenForm({ supplement_id: '' });
-    setAddingRegimen(false);
-    loadRegimens();
-  }
-
-  function phaseSummary(ps) {
-    if (!ps?.length) return 'No phases';
-    const defined = ps.filter(p => !p.indefinite).reduce((s, p) => s + p.duration_days, 0);
-    const hasIndef = ps.some(p => p.indefinite);
-    return `${ps.length} phase${ps.length !== 1 ? 's' : ''} · ${defined}d${hasIndef ? ' + ∞' : ''}`;
-  }
-
-  async function runCalculate() {
-    const missing = regimens.filter(r => !phases[r.id]?.length);
-    if (missing.length) {
-      setCalcError(`Add at least one phase to: ${missing.map(r => r.supplement_name).join(', ')}`);
-      return;
-    }
-    setCalcError('');
-    const { results } = await api.calculate(activeSession.id);
-    const map = {};
-    for (const r of results) map[r.regimen_id] = r;
-    setCalcResults(map);
   }
 
   async function saveSession(e) {
@@ -341,17 +228,14 @@ export default function Dashboard() {
       notes: editingSession.notes || null,
     });
     setSessions(prev => prev.map(s => s.id === updated.id ? updated : s));
-    if (activeSession?.id === updated.id) setActiveSession(updated);
     setEditingSession(null);
   }
 
   async function deleteSession(id) {
     if (!window.confirm('Delete this session and all its regimens?')) return;
     await api.deleteSession(id);
-    const remaining = sessions.filter(s => s.id !== id);
-    setSessions(remaining);
-    setActiveSession(remaining[0] ?? null);
-    if (remaining[0]) setRegimens([]);
+    setSessions(prev => prev.filter(s => s.id !== id));
+    setOpenSessionIds(prev => prev.filter(sid => sid !== id));
   }
 
   async function submitCopySession(e) {
@@ -359,14 +243,7 @@ export default function Dashboard() {
     const s = await api.copySession(copyingSession, copyForm);
     setCopyingSession(null);
     setSessions(prev => [s, ...prev]);
-    setActiveSession(s);
-    setCalcResults({});
-  }
-
-  async function deleteRegimen(id) {
-    if (!window.confirm('Remove this regimen and all its phases?')) return;
-    await api.deleteRegimen(id);
-    loadRegimens();
+    setOpenSessionIds(prev => [s.id, ...prev]);
   }
 
   function daysLeftBadge(targetDate) {
@@ -375,58 +252,11 @@ export default function Dashboard() {
     return <span className="text-xs text-violet-400 font-mono">{d}d left</span>;
   }
 
-  function downloadCSV() {
-    const esc = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
-    const sessionStart  = formatDate(activeSession.start_date, prefs.dateFormat);
-    const sessionTarget = formatDate(activeSession.target_date, prefs.dateFormat);
-    const lines = [
-      `PillPipe Shortfall Export`,
-      `${esc('Session')},${esc(`${sessionStart} → ${sessionTarget} (${sessionTotalDays} days)`)}`,
-      `${esc('Generated')},${esc(formatDate(today, prefs.dateFormat))}`,
-      '',
-      'Supplement,Brand,Unit,"On Hand","Total Needed",Shortfall,"Bottles to Buy","Est. Cost","Days Short",Status',
-    ];
-    for (const r of regimens) {
-      const res = calcResults[r.id];
-      if (!res) continue;
-      const u = r.unit || 'capsules';
-      const unitLabel = u === 'ml' ? 'ml' : u === 'drops' ? 'drops' : u === 'tablets' ? 'tabs' : 'caps';
-      lines.push([
-        esc(r.supplement_name),
-        esc(r.brand || ''),
-        unitLabel,
-        Number(res.currentOnHand),
-        Number(res.pillsNeeded),
-        Number(res.shortfall),
-        Number(res.bottlesNeeded),
-        `$${(res.estimatedCost || 0).toFixed(2)}`,
-        Number(res.daysShort),
-        res.status,
-      ].join(','));
-    }
-    const tc = Object.values(calcResults).reduce((s, r) => s + (r.estimatedCost || 0), 0);
-    lines.push('');
-    lines.push(`,,,,,,,$${tc.toFixed(2)},,Total Est. Cost`);
-    const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement('a');
-    a.href     = url;
-    a.download = `pillpipe-shortfall-${activeSession.target_date.slice(0, 10)}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+  function toggleSession(id) {
+    setOpenSessionIds(prev =>
+      prev.includes(id) ? prev.filter(sid => sid !== id) : [...prev, id]
+    );
   }
-
-  const totalCost = Object.keys(calcResults).length > 0
-    ? Object.values(calcResults).reduce((sum, r) => sum + (r.estimatedCost || 0), 0)
-    : null;
-
-  const sessionTotalDays = activeSession
-    ? Math.ceil((new Date(activeSession.target_date) - new Date(activeSession.start_date)) / (1000 * 60 * 60 * 24))
-    : 0;
-
-  const daysLeft = activeSession
-    ? Math.ceil((new Date(activeSession.target_date) - new Date()) / (1000 * 60 * 60 * 24))
-    : 0;
 
   async function downloadBackup() {
     const data = await api.getBackup();
@@ -466,11 +296,8 @@ export default function Dashboard() {
     if (!window.confirm('Are you absolutely sure? All data will be gone.')) return;
     await api.clearData();
     setView('regimens');
-    setActiveSession(null);
+    setOpenSessionIds([]);
     setSessions([]);
-    setRegimens([]);
-    setPhases({});
-    setCalcResults({});
     await loadSupplements();
   }
 
@@ -812,7 +639,7 @@ export default function Dashboard() {
                       Your browser blocks Web Push over plain HTTP. To enable notifications, access PillPipe via HTTPS — enable HTTPS in your Tailscale settings (Serve / Funnel), or use a reverse proxy with a TLS certificate.
                     </p>
                     <p className="text-xs text-gray-500 mt-1">
-                      The Android app will use native push notifications and won't have this limitation.
+                      The Android app will use native push notifications and won&apos;t have this limitation.
                     </p>
                   </div>
                 )}
@@ -897,7 +724,7 @@ export default function Dashboard() {
             {openSections.support && (
               <div className="px-5 pb-5 space-y-4 border-t border-gray-800 pt-4">
                 <p className="text-xs text-gray-400 leading-relaxed">
-                  PillPipe is free, open-source, and self-hosted — no subscriptions, no ads. If it's useful to you, a small donation helps cover development time and keeps the project going.
+                  PillPipe is free, open-source, and self-hosted — no subscriptions, no ads. If it&apos;s useful to you, a small donation helps cover development time and keeps the project going.
                 </p>
                 <div className="flex flex-col sm:flex-row gap-2">
                   <a href="https://ko-fi.com/pillpipe" target="_blank" rel="noopener noreferrer"
@@ -979,7 +806,7 @@ export default function Dashboard() {
         {view !== 'supplements' && <div className="lg:col-span-1 space-y-4">
           <div className="rounded-xl bg-gray-900 border border-gray-800 p-4">
             <div className="flex items-center justify-between mb-3">
-              <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Session</h2>
+              <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Sessions</h2>
               <button onClick={() => { if (!addingSession) { loadTemplates(); setSessionForm(f => ({ ...f, target_date: defaultTargetDate(prefs.defaultDuration) })); } setAddingSession(a => !a); setEditingSession(null); }}
                 className="text-sm text-violet-400 hover:text-violet-300 font-medium">
                 {addingSession ? 'Cancel' : '+ New'}
@@ -1025,177 +852,97 @@ export default function Dashboard() {
               </form>
             )}
 
-            {/* Active session */}
-            {activeSession && !addingSession && (
-              <div>
-                {editingSession?.id === activeSession.id ? (
-                  <form onSubmit={saveSession} className="space-y-1.5">
-                    <input type="date" required value={editingSession.start_date}
-                      onChange={e => setEditingSession(f => ({ ...f, start_date: e.target.value }))}
-                      className={inputCls} />
-                    <input type="date" required value={editingSession.target_date}
-                      onChange={e => setEditingSession(f => ({ ...f, target_date: e.target.value }))}
-                      className={inputCls} />
-                    <textarea rows={2} value={editingSession.notes || ''}
-                      onChange={e => setEditingSession(f => ({ ...f, notes: e.target.value }))}
-                      className={`${inputCls} resize-none`}
-                      placeholder="Notes" />
-                    <div className="flex flex-wrap gap-2 pt-0.5">
-                      <button type="submit" className="px-3 py-2.5 sm:py-1 rounded bg-violet-600 hover:bg-violet-500 text-white text-sm">Save</button>
-                      <button type="button" onClick={() => setEditingSession(null)} className="px-3 py-2.5 sm:py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm">Cancel</button>
-                      <button type="button" className="sm:hidden px-3 py-2.5 rounded text-gray-400 hover:text-gray-200 text-sm"
-                        onClick={() => { setEditingSession(null); setCopyingSession(activeSession.id); setCopyForm({ start_date: today, target_date: '' }); }}>Copy</button>
-                      <button type="button" className="sm:hidden px-3 py-2.5 rounded text-red-400 hover:text-red-300 text-sm ml-auto"
-                        onClick={() => { setEditingSession(null); deleteSession(activeSession.id); }}>Delete</button>
-                    </div>
-                  </form>
-                ) : (
-                  <>
-                    <div className="rounded-lg bg-violet-700/20 border border-violet-600/30 px-3 py-3 cursor-pointer"
-                      onClick={() => setEditingSession({ ...activeSession, start_date: activeSession.start_date.slice(0, 10), target_date: activeSession.target_date.slice(0, 10), notes: activeSession.notes || '' })}>
-                      <div className="flex items-start gap-1">
-                        <div className="flex-1 min-w-0">
-                          <div className="font-medium text-violet-300 flex items-center gap-2 flex-wrap text-sm">
-                            <span className="font-mono">→ {formatDate(activeSession.target_date, prefs.dateFormat)}</span>
-                            {daysLeftBadge(activeSession.target_date)}
-                          </div>
-                          <div className="text-xs text-gray-500 mt-0.5 font-mono">from {formatDate(activeSession.start_date, prefs.dateFormat)}</div>
-                          {activeSession.notes && <div className="text-xs text-gray-400 mt-1.5 leading-relaxed">{activeSession.notes}</div>}
-                        </div>
-                        <button onClick={e => { e.stopPropagation(); setCopyingSession(activeSession.id); setCopyForm({ start_date: today, target_date: '' }); }}
-                          className="hidden sm:block text-gray-500 hover:text-gray-300 p-2 shrink-0" title="Copy to new session">⧉</button>
-                        <button onClick={e => { e.stopPropagation(); setSavingTemplate(activeSession.id); setTemplateNameInput(''); }}
-                          className="hidden sm:block text-gray-500 hover:text-gray-300 p-2 shrink-0" title="Save as template">☆</button>
-                        <button onClick={e => { e.stopPropagation(); setEditingSession({ ...activeSession, start_date: activeSession.start_date.slice(0, 10), target_date: activeSession.target_date.slice(0, 10), notes: activeSession.notes || '' }); }}
-                          className="hidden sm:block text-gray-500 hover:text-gray-300 p-2 shrink-0">✎</button>
-                        <button onClick={e => { e.stopPropagation(); deleteSession(activeSession.id); }}
-                          className="hidden sm:block text-red-500 hover:text-red-400 p-2 shrink-0">✕</button>
-                      </div>
-                    </div>
-                    {copyingSession === activeSession.id && (
-                      <form onSubmit={submitCopySession} className="mt-2 space-y-1.5 pt-2">
-                        <p className="text-xs text-gray-400 font-medium">Copy to new session</p>
-                        <input type="date" required value={copyForm.start_date}
-                          onChange={e => setCopyForm(f => ({ ...f, start_date: e.target.value }))}
-                          className={inputCls} />
-                        <input type="date" required value={copyForm.target_date}
-                          onChange={e => setCopyForm(f => ({ ...f, target_date: e.target.value }))}
-                          className={inputCls} />
-                        <div className="flex gap-2 pt-0.5">
-                          <button type="submit" className="px-3 py-2 sm:py-1 rounded bg-violet-600 hover:bg-violet-500 text-white text-sm">Copy</button>
-                          <button type="button" onClick={() => setCopyingSession(null)} className="px-3 py-2 sm:py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm">Cancel</button>
-                        </div>
-                      </form>
-                    )}
-                    {savingTemplate === activeSession.id && (
-                      <div className="mt-2 space-y-1.5 pt-2">
-                        <p className="text-xs text-gray-400 font-medium">Save as template</p>
-                        <input type="text" placeholder="Template name" value={templateNameInput}
-                          onChange={e => setTemplateNameInput(e.target.value)}
-                          className={inputCls} autoFocus />
-                        <div className="flex gap-2 pt-0.5">
-                          <button type="button" onClick={() => saveSessionAsTemplate(activeSession.id)}
-                            disabled={!templateNameInput.trim()}
-                            className="px-3 py-2 sm:py-1 rounded bg-violet-600 hover:bg-violet-500 disabled:opacity-40 text-white text-sm">Save</button>
-                          <button type="button" onClick={() => setSavingTemplate(null)}
-                            className="px-3 py-2 sm:py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm">Cancel</button>
-                        </div>
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
-            )}
-
-            {!activeSession && !addingSession && (
+            {/* Sessions list — all sessions; click to toggle open/closed */}
+            {sessions.length === 0 && !addingSession && (
               <p className="text-xs text-gray-600 text-center py-2">No sessions yet.</p>
             )}
 
-            {/* Other sessions */}
-            {sessions.length > 1 && !addingSession && (
-              <div className="mt-3">
-                <button onClick={() => setShowOtherSessions(s => !s)}
-                  className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-300 transition-colors">
-                  <span>{showOtherSessions ? '▾' : '▸'}</span>
-                  <span>{sessions.length - 1} other session{sessions.length - 1 !== 1 ? 's' : ''}</span>
-                </button>
-                {showOtherSessions && (
-                  <div className="mt-2 space-y-1">
-                    {sessions.filter(s => s.id !== activeSession?.id).map(s => (
-                      <div key={s.id}>
-                        <div className="rounded px-3 py-2.5 text-sm hover:bg-gray-800 text-gray-400 transition-colors">
-                          {editingSession?.id === s.id ? (
-                            <form onSubmit={saveSession} className="space-y-1.5">
-                              <input type="date" required value={editingSession.start_date}
-                                onChange={e => setEditingSession(f => ({ ...f, start_date: e.target.value }))}
-                                className={inputCls} />
-                              <input type="date" required value={editingSession.target_date}
-                                onChange={e => setEditingSession(f => ({ ...f, target_date: e.target.value }))}
-                                className={inputCls} />
-                              <textarea rows={2} value={editingSession.notes || ''}
-                                onChange={e => setEditingSession(f => ({ ...f, notes: e.target.value }))}
-                                className={`${inputCls} resize-none`}
-                                placeholder="Notes" />
-                              <div className="flex gap-2 pt-0.5">
-                                <button type="submit" className="px-3 py-2 sm:py-1 rounded bg-violet-600 hover:bg-violet-500 text-white text-sm">Save</button>
-                                <button type="button" onClick={() => setEditingSession(null)} className="px-3 py-2 sm:py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm">Cancel</button>
-                              </div>
-                            </form>
-                          ) : (
-                            <div className="flex items-start gap-1">
-                              <button className="flex-1 text-left py-1" onClick={() => { setActiveSession(s); setCalcResults({}); setShowOtherSessions(false); }}>
-                                <div className="font-medium flex items-center gap-2 flex-wrap">
-                                  <span className="font-mono">→ {new Date(s.target_date).toLocaleDateString()}</span>
-                                  {daysLeftBadge(s.target_date)}
-                                </div>
-                                <div className="text-xs opacity-60 font-mono">from {new Date(s.start_date).toLocaleDateString()}</div>
-                                {s.notes && <div className="text-xs opacity-50 mt-0.5 line-clamp-1">{s.notes}</div>}
-                              </button>
-                              <button onClick={() => { setCopyingSession(s.id); setCopyForm({ start_date: today, target_date: '' }); }}
-                                className="hidden sm:block text-gray-500 hover:text-gray-300 p-2 shrink-0" title="Copy to new session">⧉</button>
-                              <button onClick={() => { setSavingTemplate(s.id); setTemplateNameInput(''); }}
-                                className="hidden sm:block text-gray-500 hover:text-gray-300 p-2 shrink-0" title="Save as template">☆</button>
-                              <button onClick={() => setEditingSession({ ...s, start_date: s.start_date.slice(0, 10), target_date: s.target_date.slice(0, 10), notes: s.notes || '' })}
-                                className="hidden sm:block text-gray-500 hover:text-gray-300 p-2 shrink-0">✎</button>
-                              <button onClick={() => deleteSession(s.id)}
-                                className="hidden sm:block text-red-500 hover:text-red-400 p-2 shrink-0">✕</button>
-                            </div>
-                          )}
-                        </div>
-                        {copyingSession === s.id && (
-                          <form onSubmit={submitCopySession} className="mt-1 space-y-1.5 px-3 py-3 bg-gray-800/50 rounded border border-gray-700">
-                            <p className="text-xs text-gray-400 font-medium">Copy to new session</p>
-                            <input type="date" required value={copyForm.start_date}
-                              onChange={e => setCopyForm(f => ({ ...f, start_date: e.target.value }))}
-                              className={inputCls} />
-                            <input type="date" required value={copyForm.target_date}
-                              onChange={e => setCopyForm(f => ({ ...f, target_date: e.target.value }))}
-                              className={inputCls} />
-                            <div className="flex gap-2 pt-0.5">
-                              <button type="submit" className="px-3 py-2 sm:py-1 rounded bg-violet-600 hover:bg-violet-500 text-white text-sm">Copy</button>
-                              <button type="button" onClick={() => setCopyingSession(null)} className="px-3 py-2 sm:py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm">Cancel</button>
-                            </div>
-                          </form>
-                        )}
-                        {savingTemplate === s.id && (
-                          <div className="mt-1 space-y-1.5 px-3 py-3 bg-gray-800/50 rounded border border-gray-700">
-                            <p className="text-xs text-gray-400 font-medium">Save as template</p>
-                            <input type="text" placeholder="Template name" value={templateNameInput}
-                              onChange={e => setTemplateNameInput(e.target.value)}
-                              className={inputCls} autoFocus />
-                            <div className="flex gap-2 pt-0.5">
-                              <button type="button" onClick={() => saveSessionAsTemplate(s.id)}
-                                disabled={!templateNameInput.trim()}
-                                className="px-3 py-2 sm:py-1 rounded bg-violet-600 hover:bg-violet-500 disabled:opacity-40 text-white text-sm">Save</button>
-                              <button type="button" onClick={() => setSavingTemplate(null)}
-                                className="px-3 py-2 sm:py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm">Cancel</button>
-                            </div>
+            {sessions.length > 0 && !addingSession && (
+              <div className="space-y-1">
+                {sessions.map(s => {
+                  const isOpen = openSessionIds.includes(s.id);
+                  return (
+                    <div key={s.id}>
+                      {editingSession?.id === s.id ? (
+                        <form onSubmit={saveSession} className="space-y-1.5 mb-1 pt-1">
+                          <input type="date" required value={editingSession.start_date}
+                            onChange={e => setEditingSession(f => ({ ...f, start_date: e.target.value }))}
+                            className={inputCls} />
+                          <input type="date" required value={editingSession.target_date}
+                            onChange={e => setEditingSession(f => ({ ...f, target_date: e.target.value }))}
+                            className={inputCls} />
+                          <textarea rows={2} value={editingSession.notes || ''}
+                            onChange={e => setEditingSession(f => ({ ...f, notes: e.target.value }))}
+                            className={`${inputCls} resize-none`}
+                            placeholder="Notes" />
+                          <div className="flex flex-wrap gap-2 pt-0.5">
+                            <button type="submit" className="px-3 py-2.5 sm:py-1 rounded bg-violet-600 hover:bg-violet-500 text-white text-sm">Save</button>
+                            <button type="button" onClick={() => setEditingSession(null)} className="px-3 py-2.5 sm:py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm">Cancel</button>
+                            <button type="button" className="sm:hidden px-3 py-2.5 rounded text-gray-400 hover:text-gray-200 text-sm"
+                              onClick={() => { setEditingSession(null); setCopyingSession(s.id); setCopyForm({ start_date: today, target_date: '' }); }}>Copy</button>
+                            <button type="button" className="sm:hidden px-3 py-2.5 rounded text-red-400 hover:text-red-300 text-sm ml-auto"
+                              onClick={() => { setEditingSession(null); deleteSession(s.id); }}>Delete</button>
                           </div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
+                        </form>
+                      ) : (
+                        <div
+                          className={`rounded-lg px-3 py-2.5 cursor-pointer transition-colors ${isOpen ? 'bg-violet-700/20 border border-violet-600/30' : 'hover:bg-gray-800 border border-transparent'}`}
+                          onClick={() => toggleSession(s.id)}>
+                          <div className="flex items-start gap-1">
+                            <div className="flex-1 min-w-0">
+                              <div className={`font-medium flex items-center gap-2 flex-wrap text-sm ${isOpen ? 'text-violet-300' : 'text-gray-400'}`}>
+                                <span className="font-mono">→ {formatDate(s.target_date, prefs.dateFormat)}</span>
+                                {daysLeftBadge(s.target_date)}
+                              </div>
+                              <div className="text-xs text-gray-600 mt-0.5 font-mono">from {formatDate(s.start_date, prefs.dateFormat)}</div>
+                              {s.notes && <div className="text-xs text-gray-500 mt-0.5 line-clamp-1">{s.notes}</div>}
+                            </div>
+                            <button onClick={e => { e.stopPropagation(); setCopyingSession(s.id); setCopyForm({ start_date: today, target_date: '' }); }}
+                              className="hidden sm:block text-gray-500 hover:text-gray-300 p-1.5 shrink-0" title="Copy to new session">⧉</button>
+                            <button onClick={e => { e.stopPropagation(); setSavingTemplate(s.id); setTemplateNameInput(''); }}
+                              className="hidden sm:block text-gray-500 hover:text-gray-300 p-1.5 shrink-0" title="Save as template">☆</button>
+                            <button onClick={e => { e.stopPropagation(); setEditingSession({ ...s, start_date: s.start_date.slice(0, 10), target_date: s.target_date.slice(0, 10), notes: s.notes || '' }); }}
+                              className="hidden sm:block text-gray-500 hover:text-gray-300 p-1.5 shrink-0">✎</button>
+                            <button onClick={e => { e.stopPropagation(); deleteSession(s.id); }}
+                              className="hidden sm:block text-red-500 hover:text-red-400 p-1.5 shrink-0">✕</button>
+                          </div>
+                        </div>
+                      )}
+
+                      {copyingSession === s.id && (
+                        <form onSubmit={submitCopySession} className="mt-1 space-y-1.5 px-3 py-3 bg-gray-800/50 rounded border border-gray-700">
+                          <p className="text-xs text-gray-400 font-medium">Copy to new session</p>
+                          <input type="date" required value={copyForm.start_date}
+                            onChange={e => setCopyForm(f => ({ ...f, start_date: e.target.value }))}
+                            className={inputCls} />
+                          <input type="date" required value={copyForm.target_date}
+                            onChange={e => setCopyForm(f => ({ ...f, target_date: e.target.value }))}
+                            className={inputCls} />
+                          <div className="flex gap-2 pt-0.5">
+                            <button type="submit" className="px-3 py-2 sm:py-1 rounded bg-violet-600 hover:bg-violet-500 text-white text-sm">Copy</button>
+                            <button type="button" onClick={() => setCopyingSession(null)} className="px-3 py-2 sm:py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm">Cancel</button>
+                          </div>
+                        </form>
+                      )}
+
+                      {savingTemplate === s.id && (
+                        <div className="mt-1 space-y-1.5 px-3 py-3 bg-gray-800/50 rounded border border-gray-700">
+                          <p className="text-xs text-gray-400 font-medium">Save as template</p>
+                          <input type="text" placeholder="Template name" value={templateNameInput}
+                            onChange={e => setTemplateNameInput(e.target.value)}
+                            className={inputCls} autoFocus />
+                          <div className="flex gap-2 pt-0.5">
+                            <button type="button" onClick={() => saveSessionAsTemplate(s.id)}
+                              disabled={!templateNameInput.trim()}
+                              className="px-3 py-2 sm:py-1 rounded bg-violet-600 hover:bg-violet-500 disabled:opacity-40 text-white text-sm">Save</button>
+                            <button type="button" onClick={() => setSavingTemplate(null)}
+                              className="px-3 py-2 sm:py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm">Cancel</button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -1205,225 +952,26 @@ export default function Dashboard() {
         <div className={view === 'supplements' ? 'col-span-full' : 'lg:col-span-2'} style={{minWidth: 0}}>
           {view === 'supplements' ? (
             <SupplementsPanel supplements={supplements} onUpdate={loadSupplements} />
-          ) : activeSession ? (
-            <>
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">
-                    Regimens — {new Date(activeSession.target_date).toLocaleDateString()}
-                    {daysLeft >= 0
-                      ? <span className="ml-2 text-violet-400 font-normal normal-case font-mono">· {daysLeft}d left</span>
-                      : <span className="ml-2 text-red-400 font-normal normal-case font-mono">· {Math.abs(daysLeft)}d overdue</span>
-                    }
-                  </h2>
-                  {totalCost !== null && (
-                    <p className="text-xs text-gray-500 mt-0.5">
-                      Total to buy: <span className="text-violet-300 font-medium font-mono">${totalCost.toFixed(2)}</span>
-                    </p>
-                  )}
-                </div>
-                <div className="flex gap-2 shrink-0">
-                  <button onClick={() => { setAddingRegimen(a => !a); setCalcError(''); }}
-                    className="px-4 py-3 sm:py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-200 text-sm font-medium">
-                    {addingRegimen ? 'Cancel' : '+ Add'}
-                  </button>
-                  {totalCost !== null && (
-                    <button onClick={downloadCSV}
-                      className="px-4 py-3 sm:py-2 rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm font-medium"
-                      title="Export results as CSV">
-                      ↓ CSV
-                    </button>
-                  )}
-                  <button onClick={runCalculate}
-                    className="px-5 py-3 sm:py-2 rounded-lg bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium">
-                    Calculate
-                  </button>
-                </div>
-              </div>
-
-              {calcError && (
-                <p className="mt-2 text-xs text-red-400 bg-red-900/20 border border-red-900/40 rounded-lg px-3 py-2">{calcError}</p>
-              )}
-
-              {/* Add regimen form */}
-              {addingRegimen && (
-                <form onSubmit={createRegimen} className="rounded-xl bg-gray-900 border border-gray-800 p-5 flex gap-3 items-end mt-4">
-                  <div className="flex-1">
-                    <label className="block text-xs text-gray-500 mb-1">Supplement</label>
-                    <select required value={regimenForm.supplement_id}
-                      onChange={e => setRegimenForm(f => ({ ...f, supplement_id: e.target.value }))}
-                      className={inputCls}>
-                      <option value="">Select…</option>
-                      {supplements.map(s => (
-                        <option key={s.id} value={s.id}>{s.name}{s.brand ? ` (${s.brand})` : ''} — {s.current_inventory} {s.unit === 'ml' ? 'ml' : s.unit === 'drops' ? 'drops' : s.unit === 'tablets' ? 'tabs' : 'caps'} on hand</option>
-                      ))}
-                    </select>
-                  </div>
-                  <button type="submit" className="px-4 py-2.5 sm:py-1.5 rounded bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium shrink-0">
-                    Add
-                  </button>
-                </form>
-              )}
-
-              {/* Bulk log bar */}
-              {regimens.length > 0 && (
-                <div className="flex items-center gap-2 mt-3">
-                  <span className="text-xs text-gray-600 shrink-0">Today:</span>
-                  <button onClick={() => logAllToday('taken')}
-                    className="px-3 py-1.5 rounded bg-green-800/70 hover:bg-green-700 text-green-200 text-xs font-medium">
-                    ✓ Mark all taken
-                  </button>
-                  <button onClick={() => logAllToday('skipped')}
-                    className="px-3 py-1.5 rounded bg-gray-800 hover:bg-gray-700 text-gray-400 text-xs font-medium">
-                    ✗ Skip all
-                  </button>
-                </div>
-              )}
-
-              {/* Regimen cards */}
-              <div className="space-y-3 mt-3">
-                {regimens.map(r => {
-                  const isExpanded = expandedRegimen === r.id;
-                  return (
-                    <div key={r.id} className="rounded-xl bg-gray-900 border border-gray-800 p-5">
-                      <div className="flex items-start justify-between gap-3 cursor-pointer"
-                        onClick={() => setExpandedRegimen(isExpanded ? null : r.id)}>
-                        <div className="min-w-0">
-                          <h3 className="font-semibold text-white">{r.supplement_name}</h3>
-                          <p className="text-xs text-gray-500 truncate">
-                            {r.brand && `${r.brand} · `}
-                            {r.unit === 'drops' ? `${r.pills_per_bottle} ml/bottle` : r.unit === 'ml' ? `${r.pills_per_bottle} ml/bottle` : `${r.pills_per_bottle} ${r.unit === 'tablets' ? 'tabs' : 'caps'}/bottle`}
-                            {' · '}${Number(r.price).toFixed(2)}
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-1 shrink-0">
-                          <span className="text-sm text-gray-400 whitespace-nowrap mr-1">
-                            <span className="font-mono">{(() => {
-                            const v = calcResults[r.id] != null ? calcResults[r.id].currentOnHand : r.current_inventory;
-                            const u = r.unit || 'capsules';
-                            if (u === 'drops') return `${Number(v)} drops`;
-                            if (u === 'ml') return `${Number(v)} ml`;
-                            if (u === 'tablets') return `${Number(v)} tabs`;
-                            return `${Number(v)} caps`;
-                          })()}</span> on hand
-                          </span>
-                          <button onClick={e => { e.stopPropagation(); setExpandedRegimen(isExpanded ? null : r.id); }}
-                            className={`hidden sm:block p-2 transition-colors ${isExpanded ? 'text-violet-400 hover:text-violet-300' : 'text-gray-500 hover:text-gray-300'}`}>
-                            ✎
-                          </button>
-                          <button onClick={e => { e.stopPropagation(); deleteRegimen(r.id); }} className="hidden sm:block text-red-500 hover:text-red-400 p-2">✕</button>
-                        </div>
-                      </div>
-
-                      {/* Collapsed: phase summary + notes preview + quick log */}
-                      {!isExpanded && (
-                        <div className="mt-2 space-y-1.5">
-                          <p className="text-xs text-gray-600">{phaseSummary(phases[r.id])}</p>
-                          {r.notes && <p className="text-xs text-gray-500 italic line-clamp-1">{r.notes}</p>}
-                          {/* Quick log buttons */}
-                          <div className="flex items-center gap-2 pt-0.5" onClick={e => e.stopPropagation()}>
-                            {!todayLogs[r.id] ? (
-                              <>
-                                <button onClick={() => logTodayDose(r.id, 'taken')}
-                                  className="px-2.5 py-1 rounded bg-green-800/70 hover:bg-green-700 text-green-200 text-xs font-medium">
-                                  ✓ Taken
-                                </button>
-                                <button onClick={() => logTodayDose(r.id, 'skipped')}
-                                  className="px-2.5 py-1 rounded bg-gray-800 hover:bg-gray-700 text-gray-400 text-xs font-medium">
-                                  ✗ Skip
-                                </button>
-                              </>
-                            ) : (
-                              <>
-                                <span className={`text-xs font-medium ${todayLogs[r.id] === 'taken' ? 'text-green-400' : 'text-gray-400'}`}>
-                                  {todayLogs[r.id] === 'taken' ? '✓ Taken today' : '✗ Skipped today'}
-                                </span>
-                                <button onClick={() => logTodayDose(r.id, todayLogs[r.id] === 'taken' ? 'skipped' : 'taken')}
-                                  className="text-xs text-gray-600 hover:text-gray-400">
-                                  change
-                                </button>
-                              </>
-                            )}
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Expanded: notes + full phase editor */}
-                      {isExpanded && (
-                        <div className="mt-4 space-y-4">
-                          <div>
-                            <label className="block text-xs text-gray-500 mb-1">Notes <span className="text-gray-600">(optional)</span></label>
-                            <textarea
-                              rows={2}
-                              value={regimenNotes[r.id] ?? ''}
-                              onChange={e => setRegimenNotes(n => ({ ...n, [r.id]: e.target.value }))}
-                              onBlur={() => saveRegimenNotes(r.id)}
-                              className={`${inputCls} resize-none`}
-                              placeholder="e.g. take with food, avoid at night…"
-                            />
-                          </div>
-                          <PhaseEditor
-                            regimenId={r.id}
-                            phases={phases[r.id] || []}
-                            onUpdate={() => loadPhases(r.id)}
-                            sessionTotalDays={sessionTotalDays}
-                            unit={r.unit || 'capsules'}
-                          />
-                          {/* Reminder time */}
-                          {notifStatus === 'granted' && (
-                            <div className="flex items-center gap-3 pt-1">
-                              <label className="text-xs text-gray-500 shrink-0">Reminder</label>
-                              <input type="time" value={reminderTimes[r.id] || ''}
-                                onChange={e => setReminderTime(r.id, e.target.value)}
-                                className="rounded bg-gray-800 border border-gray-700 px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-violet-500"
-                              />
-                              {reminderTimes[r.id] && (
-                                <button onClick={() => setReminderTime(r.id, '')}
-                                  className="text-xs text-gray-600 hover:text-gray-400">clear</button>
-                              )}
-                            </div>
-                          )}
-                          {/* Adherence */}
-                          <div className="border-t border-gray-800 pt-3">
-                            <p className="text-xs text-gray-500 font-medium uppercase tracking-wider mb-2">Adherence</p>
-                            <AdherenceCalendar
-                              regimenId={r.id}
-                              sessionStartDate={activeSession?.start_date}
-                              todayStatus={todayLogs[r.id] ?? null}
-                              onLogToday={(status) => logTodayDose(r.id, status)}
-                            />
-                          </div>
-
-                          <div className="sm:hidden flex gap-2 pt-2 border-t border-gray-700/50">
-                            <button onClick={() => setExpandedRegimen(null)}
-                              className="flex-1 py-2.5 rounded bg-gray-700 hover:bg-gray-600 text-gray-200 text-sm font-medium">Done</button>
-                            <button onClick={() => deleteRegimen(r.id)}
-                              className="px-4 py-2.5 rounded border border-red-900 text-red-400 hover:text-red-300 text-sm">Delete</button>
-                          </div>
-                        </div>
-                      )}
-
-                      {calcResults[r.id] && (
-                        <div className="mt-3">
-                          <ShortfallAlert
-                            result={calcResults[r.id]}
-                            supplementName={r.supplement_name}
-                            unit={calcResults[r.id]?.unit || r.unit || 'capsules'}
-                            drops_per_ml={calcResults[r.id]?.drops_per_ml || r.drops_per_ml || 20}
-                          />
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-
-              {regimens.length === 0 && (
-                <p className="text-center text-gray-600 py-8">No regimens yet. Use + Add above.</p>
-              )}
-            </>
+          ) : openSessionIds.length > 0 ? (
+            <div className="space-y-4">
+              {openSessionIds.map(id => {
+                const s = sessions.find(sess => sess.id === id);
+                return s ? (
+                  <SessionPane
+                    key={id}
+                    session={s}
+                    supplements={supplements}
+                    prefs={prefs}
+                    notifStatus={notifStatus}
+                    onClose={() => setOpenSessionIds(prev => prev.filter(sid => sid !== id))}
+                  />
+                ) : null;
+              })}
+            </div>
           ) : (
-            <p className="text-center text-gray-600 py-16">Create a session to get started.</p>
+            <p className="text-center text-gray-600 py-16">
+              {sessions.length > 0 ? 'Select a session to view its regimens.' : 'Create a session to get started.'}
+            </p>
           )}
         </div>
       </div>

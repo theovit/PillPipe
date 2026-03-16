@@ -36,6 +36,57 @@ Code is in place (`false &&` guard in Settings). Hidden until Ko-fi / GitHub Spo
 
 ---
 
+#### Supplement Purchase Links
+**Effort:** Very Low | **Value:** Low-Medium
+
+Add an optional URL field per supplement linking to where you actually buy it (Amazon, iHerb, etc.). Show as a small link icon on the supplement row — tap to open in new tab. Useful when reordering.
+
+- DB: `ALTER TABLE supplements ADD COLUMN purchase_url TEXT`
+- UI: optional URL input in supplement add/edit form; link icon on row if set
+
+---
+
+#### Reorder Shopping List
+**Effort:** Low | **Value:** Medium
+
+A "Shopping List" view or panel that collects all supplements currently in shortfall or below reorder threshold after a Calculate run. Formatted cleanly for copy-paste or screenshot to bring to a store or send to someone.
+
+- Triggered from a button after Calculate runs (alongside the existing CSV export)
+- Shows: supplement name, bottles needed, estimated cost, purchase link if set
+- Grand total cost at the bottom
+- One-click copy to clipboard
+
+---
+
+#### Dark / Light Mode Toggle
+**Effort:** Low | **Value:** Medium
+
+Follow system preference by default (`prefers-color-scheme`), with a manual override in Appearance settings (Dark / Light / System). Currently the app is always dark.
+
+- Tailwind v4 supports `darkMode: 'class'` — add a `dark` class to `<html>` and swap it
+- System default: read `window.matchMedia('(prefers-color-scheme: dark)')`
+- Persist preference in `user_settings` prefs (server-synced like other appearance prefs)
+
+---
+
+#### PDF Export
+**Effort:** Low-Medium | **Value:** Medium
+
+Export a session summary as a formatted PDF — useful for printing and bringing to doctor appointments.
+
+- Content: session header (dates, duration), per-regimen shortfall results, grand total cost
+- Library: `jsPDF` or `@react-pdf/renderer` (client-side, no server changes needed)
+- Triggered from a "↓ PDF" button alongside the existing "↓ CSV" button post-Calculate
+- Formatted cleanly: supplement name, dosage schedule, on-hand, needed, shortfall, bottles, cost
+
+---
+
+#### ~~Multiple Active Sessions~~ — ✅ Shipped
+
+See Completed section below.
+
+---
+
 ### P5 — Long Term
 
 #### Flexible Ads
@@ -121,6 +172,7 @@ Multi-tenant support allowing healthcare providers to create sessions and push t
 - [x] Shortfall Export — "↓ CSV" button appears after Calculate runs; exports session header, per-regimen rows (on-hand, needed, shortfall, bottles, cost, days short, status), and grand total; zero new dependencies
 - [x] Session Templates — save any session as a named template (☆ button); apply when creating a new session to pre-populate all regimens + phases; manage/delete templates in Settings → Templates; backup/restore includes template data
 - [x] Google Drive Backup — OAuth2 connect via Google; manual, daily, or on-change backup modes; JSON backup uploaded to Drive with timestamped filenames; view and restore any previous backup from Settings → Data; tokens stored in DB; server-side cron for scheduled backups; on-change middleware triggers backup after successful mutations
-- [x] Appearance Settings — theme color picker (6 presets: violet/blue/cyan/green/orange/rose + custom color via HSL shade derivation); font size (small/medium/large via root font-size); CSS variable swap applies across all components instantly; persisted to localStorage
-- [x] Preferences Settings — date format (locale/MM-DD-YYYY/DD-MM-YYYY/YYYY-MM-DD) applied to session card dates and CSV export; default session duration (none/30/60/90/120 days) pre-fills target date when new session form opens; persisted to localStorage
+- [x] Appearance Settings — theme color picker (6 presets: violet/blue/cyan/green/orange/rose + custom color via HSL shade derivation); font size (small/medium/large via root font-size); CSS variable swap applies across all components instantly; persisted to localStorage and synced to server (`GET/PUT /settings/prefs`); included in all backups
+- [x] Preferences Settings — date format (locale/MM-DD-YYYY/DD-MM-YYYY/YYYY-MM-DD) applied to session card dates and CSV export; default session duration (none/30/60/90/120 days) pre-fills target date when new session form opens; persisted to localStorage and synced to server alongside appearance prefs
+- [x] Multiple Active Sessions — sessions sidebar shows all sessions as a unified list; click any session to toggle it open/closed; multiple sessions can be open simultaneously in the main pane, each managed by a self-contained `SessionPane` component; `SessionPane.jsx` extracted from Dashboard
 - [ ] Donate / Support Section — code complete, hidden behind `false &&` guard; activate once Ko-fi / GitHub Sponsors pages are live

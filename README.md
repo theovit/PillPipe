@@ -19,6 +19,7 @@ PillPipe answers both questions.
 
 ## Features
 
+- **Multiple active sessions** — open any number of sessions simultaneously. Click a session in the sidebar to expand or collapse it; all open sessions stack in the main pane. Useful for comparing a current vs. upcoming protocol, or managing different regimens side by side.
 - **Sessions** — define a treatment window (start → next appointment). See days remaining or days overdue at a glance.
 - **Regimens** — attach supplements to a session and define their dosing schedule.
 - **Phases** — ordered dosage steps (e.g. "2 pills/day for 2 weeks, then 1 pill/day until the appointment"). Supports day-of-week selection (Mon/Wed/Fri dosing), duration in days or weeks, and an **Indefinite** flag for long-term maintenance supplements that fills the rest of the session automatically.
@@ -38,8 +39,8 @@ PillPipe answers both questions.
 - **Shortfall Export (CSV)** — download calculation results as a CSV after running Calculate; includes per-regimen rows and grand total.
 - **Mobile touch-friendly UI** — tap to edit, hidden icons, action buttons optimized for phone use.
 - **Settings page** — full-screen tab with collapsible sections for data, templates, appearance, preferences, notifications, and about.
-- **Appearance settings** — theme color (6 presets + custom color picker), font size (small/medium/large); persisted to localStorage, applied instantly across the entire UI.
-- **Preference settings** — date format (browser default, MM/DD/YYYY, DD/MM/YYYY, YYYY-MM-DD) and default session duration (pre-fills target date on new sessions).
+- **Appearance settings** — theme color (6 presets + custom color picker), font size (small/medium/large); persisted to localStorage and synced to the server so they're included in every backup.
+- **Preference settings** — date format (browser default, MM/DD/YYYY, DD/MM/YYYY, YYYY-MM-DD) and default session duration (pre-fills target date on new sessions); synced to the server alongside appearance settings.
 - **Google Drive backup** — connect your Google account in Settings → Data to back up automatically (daily or on every change) or manually. Restore any previous backup from Drive with one click.
 - **Data backup & restore** — export all your data as JSON and restore it later from Settings → Data.
 - **Version display** — app version shown in the Settings footer, pulled live from the server.
@@ -79,7 +80,7 @@ PillPipe/
 │   └── src/
 │       ├── App.jsx         # Root component and routing
 │       ├── main.jsx        # Entry point
-│       ├── components/     # Dashboard, PhaseEditor, ShortfallAlert, SupplementsPanel
+│       ├── components/     # Dashboard, SessionPane, PhaseEditor, ShortfallAlert, SupplementsPanel, AdherenceCalendar
 │       └── utils/          # API service layer (api.js)
 ├── server/                 # Node.js + Express backend
 │   ├── index.js            # Routes & middleware
