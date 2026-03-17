@@ -1,6 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
 import * as Notifications from 'expo-notifications';
+import * as FileSystem from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
+import * as DocumentPicker from 'expo-document-picker';
 import { getDb } from '@/db/database';
 import appJson from '../../app.json';
 
@@ -24,6 +27,8 @@ function savePrefs(prefs: { dateFormat: DateFormat }) {
 export default function SettingsScreen() {
   const [dateFormat, setDateFormat] = useState<DateFormat>('MM/DD/YYYY');
   const [notifStatus, setNotifStatus] = useState<string>('unknown');
+  const [backupWorking, setBackupWorking] = useState(false);
+  const [restoreWorking, setRestoreWorking] = useState(false);
 
   useEffect(() => {
     const prefs = loadPrefs();
@@ -49,6 +54,120 @@ export default function SettingsScreen() {
       }
     } catch {
       Alert.alert('Error', 'Notifications are not available on this platform.');
+    }
+  }
+
+  async function exportBackup() {
+    setBackupWorking(true);
+    try {
+      const db = await getDb();
+      const [supplements, sessions, regimens, phases, doseLogs] = await Promise.all([
+        db.getAllAsync('SELECT * FROM supplements'),
+        db.getAllAsync('SELECT * FROM sessions'),
+        db.getAllAsync('SELECT * FROM regimens'),
+        db.getAllAsync('SELECT * FROM phases'),
+        db.getAllAsync('SELECT * FROM dose_log'),
+      ]);
+      const backup = {
+        version: 1,
+        exported_at: new Date().toISOString(),
+        supplements, sessions, regimens, phases, dose_log: doseLogs,
+      };
+      const json = JSON.stringify(backup, null, 2);
+      const date = new Date().toISOString().slice(0, 10);
+      const path = `${FileSystem.cacheDirectory}pillpipe-backup-${date}.json`;
+      await FileSystem.writeAsStringAsync(path, json);
+      await Sharing.shareAsync(path, { mimeType: 'application/json', UTI: 'public.json' });
+    } catch (e) {
+      Alert.alert('Backup failed', String(e));
+    }
+    setBackupWorking(false);
+  }
+
+  async function importBackup() {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: 'application/json',
+        copyToCacheDirectory: true,
+      });
+      if (result.canceled || !result.assets?.[0]) return;
+
+      const json = await FileSystem.readAsStringAsync(result.assets[0].uri);
+      const data = JSON.parse(json);
+
+      if (!data.supplements || !data.sessions) {
+        Alert.alert('Invalid backup', 'This file does not look like a PillPipe backup.');
+        return;
+      }
+
+      Alert.alert(
+        'Restore backup?',
+        `This will replace all current data with the backup from ${data.exported_at?.slice(0, 10) ?? 'unknown date'}. This cannot be undone.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Restore', style: 'destructive', onPress: async () => {
+              setRestoreWorking(true);
+              try {
+                const db = await getDb();
+                await db.execAsync(`
+                  DELETE FROM dose_log;
+                  DELETE FROM phases;
+                  DELETE FROM regimens;
+                  DELETE FROM sessions;
+                  DELETE FROM supplements;
+                `);
+                for (const row of (data.supplements ?? [])) {
+                  const keys = Object.keys(row).join(',');
+                  const placeholders = Object.keys(row).map(() => '?').join(',');
+                  await db.runAsync(
+                    `INSERT OR IGNORE INTO supplements (${keys}) VALUES (${placeholders})`,
+                    Object.values(row) as any[],
+                  );
+                }
+                for (const row of (data.sessions ?? [])) {
+                  const keys = Object.keys(row).join(',');
+                  const placeholders = Object.keys(row).map(() => '?').join(',');
+                  await db.runAsync(
+                    `INSERT OR IGNORE INTO sessions (${keys}) VALUES (${placeholders})`,
+                    Object.values(row) as any[],
+                  );
+                }
+                for (const row of (data.regimens ?? [])) {
+                  const keys = Object.keys(row).join(',');
+                  const placeholders = Object.keys(row).map(() => '?').join(',');
+                  await db.runAsync(
+                    `INSERT OR IGNORE INTO regimens (${keys}) VALUES (${placeholders})`,
+                    Object.values(row) as any[],
+                  );
+                }
+                for (const row of (data.phases ?? [])) {
+                  const keys = Object.keys(row).join(',');
+                  const placeholders = Object.keys(row).map(() => '?').join(',');
+                  await db.runAsync(
+                    `INSERT OR IGNORE INTO phases (${keys}) VALUES (${placeholders})`,
+                    Object.values(row) as any[],
+                  );
+                }
+                for (const row of (data.dose_log ?? [])) {
+                  const keys = Object.keys(row).join(',');
+                  const placeholders = Object.keys(row).map(() => '?').join(',');
+                  await db.runAsync(
+                    `INSERT OR IGNORE INTO dose_log (${keys}) VALUES (${placeholders})`,
+                    Object.values(row) as any[],
+                  );
+                }
+                Alert.alert('Restored', 'Backup restored successfully. Navigate to Regimens to see your data.');
+              } catch (e) {
+                Alert.alert('Restore failed', String(e));
+              }
+              setRestoreWorking(false);
+            },
+          },
+        ],
+      );
+    } catch (e) {
+      Alert.alert('Error', String(e));
     }
   }
 
@@ -130,6 +249,31 @@ export default function SettingsScreen() {
         ) : (
           <Text className="text-gray-600 text-xs">Reminders fire at the time set on each regimen card.</Text>
         )}
+      </View>
+
+      {/* Backup & Restore */}
+      <View className="bg-gray-900 border border-gray-800 rounded-xl p-4 mb-4">
+        <Text className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-3">Backup & Restore</Text>
+        <Pressable
+          onPress={exportBackup}
+          disabled={backupWorking}
+          className="bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 mb-2"
+        >
+          <Text className="text-gray-200 text-sm font-medium">
+            {backupWorking ? 'Exporting…' : '↑ Export backup (JSON)'}
+          </Text>
+          <Text className="text-gray-600 text-xs mt-0.5">Saves all data to a shareable file</Text>
+        </Pressable>
+        <Pressable
+          onPress={importBackup}
+          disabled={restoreWorking}
+          className="bg-gray-800 border border-gray-700 rounded-lg px-4 py-3"
+        >
+          <Text className="text-gray-200 text-sm font-medium">
+            {restoreWorking ? 'Restoring…' : '↓ Restore from backup'}
+          </Text>
+          <Text className="text-gray-600 text-xs mt-0.5">Replaces all current data with a backup file</Text>
+        </Pressable>
       </View>
 
       {/* Data */}

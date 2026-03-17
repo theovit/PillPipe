@@ -28,16 +28,21 @@ const inputCls =
   'bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-gray-200 text-base';
 const labelCls = 'text-xs text-gray-500 mb-1';
 
-const DOW_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+const DOW_LABELS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'];
+
+function phaseDurLabel(days: number): string {
+  if (days % 7 === 0) return `${days / 7}wk`;
+  return `${days}d`;
+}
 
 function phaseLabel(p: Phase, unit: string): string {
   const isIndef = p.indefinite === 1 || p.indefinite === true;
-  const dur = isIndef ? 'indefinite' : `${p.duration_days}d`;
+  const dur = isIndef ? '∞' : phaseDurLabel(p.duration_days);
   const dow = p.days_of_week ? JSON.parse(p.days_of_week) as number[] : null;
-  const dowStr = dow && dow.length < 7
+  const dowStr = dow && dow.length > 0 && dow.length < 7
     ? ' · ' + dow.map((d) => DOW_LABELS[d]).join(' ')
     : '';
-  return `${fmtAmount(Number(p.dosage), unit)}/day · ${dur}${dowStr}`;
+  return `${fmtAmount(Number(p.dosage), unit)}/dose · ${dur}${dowStr}`;
 }
 
 export default function RegimensScreen() {
@@ -749,9 +754,39 @@ export default function RegimensScreen() {
                         </Pressable>
                       ))
                     )}
+                    {/* Phase coverage indicator */}
+                    {openSess && regimenPhases.length > 0 && (() => {
+                      const totalDays = Math.ceil(
+                        (new Date(openSess.target_date).getTime() - new Date(openSess.start_date).getTime()) / 86400000,
+                      );
+                      const hasIndef = regimenPhases.some((p) => p.indefinite === 1 || p.indefinite === true);
+                      const definedDays = regimenPhases.reduce((sum, p) => {
+                        if (p.indefinite === 1 || p.indefinite === true) return sum;
+                        return sum + p.duration_days;
+                      }, 0);
+                      const remaining = totalDays - definedDays;
+                      let coverageText: string;
+                      let coverageColor: string;
+                      if (hasIndef) {
+                        coverageText = 'session fully covered';
+                        coverageColor = 'text-green-500';
+                      } else if (remaining === 0) {
+                        coverageText = `${definedDays}d defined · fully covered`;
+                        coverageColor = 'text-green-500';
+                      } else if (remaining > 0) {
+                        coverageText = `${definedDays}/${totalDays}d defined · ${remaining}d remaining`;
+                        coverageColor = 'text-violet-400';
+                      } else {
+                        coverageText = `${definedDays}d defined · over by ${-remaining}d`;
+                        coverageColor = 'text-amber-400';
+                      }
+                      return (
+                        <Text className={`text-xs mt-1.5 ${coverageColor}`}>{coverageText}</Text>
+                      );
+                    })()}
                     <Pressable
                       onPress={() => openPhaseModal(r.id, unit)}
-                      className="flex-row items-center gap-1 mt-1"
+                      className="flex-row items-center gap-1 mt-1.5"
                     >
                       <Text className="text-violet-500 text-xs font-medium">+ Add phase</Text>
                     </Pressable>
@@ -823,6 +858,7 @@ export default function RegimensScreen() {
                           <Text className="text-gray-500 text-xs font-mono mt-1">
                             need {fmtAmount(res.pillsNeeded, unit)} · have {fmtAmount(res.currentOnHand, unit)}
                             {res.waste > 0 ? ` · ${fmtAmount(res.waste, unit)} leftover` : ''}
+                            {res.daysShort > 0 ? ` · ${res.daysShort}d short` : ''}
                           </Text>
                         </>
                       )}
@@ -1013,7 +1049,7 @@ export default function RegimensScreen() {
           <View className="gap-5">
             {/* Dosage */}
             <View>
-              <Text className={labelCls}>Dosage ({phaseUnit}/day)</Text>
+              <Text className={labelCls}>Dosage ({phaseUnit}/dose)</Text>
               <TextInput
                 className={inputCls}
                 value={phaseDosage}
