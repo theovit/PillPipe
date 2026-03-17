@@ -43,11 +43,15 @@ export default function SupplementsScreen() {
 
   async function loadSupplements() {
     setLoading(true);
-    const db = await getDb();
-    const rows = await db.getAllAsync<Supplement>(
-      'SELECT * FROM supplements ORDER BY name ASC',
-    );
-    setSupplements(rows);
+    try {
+      const db = await getDb();
+      const rows = await db.getAllAsync<Supplement>(
+        'SELECT * FROM supplements ORDER BY name ASC',
+      );
+      setSupplements(rows);
+    } catch {
+      // SQLite unavailable (e.g. web preview)
+    }
     setLoading(false);
   }
 

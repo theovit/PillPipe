@@ -6,6 +6,7 @@ import {
   Modal,
   Pressable,
   ScrollView,
+  Switch,
   Text,
   TextInput,
   View,
@@ -19,6 +20,18 @@ import { daysUntil, fmtAmount, formatDate, todayISO } from '@/utils/dates';
 const inputCls =
   'bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-gray-200 text-base';
 const labelCls = 'text-xs text-gray-500 mb-1';
+
+const DOW_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+
+function phaseLabel(p: Phase, unit: string): string {
+  const isIndef = p.indefinite === 1 || p.indefinite === true;
+  const dur = isIndef ? 'indefinite' : `${p.duration_days}d`;
+  const dow = p.days_of_week ? JSON.parse(p.days_of_week) as number[] : null;
+  const dowStr = dow && dow.length < 7
+    ? ' · ' + dow.map((d) => DOW_LABELS[d]).join(' ')
+    : '';
+  return `${fmtAmount(Number(p.dosage), unit)}/day · ${dur}${dowStr}`;
+}
 
 export default function RegimensScreen() {
   const [sessions, setSessions] = useState<Session[]>([]);
@@ -39,6 +52,16 @@ export default function RegimensScreen() {
   const [regimenModal, setRegimenModal] = useState(false);
   const [selectedSupId, setSelectedSupId] = useState('');
 
+  // Phase editor state
+  const [phaseModal, setPhaseModal] = useState(false);
+  const [editingPhase, setEditingPhase] = useState<Phase | null>(null);
+  const [phaseRegimenId, setPhaseRegimenId] = useState('');
+  const [phaseUnit, setPhaseUnit] = useState('capsules');
+  const [phaseDosage, setPhaseDosage] = useState('');
+  const [phaseDuration, setPhaseDuration] = useState('30');
+  const [phaseIndefinite, setPhaseIndefinite] = useState(false);
+  const [phaseDow, setPhaseDow] = useState<number[]>([]);
+
   useFocusEffect(
     useCallback(() => {
       loadSessions();
@@ -47,11 +70,15 @@ export default function RegimensScreen() {
 
   async function loadSessions() {
     setLoading(true);
-    const db = await getDb();
-    const rows = await db.getAllAsync<Session>(
-      'SELECT * FROM sessions ORDER BY target_date DESC',
-    );
-    setSessions(rows);
+    try {
+      const db = await getDb();
+      const rows = await db.getAllAsync<Session>(
+        'SELECT * FROM sessions ORDER BY target_date DESC',
+      );
+      setSessions(rows);
+    } catch {
+      // SQLite unavailable (e.g. web preview)
+    }
     setLoading(false);
   }
 
@@ -59,41 +86,81 @@ export default function RegimensScreen() {
     if (openSessionId === id) { setOpenSessionId(null); return; }
     setOpenSessionId(id);
     setCalcResults({});
-    const db = await getDb();
+    try {
+      const db = await getDb();
 
-    const sups = await db.getAllAsync<Supplement>('SELECT * FROM supplements ORDER BY name');
-    setSupplements(sups);
+      const sups = await db.getAllAsync<Supplement>('SELECT * FROM supplements ORDER BY name');
+      setSupplements(sups);
 
-    const regs = await db.getAllAsync<Regimen>(
-      `SELECT r.*, s.name AS supplement_name, s.brand, s.pills_per_bottle,
-              s.price, s.unit, s.drops_per_ml, s.current_inventory
-       FROM regimens r JOIN supplements s ON s.id = r.supplement_id
-       WHERE r.session_id = ? ORDER BY r.created_at`,
-      [id],
-    );
-    setRegimens(regs);
-
-    const phaseMap: Record<string, Phase[]> = {};
-    for (const r of regs) {
-      const ps = await db.getAllAsync<Phase>(
-        'SELECT * FROM phases WHERE regimen_id = ? ORDER BY sequence_order',
-        [r.id],
+      const regs = await db.getAllAsync<Regimen>(
+        `SELECT r.*, s.name AS supplement_name, s.brand, s.pills_per_bottle,
+                s.price, s.unit, s.drops_per_ml, s.current_inventory
+         FROM regimens r JOIN supplements s ON s.id = r.supplement_id
+         WHERE r.session_id = ? ORDER BY r.created_at`,
+        [id],
       );
-      phaseMap[r.id] = ps;
+      setRegimens(regs);
+
+      const phaseMap: Record<string, Phase[]> = {};
+      for (const r of regs) {
+        const ps = await db.getAllAsync<Phase>(
+          'SELECT * FROM phases WHERE regimen_id = ? ORDER BY sequence_order',
+          [r.id],
+        );
+        phaseMap[r.id] = ps;
+      }
+      setPhases(phaseMap);
+    } catch {
+      // no-op
     }
-    setPhases(phaseMap);
+  }
+
+  async function reloadOpenSession() {
+    if (openSessionId) {
+      // Re-fetch regimens + phases without toggling open state
+      try {
+        const db = await getDb();
+        const sups = await db.getAllAsync<Supplement>('SELECT * FROM supplements ORDER BY name');
+        setSupplements(sups);
+
+        const regs = await db.getAllAsync<Regimen>(
+          `SELECT r.*, s.name AS supplement_name, s.brand, s.pills_per_bottle,
+                  s.price, s.unit, s.drops_per_ml, s.current_inventory
+           FROM regimens r JOIN supplements s ON s.id = r.supplement_id
+           WHERE r.session_id = ? ORDER BY r.created_at`,
+          [openSessionId],
+        );
+        setRegimens(regs);
+
+        const phaseMap: Record<string, Phase[]> = {};
+        for (const r of regs) {
+          const ps = await db.getAllAsync<Phase>(
+            'SELECT * FROM phases WHERE regimen_id = ? ORDER BY sequence_order',
+            [r.id],
+          );
+          phaseMap[r.id] = ps;
+        }
+        setPhases(phaseMap);
+      } catch {
+        // no-op
+      }
+    }
   }
 
   async function createSession() {
     if (!sessionStart || !sessionTarget) { Alert.alert('Start and target dates are required'); return; }
     if (sessionTarget <= sessionStart) { Alert.alert('Target must be after start date'); return; }
-    const db = await getDb();
-    await db.runAsync(
-      'INSERT INTO sessions (id,start_date,target_date,notes) VALUES (?,?,?,?)',
-      [uuid(), sessionStart, sessionTarget, sessionNotes.trim() || null],
-    );
-    setSessionModal(false);
-    loadSessions();
+    try {
+      const db = await getDb();
+      await db.runAsync(
+        'INSERT INTO sessions (id,start_date,target_date,notes) VALUES (?,?,?,?)',
+        [uuid(), sessionStart, sessionTarget, sessionNotes.trim() || null],
+      );
+      setSessionModal(false);
+      loadSessions();
+    } catch {
+      Alert.alert('Error', 'Could not create session');
+    }
   }
 
   async function deleteSession(id: string) {
@@ -101,10 +168,12 @@ export default function RegimensScreen() {
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Delete', style: 'destructive', onPress: async () => {
-          const db = await getDb();
-          await db.runAsync('DELETE FROM sessions WHERE id=?', [id]);
-          if (openSessionId === id) setOpenSessionId(null);
-          loadSessions();
+          try {
+            const db = await getDb();
+            await db.runAsync('DELETE FROM sessions WHERE id=?', [id]);
+            if (openSessionId === id) setOpenSessionId(null);
+            loadSessions();
+          } catch { /* no-op */ }
         },
       },
     ]);
@@ -112,14 +181,112 @@ export default function RegimensScreen() {
 
   async function addRegimen() {
     if (!selectedSupId || !openSessionId) return;
-    const db = await getDb();
-    await db.runAsync(
-      'INSERT INTO regimens (id,session_id,supplement_id) VALUES (?,?,?)',
-      [uuid(), openSessionId, selectedSupId],
-    );
-    setRegimenModal(false);
-    openSession(openSessionId);
+    try {
+      const db = await getDb();
+      await db.runAsync(
+        'INSERT INTO regimens (id,session_id,supplement_id) VALUES (?,?,?)',
+        [uuid(), openSessionId, selectedSupId],
+      );
+      setRegimenModal(false);
+      setSelectedSupId('');
+      await reloadOpenSession();
+    } catch {
+      Alert.alert('Error', 'Could not add regimen');
+    }
   }
+
+  async function deleteRegimen(regimenId: string) {
+    Alert.alert('Remove regimen?', 'All phases will also be deleted.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Remove', style: 'destructive', onPress: async () => {
+          try {
+            const db = await getDb();
+            await db.runAsync('DELETE FROM regimens WHERE id=?', [regimenId]);
+            await reloadOpenSession();
+          } catch { /* no-op */ }
+        },
+      },
+    ]);
+  }
+
+  // ── Phase CRUD ──────────────────────────────────────────────────────────────
+
+  function openPhaseModal(regimenId: string, unitStr: string, existing?: Phase) {
+    setPhaseRegimenId(regimenId);
+    setPhaseUnit(unitStr);
+    if (existing) {
+      setEditingPhase(existing);
+      setPhaseDosage(String(existing.dosage));
+      setPhaseDuration(String(existing.duration_days));
+      setPhaseIndefinite(existing.indefinite === 1 || existing.indefinite === true);
+      setPhaseDow(existing.days_of_week ? JSON.parse(existing.days_of_week) as number[] : []);
+    } else {
+      setEditingPhase(null);
+      setPhaseDosage('');
+      setPhaseDuration('30');
+      setPhaseIndefinite(false);
+      setPhaseDow([]);
+    }
+    setPhaseModal(true);
+  }
+
+  async function savePhase() {
+    const dosage = parseFloat(phaseDosage);
+    if (isNaN(dosage) || dosage <= 0) { Alert.alert('Enter a valid dosage'); return; }
+    const dur = phaseIndefinite ? 9999 : parseInt(phaseDuration, 10);
+    if (!phaseIndefinite && (isNaN(dur) || dur <= 0)) { Alert.alert('Enter a valid duration'); return; }
+    const daysJson = phaseDow.length > 0 ? JSON.stringify([...phaseDow].sort()) : null;
+
+    try {
+      const db = await getDb();
+      if (editingPhase) {
+        await db.runAsync(
+          'UPDATE phases SET dosage=?, duration_days=?, days_of_week=?, indefinite=? WHERE id=?',
+          [dosage, dur, daysJson, phaseIndefinite ? 1 : 0, editingPhase.id],
+        );
+      } else {
+        const rows = await db.getAllAsync<{ m: number | null }>(
+          'SELECT MAX(sequence_order) as m FROM phases WHERE regimen_id=?',
+          [phaseRegimenId],
+        );
+        const nextOrder = (rows[0]?.m ?? -1) + 1;
+        await db.runAsync(
+          'INSERT INTO phases (id,regimen_id,dosage,duration_days,days_of_week,indefinite,sequence_order) VALUES (?,?,?,?,?,?,?)',
+          [uuid(), phaseRegimenId, dosage, dur, daysJson, phaseIndefinite ? 1 : 0, nextOrder],
+        );
+      }
+      setPhaseModal(false);
+      setCalcResults({});
+      await reloadOpenSession();
+    } catch (e: unknown) {
+      Alert.alert('Error', String(e));
+    }
+  }
+
+  async function deletePhase(phaseId: string) {
+    Alert.alert('Delete phase?', '', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete', style: 'destructive', onPress: async () => {
+          try {
+            const db = await getDb();
+            await db.runAsync('DELETE FROM phases WHERE id=?', [phaseId]);
+            setCalcResults({});
+            await reloadOpenSession();
+          } catch { /* no-op */ }
+        },
+      },
+    ]);
+  }
+
+  function toggleDow(day: number) {
+    setPhaseDow((prev) =>
+      prev.includes(day) ? prev.filter((d) => d !== day) : [...prev, day],
+    );
+  }
+
+  // ── Calculate ───────────────────────────────────────────────────────────────
 
   async function runCalculate() {
     const session = sessions.find((s) => s.id === openSessionId);
@@ -192,7 +359,7 @@ export default function RegimensScreen() {
             </Text>
             <View className="flex-row gap-2">
               <Pressable
-                onPress={() => setRegimenModal(true)}
+                onPress={() => { setSelectedSupId(''); setRegimenModal(true); }}
                 className="bg-gray-700 rounded-lg px-3 py-1.5"
               >
                 <Text className="text-gray-200 text-sm">+ Add</Text>
@@ -209,17 +376,56 @@ export default function RegimensScreen() {
             regimens.map((r) => {
               const res = calcResults[r.id];
               const unit = r.unit ?? 'capsules';
+              const regimenPhases = phases[r.id] ?? [];
               return (
                 <View key={r.id} className="bg-gray-800/60 border border-gray-700/60 rounded-xl p-4 mb-3">
+                  {/* Header row */}
                   <View className="flex-row items-center justify-between">
-                    <Text className="text-white font-semibold">{r.supplement_name}</Text>
-                    <Text className="text-gray-400 text-sm font-mono">
-                      {fmtAmount(Number(r.current_inventory ?? 0), unit)} on hand
-                    </Text>
+                    <Text className="text-white font-semibold flex-1 mr-2" numberOfLines={1}>{r.supplement_name}</Text>
+                    <View className="flex-row items-center gap-2">
+                      <Text className="text-gray-400 text-sm font-mono">
+                        {fmtAmount(Number(r.current_inventory ?? 0), unit)}
+                      </Text>
+                      <Pressable
+                        onPress={() => deleteRegimen(r.id)}
+                        hitSlop={8}
+                      >
+                        <Text className="text-gray-600 text-base">✕</Text>
+                      </Pressable>
+                    </View>
                   </View>
+                  {/* Subtitle */}
                   <Text className="text-gray-500 text-xs mt-0.5">
                     {r.brand ? `${r.brand} · ` : ''}{r.pills_per_bottle} {unit}/bottle · ${Number(r.price ?? 0).toFixed(2)}
                   </Text>
+
+                  {/* Phases */}
+                  <View className="mt-3 border-t border-gray-700/50 pt-3">
+                    {regimenPhases.length === 0 ? (
+                      <Text className="text-gray-600 text-xs mb-2">No phases yet.</Text>
+                    ) : (
+                      regimenPhases.map((p, idx) => (
+                        <Pressable
+                          key={p.id}
+                          onPress={() => openPhaseModal(r.id, unit, p)}
+                          onLongPress={() => deletePhase(p.id)}
+                          className="flex-row items-center gap-2 mb-1.5"
+                        >
+                          <View className="w-5 h-5 rounded-full bg-violet-900/60 border border-violet-700/50 items-center justify-center">
+                            <Text className="text-violet-400 text-xs font-bold">{idx + 1}</Text>
+                          </View>
+                          <Text className="text-gray-300 text-xs flex-1">{phaseLabel(p, unit)}</Text>
+                          <Text className="text-gray-600 text-xs">›</Text>
+                        </Pressable>
+                      ))
+                    )}
+                    <Pressable
+                      onPress={() => openPhaseModal(r.id, unit)}
+                      className="flex-row items-center gap-1 mt-1"
+                    >
+                      <Text className="text-violet-500 text-xs font-medium">+ Add phase</Text>
+                    </Pressable>
+                  </View>
 
                   {/* Shortfall result */}
                   {res && (
@@ -254,7 +460,7 @@ export default function RegimensScreen() {
         </View>
       )}
 
-      {/* New Session Modal */}
+      {/* ── New Session Modal ── */}
       <Modal visible={sessionModal} animationType="slide" presentationStyle="pageSheet">
         <View className="flex-1 bg-background px-5 pt-6">
           <View className="flex-row items-center justify-between mb-6">
@@ -283,7 +489,7 @@ export default function RegimensScreen() {
         </View>
       </Modal>
 
-      {/* Add Regimen Modal */}
+      {/* ── Add Regimen Modal ── */}
       <Modal visible={regimenModal} animationType="slide" presentationStyle="pageSheet">
         <View className="flex-1 bg-background px-5 pt-6">
           <View className="flex-row items-center justify-between mb-6">
@@ -315,6 +521,100 @@ export default function RegimensScreen() {
             </Pressable>
           ) : null}
         </View>
+      </Modal>
+
+      {/* ── Phase Editor Modal ── */}
+      <Modal visible={phaseModal} animationType="slide" presentationStyle="pageSheet">
+        <ScrollView className="flex-1 bg-background" contentContainerClassName="px-5 pt-6 pb-10">
+          <View className="flex-row items-center justify-between mb-6">
+            <Text className="text-white text-lg font-semibold">
+              {editingPhase ? 'Edit Phase' : 'Add Phase'}
+            </Text>
+            <Pressable onPress={() => setPhaseModal(false)}>
+              <Text className="text-gray-400">Cancel</Text>
+            </Pressable>
+          </View>
+
+          <View className="gap-5">
+            {/* Dosage */}
+            <View>
+              <Text className={labelCls}>Dosage ({phaseUnit}/day)</Text>
+              <TextInput
+                className={inputCls}
+                value={phaseDosage}
+                onChangeText={setPhaseDosage}
+                placeholder="e.g. 2"
+                placeholderTextColor="#4b5563"
+                keyboardType="decimal-pad"
+              />
+            </View>
+
+            {/* Indefinite toggle */}
+            <View className="flex-row items-center justify-between">
+              <View>
+                <Text className="text-gray-200 text-sm font-medium">Indefinite</Text>
+                <Text className="text-gray-500 text-xs">Runs until end of session</Text>
+              </View>
+              <Switch
+                value={phaseIndefinite}
+                onValueChange={setPhaseIndefinite}
+                trackColor={{ false: '#374151', true: '#7c3aed' }}
+                thumbColor="#fff"
+              />
+            </View>
+
+            {/* Duration (hidden if indefinite) */}
+            {!phaseIndefinite && (
+              <View>
+                <Text className={labelCls}>Duration (days)</Text>
+                <TextInput
+                  className={inputCls}
+                  value={phaseDuration}
+                  onChangeText={setPhaseDuration}
+                  placeholder="30"
+                  placeholderTextColor="#4b5563"
+                  keyboardType="number-pad"
+                />
+              </View>
+            )}
+
+            {/* Days of week */}
+            <View>
+              <Text className={labelCls}>Days of week (leave all off = every day)</Text>
+              <View className="flex-row gap-2 mt-1">
+                {DOW_LABELS.map((label, idx) => {
+                  const active = phaseDow.includes(idx);
+                  return (
+                    <Pressable
+                      key={idx}
+                      onPress={() => toggleDow(idx)}
+                      className={`flex-1 items-center py-2 rounded-lg border ${active ? 'bg-violet-600 border-violet-500' : 'bg-gray-800 border-gray-700'}`}
+                    >
+                      <Text className={`text-xs font-semibold ${active ? 'text-white' : 'text-gray-500'}`}>
+                        {label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            </View>
+          </View>
+
+          <Pressable onPress={savePhase} className="mt-8 bg-violet-600 rounded-xl py-3.5 items-center">
+            <Text className="text-white font-semibold text-base">
+              {editingPhase ? 'Save Changes' : 'Add Phase'}
+            </Text>
+          </Pressable>
+
+          {editingPhase && (
+            <Pressable
+              onPress={() => { setPhaseModal(false); deletePhase(editingPhase.id); }}
+              className="mt-3 border border-red-900/40 rounded-xl py-3.5 items-center"
+            >
+              <Text className="text-red-400 font-medium">Delete Phase</Text>
+            </Pressable>
+          )}
+        </ScrollView>
       </Modal>
     </ScrollView>
   );
