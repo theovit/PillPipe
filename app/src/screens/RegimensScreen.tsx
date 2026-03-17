@@ -15,11 +15,14 @@ import {
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useFocusEffect } from '@react-navigation/native';
+import * as FileSystem from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
 import AdherenceCalendar from '@/components/AdherenceCalendar';
 import { getDb, uuid } from '@/db/database';
 import { calculate } from '@/engine/calculator';
 import { Phase, Regimen, Session, Supplement } from '@/utils/types';
 import { daysUntil, fmtAmount, formatDate, todayISO } from '@/utils/dates';
+import { cancelReminder, scheduleReminder } from '@/utils/notifications';
 
 const inputCls =
   'bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-gray-200 text-base';
@@ -58,8 +61,21 @@ export default function RegimensScreen() {
   const [regimenModal, setRegimenModal] = useState(false);
   const [selectedSupId, setSelectedSupId] = useState('');
 
+  // Edit session
+  const [editModal, setEditModal] = useState(false);
+  const [editingSession, setEditingSession] = useState<Session | null>(null);
+  const [editStart, setEditStart] = useState('');
+  const [editTarget, setEditTarget] = useState('');
+  const [editNotes, setEditNotes] = useState('');
+  const [showEditStartPicker, setShowEditStartPicker] = useState(false);
+  const [showEditTargetPicker, setShowEditTargetPicker] = useState(false);
+
   // Regimen notes
   const [regimenNotes, setRegimenNotes] = useState<Record<string, string>>({});
+
+  // Reminder times
+  const [reminderTimes, setReminderTimes] = useState<Record<string, string>>({});
+  const [showReminderPicker, setShowReminderPicker] = useState<string | null>(null);
 
   // Phase editor state
   const [phaseModal, setPhaseModal] = useState(false);
@@ -122,6 +138,9 @@ export default function RegimensScreen() {
       }
       setPhases(phaseMap);
       setRegimenNotes(notesMap);
+      const timesMap: Record<string, string> = {};
+      for (const r of regs) if (r.reminder_time) timesMap[r.id] = r.reminder_time.slice(0, 5);
+      setReminderTimes(timesMap);
       await loadTodayLogs(regs.map((r) => r.id));
     } catch {
       // no-op
@@ -155,8 +174,13 @@ export default function RegimensScreen() {
         }
         setPhases(phaseMap);
         const notesMap2: Record<string, string> = {};
-        for (const r of regs) notesMap2[r.id] = r.notes ?? '';
+        const timesMap2: Record<string, string> = {};
+        for (const r of regs) {
+          notesMap2[r.id] = r.notes ?? '';
+          if (r.reminder_time) timesMap2[r.id] = r.reminder_time.slice(0, 5);
+        }
         setRegimenNotes(notesMap2);
+        setReminderTimes(timesMap2);
         await loadTodayLogs(regs.map((r) => r.id));
       } catch {
         // no-op
@@ -169,6 +193,116 @@ export default function RegimensScreen() {
       const db = await getDb();
       await db.runAsync('UPDATE regimens SET notes=? WHERE id=?', [regimenNotes[regimenId] || null, regimenId]);
     } catch { /* no-op */ }
+  }
+
+  // ── Edit session ────────────────────────────────────────────────────────────
+
+  function openEditModal(session: Session) {
+    setEditingSession(session);
+    setEditStart(session.start_date);
+    setEditTarget(session.target_date);
+    setEditNotes(session.notes ?? '');
+    setEditModal(true);
+  }
+
+  async function saveEditSession() {
+    if (!editingSession || !editStart || !editTarget) return;
+    try {
+      const db = await getDb();
+      await db.runAsync(
+        'UPDATE sessions SET start_date=?, target_date=?, notes=? WHERE id=?',
+        [editStart, editTarget, editNotes.trim() || null, editingSession.id],
+      );
+      setEditModal(false);
+      loadSessions();
+    } catch { Alert.alert('Error', 'Could not save session'); }
+  }
+
+  async function copySession() {
+    if (!editingSession) return;
+    try {
+      const db = await getDb();
+      const newId = uuid();
+      await db.runAsync(
+        'INSERT INTO sessions (id, start_date, target_date, notes) VALUES (?,?,?,?)',
+        [newId, todayISO(), '', `Copy of ${editingSession.notes || formatDate(editingSession.target_date)}`],
+      );
+      // Copy regimens (no phases — user sets them fresh on new dates)
+      const regs = await db.getAllAsync<Regimen>('SELECT * FROM regimens WHERE session_id=?', [editingSession.id]);
+      for (const r of regs) {
+        await db.runAsync(
+          'INSERT INTO regimens (id, session_id, supplement_id, notes) VALUES (?,?,?,?)',
+          [uuid(), newId, r.supplement_id, r.notes],
+        );
+      }
+      setEditModal(false);
+      loadSessions();
+      Alert.alert('Session duplicated', 'Add phases to the new session before calculating.');
+    } catch { Alert.alert('Error', 'Could not copy session'); }
+  }
+
+  // ── Reminder time ────────────────────────────────────────────────────────────
+
+  async function saveReminderTime(regimenId: string, time: string | null) {
+    setReminderTimes((prev) => {
+      const next = { ...prev };
+      if (time) next[regimenId] = time;
+      else delete next[regimenId];
+      return next;
+    });
+    try {
+      const db = await getDb();
+      await db.runAsync('UPDATE regimens SET reminder_time=? WHERE id=?', [time, regimenId]);
+    } catch { /* no-op */ }
+    // Schedule/cancel local notification
+    if (time) {
+      const [hh, mm] = time.split(':').map(Number);
+      const reg = regimens.find((r) => r.id === regimenId);
+      if (reg) scheduleReminder(regimenId, reg.supplement_name ?? 'supplement', hh, mm).catch(() => {});
+    } else {
+      cancelReminder(regimenId).catch(() => {});
+    }
+  }
+
+  // ── Inventory quick-adjust ───────────────────────────────────────────────────
+
+  async function adjustInventory(supplementId: string, delta: number) {
+    try {
+      const db = await getDb();
+      await db.runAsync(
+        'UPDATE supplements SET current_inventory = MAX(0, current_inventory + ?) WHERE id=?',
+        [delta, supplementId],
+      );
+      await reloadOpenSession();
+    } catch { /* no-op */ }
+  }
+
+  // ── CSV export ───────────────────────────────────────────────────────────────
+
+  async function exportCSV() {
+    const session = sessions.find((s) => s.id === openSessionId);
+    if (!session) return;
+    const rows = regimens.map((r) => {
+      const res = calcResults[r.id];
+      if (!res) return null;
+      const unit = r.unit || 'capsules';
+      return [
+        `"${r.supplement_name}"`, `"${r.brand || ''}"`, unit,
+        Number(res.currentOnHand), Number(res.pillsNeeded), Number(res.shortfall),
+        Number(res.bottlesNeeded), `$${(res.estimatedCost || 0).toFixed(2)}`, res.status,
+      ].join(',');
+    }).filter(Boolean);
+    const total = Object.values(calcResults).reduce((s, r) => s + (r.estimatedCost || 0), 0);
+    const csv = [
+      'Supplement,Brand,Unit,On Hand,Needed,Shortfall,Bottles,Est. Cost,Status',
+      ...rows,
+      `,,,,,,,$${total.toFixed(2)},Total`,
+    ].join('\n');
+    try {
+      const path = `${FileSystem.cacheDirectory}pillpipe-${session.target_date}.csv`;
+      await FileSystem.writeAsStringAsync(path, csv);
+      await Sharing.shareAsync(path, { mimeType: 'text/csv', UTI: 'public.comma-separated-values-text' });
+    } catch { Alert.alert('Error', 'Could not export CSV'); }
   }
 
   async function createSession() {
@@ -431,14 +565,16 @@ export default function RegimensScreen() {
             <Pressable
               key={s.id}
               onPress={() => openSession(s.id)}
-              onLongPress={() => deleteSession(s.id)}
               className={`rounded-xl border p-4 mb-3 ${openSessionId === s.id ? 'bg-violet-900/20 border-violet-700/40' : 'bg-gray-900 border-gray-800'}`}
             >
               <View className="flex-row items-center justify-between">
-                <Text className="text-violet-400 font-semibold">→ {formatDate(s.target_date)}</Text>
-                <Text className={`text-xs font-mono ${dl < 0 ? 'text-red-400' : 'text-violet-400'}`}>
+                <Text className="text-violet-400 font-semibold flex-1">→ {formatDate(s.target_date)}</Text>
+                <Text className={`text-xs font-mono mr-3 ${dl < 0 ? 'text-red-400' : 'text-violet-400'}`}>
                   {dl < 0 ? `${Math.abs(dl)}d overdue` : `${dl}d left`}
                 </Text>
+                <Pressable onPress={(e) => { e.stopPropagation(); openEditModal(s); }} hitSlop={8}>
+                  <Text className="text-gray-600 text-sm">✎</Text>
+                </Pressable>
               </View>
               <Text className="text-gray-500 text-xs mt-1">from {formatDate(s.start_date)}</Text>
               {s.notes && <Text className="text-gray-500 text-xs mt-0.5 italic">{s.notes}</Text>}
@@ -476,11 +612,16 @@ export default function RegimensScreen() {
                 <Text className="text-xs text-gray-500">
                   Total to buy: <Text className="text-violet-300 font-mono">${totalCost.toFixed(2)}</Text>
                 </Text>
-                {hasShortfall && (
-                  <Pressable onPress={shareShoppingList} className="bg-gray-700 rounded-lg px-3 py-1.5">
-                    <Text className="text-gray-300 text-xs font-medium">🛒 Share List</Text>
+                <View className="flex-row gap-2">
+                  <Pressable onPress={exportCSV} className="bg-gray-700 rounded-lg px-3 py-1.5">
+                    <Text className="text-gray-300 text-xs font-medium">↓ CSV</Text>
                   </Pressable>
-                )}
+                  {hasShortfall && (
+                    <Pressable onPress={shareShoppingList} className="bg-gray-700 rounded-lg px-3 py-1.5">
+                      <Text className="text-gray-300 text-xs font-medium">🛒 List</Text>
+                    </Pressable>
+                  )}
+                </View>
               </View>
             );
           })()}
@@ -516,14 +657,25 @@ export default function RegimensScreen() {
                   {/* Header row */}
                   <View className="flex-row items-center justify-between">
                     <Text className="text-white font-semibold flex-1 mr-2" numberOfLines={1}>{r.supplement_name}</Text>
-                    <View className="flex-row items-center gap-2">
-                      <Text className="text-gray-400 text-sm font-mono">
+                    <View className="flex-row items-center gap-1">
+                      <Pressable
+                        onPress={() => adjustInventory(r.supplement_id!, -1)}
+                        className="w-7 h-7 bg-gray-700 rounded items-center justify-center"
+                        hitSlop={4}
+                      >
+                        <Text className="text-gray-300 text-base leading-none">−</Text>
+                      </Pressable>
+                      <Text className="text-gray-400 text-sm font-mono min-w-[52px] text-center">
                         {fmtAmount(Number(r.current_inventory ?? 0), unit)}
                       </Text>
                       <Pressable
-                        onPress={() => deleteRegimen(r.id)}
-                        hitSlop={8}
+                        onPress={() => adjustInventory(r.supplement_id!, 1)}
+                        className="w-7 h-7 bg-gray-700 rounded items-center justify-center"
+                        hitSlop={4}
                       >
+                        <Text className="text-gray-300 text-base leading-none">+</Text>
+                      </Pressable>
+                      <Pressable onPress={() => deleteRegimen(r.id)} hitSlop={8} className="ml-1">
                         <Text className="text-gray-600 text-base">✕</Text>
                       </Pressable>
                     </View>
@@ -543,6 +695,39 @@ export default function RegimensScreen() {
                     placeholderTextColor="#4b5563"
                     multiline
                   />
+
+                  {/* Reminder time */}
+                  <View className="flex-row items-center gap-2 mt-2">
+                    <Text className="text-xs text-gray-600">Reminder:</Text>
+                    <Pressable
+                      onPress={() => setShowReminderPicker(showReminderPicker === r.id ? null : r.id)}
+                      className="flex-row items-center gap-1"
+                    >
+                      <Text className={`text-xs ${reminderTimes[r.id] ? 'text-violet-400' : 'text-gray-600'}`}>
+                        {reminderTimes[r.id] || 'none'}
+                      </Text>
+                    </Pressable>
+                    {reminderTimes[r.id] && (
+                      <Pressable onPress={() => saveReminderTime(r.id, null)} hitSlop={8}>
+                        <Text className="text-gray-700 text-xs">✕</Text>
+                      </Pressable>
+                    )}
+                  </View>
+                  {showReminderPicker === r.id && (
+                    <DateTimePicker
+                      value={reminderTimes[r.id] ? new Date(`1970-01-01T${reminderTimes[r.id]}:00`) : new Date()}
+                      mode="time"
+                      display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                      onChange={(_, date) => {
+                        setShowReminderPicker(null);
+                        if (date) {
+                          const hh = String(date.getHours()).padStart(2, '0');
+                          const mm = String(date.getMinutes()).padStart(2, '0');
+                          saveReminderTime(r.id, `${hh}:${mm}`);
+                        }
+                      }}
+                    />
+                  )}
 
                   {/* Phases */}
                   <View className="mt-3 border-t border-gray-700/50 pt-3">
@@ -712,6 +897,71 @@ export default function RegimensScreen() {
             <Text className="text-white font-semibold text-base">Create Session</Text>
           </Pressable>
         </View>
+      </Modal>
+
+      {/* ── Edit Session Modal ── */}
+      <Modal visible={editModal} animationType="slide" presentationStyle="pageSheet">
+        <ScrollView className="flex-1 bg-background" contentContainerClassName="px-5 pt-6 pb-10">
+          <View className="flex-row items-center justify-between mb-6">
+            <Text className="text-white text-lg font-semibold">Edit Session</Text>
+            <Pressable onPress={() => setEditModal(false)}>
+              <Text className="text-gray-400">Cancel</Text>
+            </Pressable>
+          </View>
+          <View className="gap-4">
+            <View>
+              <Text className={labelCls}>Start date</Text>
+              <Pressable onPress={() => setShowEditStartPicker(true)} className={`${inputCls} justify-center`}>
+                <Text className="text-gray-200 text-base">{editStart}</Text>
+              </Pressable>
+              {showEditStartPicker && (
+                <DateTimePicker
+                  value={editStart ? new Date(editStart) : new Date()}
+                  mode="date"
+                  display={Platform.OS === 'ios' ? 'inline' : 'default'}
+                  onChange={(_, date) => {
+                    setShowEditStartPicker(Platform.OS === 'ios');
+                    if (date) setEditStart(date.toISOString().slice(0, 10));
+                  }}
+                />
+              )}
+            </View>
+            <View>
+              <Text className={labelCls}>Target date</Text>
+              <Pressable onPress={() => setShowEditTargetPicker(true)} className={`${inputCls} justify-center`}>
+                <Text className="text-gray-200 text-base">{editTarget}</Text>
+              </Pressable>
+              {showEditTargetPicker && (
+                <DateTimePicker
+                  value={editTarget ? new Date(editTarget) : new Date()}
+                  mode="date"
+                  display={Platform.OS === 'ios' ? 'inline' : 'default'}
+                  minimumDate={editStart ? new Date(new Date(editStart).getTime() + 86400000) : undefined}
+                  onChange={(_, date) => {
+                    setShowEditTargetPicker(Platform.OS === 'ios');
+                    if (date) setEditTarget(date.toISOString().slice(0, 10));
+                  }}
+                />
+              )}
+            </View>
+            <View>
+              <Text className={labelCls}>Notes</Text>
+              <TextInput className={inputCls} value={editNotes} onChangeText={setEditNotes} placeholder="e.g. Spring protocol" placeholderTextColor="#4b5563" />
+            </View>
+          </View>
+          <Pressable onPress={saveEditSession} className="mt-8 bg-violet-600 rounded-xl py-3.5 items-center">
+            <Text className="text-white font-semibold text-base">Save Changes</Text>
+          </Pressable>
+          <Pressable onPress={copySession} className="mt-3 bg-gray-800 border border-gray-700 rounded-xl py-3.5 items-center">
+            <Text className="text-gray-300 font-medium text-base">Duplicate Session</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => { setEditModal(false); if (editingSession) deleteSession(editingSession.id); }}
+            className="mt-3 border border-red-900/40 rounded-xl py-3.5 items-center"
+          >
+            <Text className="text-red-400 font-medium">Delete Session</Text>
+          </Pressable>
+        </ScrollView>
       </Modal>
 
       {/* ── Add Regimen Modal ── */}
