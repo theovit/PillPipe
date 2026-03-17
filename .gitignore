@@ -6,3 +6,6 @@ server/package-lock.json
 
 # Tooling
 .playwright-mcp/
+
+# Dev-only seed data (local SQLite seeding, not for production)
+app/src/db/seed.dev.ts

@@ -12,7 +12,7 @@ Check off items as they are completed.
 - [ ] Session templates — save a session as a template, create new session from template
 - [ ] Multiple sessions open simultaneously (web supports expanding several at once)
 - [x] Regimen notes field (textarea, auto-save on blur)
-- [ ] Native date pickers — replace bare TextInput with `@react-native-community/datetimepicker`
+- [x] Native date pickers — replace bare TextInput with `@react-native-community/datetimepicker`
 
 ---
 
@@ -20,7 +20,7 @@ Check off items as they are completed.
 
 - [x] Taken / Skip buttons per regimen card
 - [x] "Mark all taken" / "Skip all" bulk action bar
-- [ ] Adherence calendar (`AdherenceCalendar` equivalent)
+- [x] Adherence calendar (`AdherenceCalendar` equivalent)
 - [ ] Reminder time picker per regimen
 - [ ] Push notifications via `expo-notifications` — local scheduled reminders + dose-tap action
 

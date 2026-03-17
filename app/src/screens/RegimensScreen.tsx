@@ -4,6 +4,7 @@ import {
   Alert,
   FlatList,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   Share,
@@ -12,7 +13,9 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import { useFocusEffect } from '@react-navigation/native';
+import AdherenceCalendar from '@/components/AdherenceCalendar';
 import { getDb, uuid } from '@/db/database';
 import { calculate } from '@/engine/calculator';
 import { Phase, Regimen, Session, Supplement } from '@/utils/types';
@@ -44,6 +47,8 @@ export default function RegimensScreen() {
   const [sessionStart, setSessionStart] = useState(todayISO());
   const [sessionTarget, setSessionTarget] = useState('');
   const [sessionNotes, setSessionNotes] = useState('');
+  const [showStartPicker, setShowStartPicker] = useState(false);
+  const [showTargetPicker, setShowTargetPicker] = useState(false);
 
   // Regimen data for open session
   const [regimens, setRegimens] = useState<Regimen[]>([]);
@@ -599,6 +604,19 @@ export default function RegimensScreen() {
                     )}
                   </View>
 
+                  {/* Adherence calendar */}
+                  {openSess && (
+                    <View className="mt-3 border-t border-gray-700/50 pt-3">
+                      <Text className="text-xs text-gray-500 font-medium uppercase tracking-wider mb-2">Adherence</Text>
+                      <AdherenceCalendar
+                        regimenId={r.id}
+                        sessionStartDate={openSess.start_date}
+                        todayStatus={todayLogs[r.id] ?? null}
+                        onLogToday={(status) => logDose(r.id, status)}
+                      />
+                    </View>
+                  )}
+
                   {/* Shortfall result */}
                   {res && (
                     <View className={`mt-3 rounded-lg px-4 py-3 ${res.status === 'covered' ? 'bg-green-900/20 border border-green-700/30' : 'bg-amber-900/10 border border-amber-700/40'}`}>
@@ -644,11 +662,46 @@ export default function RegimensScreen() {
           <View className="gap-4">
             <View>
               <Text className={labelCls}>Start date</Text>
-              <TextInput className={inputCls} value={sessionStart} onChangeText={setSessionStart} placeholder="YYYY-MM-DD" placeholderTextColor="#4b5563" />
+              <Pressable
+                onPress={() => setShowStartPicker(true)}
+                className={`${inputCls} justify-center`}
+              >
+                <Text className="text-gray-200 text-base">{sessionStart || 'Select date'}</Text>
+              </Pressable>
+              {showStartPicker && (
+                <DateTimePicker
+                  value={sessionStart ? new Date(sessionStart) : new Date()}
+                  mode="date"
+                  display={Platform.OS === 'ios' ? 'inline' : 'default'}
+                  onChange={(_, date) => {
+                    setShowStartPicker(Platform.OS === 'ios');
+                    if (date) setSessionStart(date.toISOString().slice(0, 10));
+                  }}
+                />
+              )}
             </View>
             <View>
               <Text className={labelCls}>Target date</Text>
-              <TextInput className={inputCls} value={sessionTarget} onChangeText={setSessionTarget} placeholder="YYYY-MM-DD" placeholderTextColor="#4b5563" />
+              <Pressable
+                onPress={() => setShowTargetPicker(true)}
+                className={`${inputCls} justify-center`}
+              >
+                <Text className={sessionTarget ? 'text-gray-200 text-base' : 'text-gray-600 text-base'}>
+                  {sessionTarget || 'Select date'}
+                </Text>
+              </Pressable>
+              {showTargetPicker && (
+                <DateTimePicker
+                  value={sessionTarget ? new Date(sessionTarget) : new Date(Date.now() + 90 * 86400000)}
+                  mode="date"
+                  display={Platform.OS === 'ios' ? 'inline' : 'default'}
+                  minimumDate={sessionStart ? new Date(new Date(sessionStart).getTime() + 86400000) : undefined}
+                  onChange={(_, date) => {
+                    setShowTargetPicker(Platform.OS === 'ios');
+                    if (date) setSessionTarget(date.toISOString().slice(0, 10));
+                  }}
+                />
+              )}
             </View>
             <View>
               <Text className={labelCls}>Notes</Text>
