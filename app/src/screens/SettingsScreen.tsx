@@ -5,27 +5,15 @@ import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import * as DocumentPicker from 'expo-document-picker';
 import { getDb } from '@/db/database';
+import { ACCENT_HEX, AccentColor, AppPrefs, loadPrefs, savePrefs } from '@/utils/prefs';
 import appJson from '../../app.json';
 
 const DATE_FORMATS = ['MM/DD/YYYY', 'DD/MM/YYYY', 'YYYY-MM-DD'] as const;
-type DateFormat = typeof DATE_FORMATS[number];
-
-const PREF_KEY = 'pillpipe_prefs';
-
-function loadPrefs(): { dateFormat: DateFormat } {
-  try {
-    const raw = (globalThis as any).localStorage?.getItem?.(PREF_KEY);
-    if (raw) return JSON.parse(raw);
-  } catch { /* no-op */ }
-  return { dateFormat: 'MM/DD/YYYY' };
-}
-
-function savePrefs(prefs: { dateFormat: DateFormat }) {
-  try { (globalThis as any).localStorage?.setItem?.(PREF_KEY, JSON.stringify(prefs)); } catch { /* no-op */ }
-}
+const ACCENT_COLORS: AccentColor[] = ['violet', 'red', 'orange', 'amber', 'green', 'blue'];
 
 export default function SettingsScreen() {
-  const [dateFormat, setDateFormat] = useState<DateFormat>('MM/DD/YYYY');
+  const [dateFormat, setDateFormat] = useState<AppPrefs['dateFormat']>('MM/DD/YYYY');
+  const [accentColor, setAccentColor] = useState<AccentColor>('violet');
   const [notifStatus, setNotifStatus] = useState<string>('unknown');
   const [backupWorking, setBackupWorking] = useState(false);
   const [restoreWorking, setRestoreWorking] = useState(false);
@@ -33,14 +21,20 @@ export default function SettingsScreen() {
   useEffect(() => {
     const prefs = loadPrefs();
     setDateFormat(prefs.dateFormat);
+    setAccentColor(prefs.accentColor);
     Notifications.getPermissionsAsync()
       .then((s) => setNotifStatus(s.status))
       .catch(() => setNotifStatus('unavailable'));
   }, []);
 
-  function applyDateFormat(fmt: DateFormat) {
+  function applyDateFormat(fmt: AppPrefs['dateFormat']) {
     setDateFormat(fmt);
     savePrefs({ dateFormat: fmt });
+  }
+
+  function applyAccentColor(c: AccentColor) {
+    setAccentColor(c);
+    savePrefs({ accentColor: c });
   }
 
   async function requestNotifications() {
@@ -231,6 +225,24 @@ export default function SettingsScreen() {
             </Pressable>
           ))}
         </View>
+      </View>
+
+      {/* Accent color */}
+      <View className="bg-gray-900 border border-gray-800 rounded-xl p-4 mb-4">
+        <Text className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-3">Accent Color</Text>
+        <View className="flex-row gap-3 flex-wrap">
+          {ACCENT_COLORS.map((c) => (
+            <Pressable
+              key={c}
+              onPress={() => applyAccentColor(c)}
+              style={{ backgroundColor: ACCENT_HEX[c] }}
+              className={`w-9 h-9 rounded-full items-center justify-center ${accentColor === c ? 'border-2 border-white' : ''}`}
+            >
+              {accentColor === c && <Text className="text-white font-bold text-xs">✓</Text>}
+            </Pressable>
+          ))}
+        </View>
+        <Text className="text-gray-600 text-xs mt-2">Takes effect on next app launch</Text>
       </View>
 
       {/* Notifications */}

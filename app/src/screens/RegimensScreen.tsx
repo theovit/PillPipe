@@ -2,6 +2,7 @@ import React, { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Clipboard,
   FlatList,
   Modal,
   Platform,
@@ -78,6 +79,9 @@ export default function RegimensScreen() {
   const [reminderTimes, setReminderTimes] = useState<Record<string, string>>({});
   const [showReminderPicker, setShowReminderPicker] = useState<string | null>(null);
 
+  // Shopping list modal
+  const [shoppingListModal, setShoppingListModal] = useState(false);
+
   // Phase editor state
   const [phaseModal, setPhaseModal] = useState(false);
   const [editingPhase, setEditingPhase] = useState<Phase | null>(null);
@@ -85,6 +89,7 @@ export default function RegimensScreen() {
   const [phaseUnit, setPhaseUnit] = useState('capsules');
   const [phaseDosage, setPhaseDosage] = useState('');
   const [phaseDuration, setPhaseDuration] = useState('30');
+  const [phaseDurationUnit, setPhaseDurationUnit] = useState<'days' | 'weeks'>('days');
   const [phaseIndefinite, setPhaseIndefinite] = useState(false);
   const [phaseDow, setPhaseDow] = useState<number[]>([]);
 
@@ -377,13 +382,21 @@ export default function RegimensScreen() {
     if (existing) {
       setEditingPhase(existing);
       setPhaseDosage(String(existing.dosage));
-      setPhaseDuration(String(existing.duration_days));
+      const d = existing.duration_days;
+      if (d % 7 === 0 && d > 0 && d !== 9999) {
+        setPhaseDurationUnit('weeks');
+        setPhaseDuration(String(d / 7));
+      } else {
+        setPhaseDurationUnit('days');
+        setPhaseDuration(String(d));
+      }
       setPhaseIndefinite(existing.indefinite === 1 || existing.indefinite === true);
       setPhaseDow(existing.days_of_week ? JSON.parse(existing.days_of_week) as number[] : []);
     } else {
       setEditingPhase(null);
       setPhaseDosage('');
       setPhaseDuration('30');
+      setPhaseDurationUnit('days');
       setPhaseIndefinite(false);
       setPhaseDow([]);
     }
@@ -393,8 +406,9 @@ export default function RegimensScreen() {
   async function savePhase() {
     const dosage = parseFloat(phaseDosage);
     if (isNaN(dosage) || dosage <= 0) { Alert.alert('Enter a valid dosage'); return; }
-    const dur = phaseIndefinite ? 9999 : parseInt(phaseDuration, 10);
-    if (!phaseIndefinite && (isNaN(dur) || dur <= 0)) { Alert.alert('Enter a valid duration'); return; }
+    const rawDur = parseInt(phaseDuration, 10);
+    const dur = phaseIndefinite ? 9999 : (phaseDurationUnit === 'weeks' ? rawDur * 7 : rawDur);
+    if (!phaseIndefinite && (isNaN(rawDur) || rawDur <= 0)) { Alert.alert('Enter a valid duration'); return; }
     const daysJson = phaseDow.length > 0 ? JSON.stringify([...phaseDow].sort()) : null;
 
     try {
@@ -618,7 +632,7 @@ export default function RegimensScreen() {
                     <Text className="text-gray-300 text-xs font-medium">↓ CSV</Text>
                   </Pressable>
                   {hasShortfall && (
-                    <Pressable onPress={shareShoppingList} className="bg-gray-700 rounded-lg px-3 py-1.5">
+                    <Pressable onPress={() => setShoppingListModal(true)} className="bg-gray-700 rounded-lg px-3 py-1.5">
                       <Text className="text-gray-300 text-xs font-medium">🛒 List</Text>
                     </Pressable>
                   )}
@@ -943,6 +957,79 @@ export default function RegimensScreen() {
         </ScrollView>
       </Modal>
 
+      {/* ── Shopping List Modal ── */}
+      <Modal visible={shoppingListModal} animationType="slide" presentationStyle="pageSheet">
+        <View className="flex-1 bg-background px-5 pt-6">
+          <View className="flex-row items-center justify-between mb-5">
+            <Text className="text-white text-lg font-semibold">Shopping List</Text>
+            <Pressable onPress={() => setShoppingListModal(false)}>
+              <Text className="text-gray-400">Done</Text>
+            </Pressable>
+          </View>
+
+          <ScrollView showsVerticalScrollIndicator={false}>
+            {regimens
+              .map((r) => ({ r, res: calcResults[r.id] }))
+              .filter(({ res }) => res && res.bottlesNeeded > 0)
+              .map(({ r, res }) => (
+                <View key={r.id} className="bg-gray-900 border border-gray-800 rounded-xl p-4 mb-3">
+                  <Text className="text-white font-semibold text-base">{r.supplement_name}</Text>
+                  {r.brand && <Text className="text-gray-500 text-xs mt-0.5">{r.brand}</Text>}
+                  <View className="flex-row justify-between items-end mt-3">
+                    <View className="gap-1">
+                      <Text className="text-gray-400 text-sm">
+                        Shortfall: <Text className="text-amber-400 font-mono">{fmtAmount(res.shortfall ?? 0, r.unit ?? 'capsules')}</Text>
+                      </Text>
+                      <Text className="text-gray-400 text-sm">
+                        On hand: <Text className="text-gray-300 font-mono">{fmtAmount(res.onHandNow ?? 0, r.unit ?? 'capsules')}</Text>
+                      </Text>
+                    </View>
+                    <View className="items-end gap-1">
+                      <View className="bg-violet-900/40 px-3 py-1 rounded-full">
+                        <Text className="text-violet-300 font-semibold text-sm">{res.bottlesNeeded} bottle{res.bottlesNeeded !== 1 ? 's' : ''}</Text>
+                      </View>
+                      <Text className="text-gray-500 text-xs">${(res.estimatedCost ?? 0).toFixed(2)}</Text>
+                    </View>
+                  </View>
+                </View>
+              ))}
+
+            {/* Total + actions */}
+            {(() => {
+              const items = regimens
+                .map((r) => ({ r, res: calcResults[r.id] }))
+                .filter(({ res }) => res && res.bottlesNeeded > 0);
+              const totalCost = items.reduce((s, { res }) => s + (res.estimatedCost ?? 0), 0);
+              const listText = items
+                .map(({ r, res }) => `• ${r.supplement_name}${r.brand ? ` (${r.brand})` : ''} — ${res.bottlesNeeded} bottle${res.bottlesNeeded !== 1 ? 's' : ''} (~$${(res.estimatedCost ?? 0).toFixed(2)})`)
+                .join('\n');
+              return (
+                <View className="mt-2">
+                  <Text className="text-gray-500 text-sm mb-4 text-right">
+                    Total: <Text className="text-violet-300 font-mono font-semibold">${totalCost.toFixed(2)}</Text>
+                  </Text>
+                  <Pressable
+                    onPress={() => {
+                      Clipboard.setString(listText);
+                      Alert.alert('Copied', 'Shopping list copied to clipboard.');
+                    }}
+                    className="bg-gray-700 rounded-xl py-3.5 items-center mb-3"
+                  >
+                    <Text className="text-gray-200 font-medium">Copy to Clipboard</Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={() => Share.share({ message: listText })}
+                    className="bg-violet-600 rounded-xl py-3.5 items-center"
+                  >
+                    <Text className="text-white font-semibold">Share List</Text>
+                  </Pressable>
+                </View>
+              );
+            })()}
+          </ScrollView>
+        </View>
+      </Modal>
+
       {/* ── Add Regimen Modal ── */}
       <Modal visible={regimenModal} animationType="slide" presentationStyle="pageSheet">
         <View className="flex-1 bg-background px-5 pt-6">
@@ -1020,15 +1107,28 @@ export default function RegimensScreen() {
             {/* Duration (hidden if indefinite) */}
             {!phaseIndefinite && (
               <View>
-                <Text className={labelCls}>Duration (days)</Text>
-                <TextInput
-                  className={inputCls}
-                  value={phaseDuration}
-                  onChangeText={setPhaseDuration}
-                  placeholder="30"
-                  placeholderTextColor="#4b5563"
-                  keyboardType="number-pad"
-                />
+                <Text className={labelCls}>Duration</Text>
+                <View className="flex-row gap-2 items-center">
+                  <TextInput
+                    className={`${inputCls} flex-1`}
+                    value={phaseDuration}
+                    onChangeText={setPhaseDuration}
+                    placeholder={phaseDurationUnit === 'weeks' ? '4' : '30'}
+                    placeholderTextColor="#4b5563"
+                    keyboardType="number-pad"
+                  />
+                  {(['days', 'weeks'] as const).map((u) => (
+                    <Pressable
+                      key={u}
+                      onPress={() => setPhaseDurationUnit(u)}
+                      className={`px-3 py-2.5 rounded-lg ${phaseDurationUnit === u ? 'bg-violet-600' : 'bg-gray-800 border border-gray-700'}`}
+                    >
+                      <Text className={`text-sm ${phaseDurationUnit === u ? 'text-white' : 'text-gray-400'}`}>
+                        {u === 'days' ? 'd' : 'wk'}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
               </View>
             )}
 

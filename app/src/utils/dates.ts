@@ -1,8 +1,14 @@
 export function formatDate(dateStr: string | null | undefined): string {
   if (!dateStr) return '';
-  const normalized = /^\d{4}-\d{2}-\d{2}$/.test(dateStr) ? dateStr + 'T00:00:00' : dateStr;
-  const d = new Date(normalized);
-  return d.toLocaleDateString();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return dateStr;
+  const [y, m, day] = dateStr.split('-');
+  try {
+    const { loadPrefs } = require('./prefs');
+    const { dateFormat } = loadPrefs();
+    if (dateFormat === 'DD/MM/YYYY') return `${day}/${m}/${y}`;
+    if (dateFormat === 'YYYY-MM-DD') return dateStr;
+  } catch { /* no-op */ }
+  return `${m}/${day}/${y}`; // default MM/DD/YYYY
 }
 
 export function todayISO(): string {
