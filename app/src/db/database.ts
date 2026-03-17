@@ -1,12 +1,8 @@
-import { Platform } from 'react-native';
 import * as SQLite from 'expo-sqlite';
 
 let _db: SQLite.SQLiteDatabase | null = null;
 
 export async function getDb(): Promise<SQLite.SQLiteDatabase> {
-  if (Platform.OS === 'web') {
-    throw new Error('SQLite is not available on web. Use the Android or iOS app.');
-  }
   if (_db) return _db;
   _db = await SQLite.openDatabaseAsync('pillpipe.db');
   await _db.execAsync('PRAGMA journal_mode = WAL;');
