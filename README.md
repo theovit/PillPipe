@@ -97,49 +97,24 @@ PillPipe/
 
 ## Getting Started
 
-**Prerequisites:** [Docker Desktop](https://www.docker.com/products/docker-desktop/)
+Full setup instructions are in **[INSTALL.md](INSTALL.md)**.
 
-### 1. Configure environment
+### Quick start (manual)
 
-```bash
-cp .env.example .env
+1. Install [Docker Desktop](https://www.docker.com/products/docker-desktop/) and start it
+2. `cp .env.example .env` — set a strong `DB_PASSWORD` and generate VAPID keys (see INSTALL.md)
+3. `docker compose up --build`
+4. Open **http://localhost:5173**
+
+### Quick start with Claude Code
+
+If you have [Claude Code](https://claude.ai/code) installed, it can handle the entire setup for you automatically — generating credentials, writing them into `.env`, and starting the stack:
+
+```
+open this repo in Claude Code and say: install the app
 ```
 
-Edit `.env` and set a strong `DB_PASSWORD` before running. The template ships with:
-
-```
-DB_USER=pillpipe
-DB_PASSWORD=changeme
-DB_NAME=pillpipe
-```
-
-### 2. Generate VAPID keys (push notifications)
-
-Push notifications require a VAPID keypair. Generate one with the `web-push` CLI — you can run it without installing anything globally using `npx`:
-
-```bash
-npx web-push generate-vapid-keys
-```
-
-Copy the output into your `.env`:
-
-```env
-VAPID_PUBLIC_KEY=<your generated public key>
-VAPID_PRIVATE_KEY=<your generated private key>
-VAPID_EMAIL=mailto:you@example.com
-```
-
-`VAPID_EMAIL` is sent to push services for abuse contact — any valid email works. If these keys are missing, the server starts normally but push notifications are silently disabled.
-
-> **Keep your private key secret.** If you regenerate it, all existing push subscriptions are invalidated and users will need to re-subscribe in Settings.
-
-### 4. Start the stack
-
-```bash
-docker compose up --build
-```
-
-The schema in `db/init.sql` runs automatically on first startup.
+Claude Code will read `INSTALL.md` and run through every step, only stopping to ask when something genuinely requires your input (e.g. Google Drive OAuth credentials).
 
 | Service | URL |
 |---|---|
