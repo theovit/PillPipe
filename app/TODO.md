@@ -1,7 +1,15 @@
 # Android App — Feature Backlog
 
 Features present in the web app that still need to be implemented in the Android app (`app/`).
-Check off items as they are completed.
+App is currently in **alpha** — items marked [x] are scaffolded but may not be fully reliable.
+
+---
+
+## Needs Fixing (built but broken)
+
+- [ ] Adherence calendar — built but not working correctly; verify parity with web
+- [ ] Push notifications — local scheduling unreliable; fix and verify
+- [ ] Backup & restore — partially implemented; fix JSON export/import end-to-end
 
 ---
 
