@@ -13,11 +13,11 @@ import {
   TextInput,
   View,
 } from 'react-native';
-import DateTimePicker from '@react-native-community/datetimepicker';
 import { useFocusEffect } from '@react-navigation/native';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import AdherenceCalendar from '@/components/AdherenceCalendar';
+import DateField from '@/components/DateField';
 import { getDb, uuid } from '@/db/database';
 import { calculate } from '@/engine/calculator';
 import { Phase, Regimen, Session, Supplement } from '@/utils/types';
@@ -55,8 +55,6 @@ export default function RegimensScreen() {
   const [sessionStart, setSessionStart] = useState(todayISO());
   const [sessionTarget, setSessionTarget] = useState('');
   const [sessionNotes, setSessionNotes] = useState('');
-  const [showStartPicker, setShowStartPicker] = useState(false);
-  const [showTargetPicker, setShowTargetPicker] = useState(false);
 
   // Regimen data for open session
   const [regimens, setRegimens] = useState<Regimen[]>([]);
@@ -72,8 +70,6 @@ export default function RegimensScreen() {
   const [editStart, setEditStart] = useState('');
   const [editTarget, setEditTarget] = useState('');
   const [editNotes, setEditNotes] = useState('');
-  const [showEditStartPicker, setShowEditStartPicker] = useState(false);
-  const [showEditTargetPicker, setShowEditTargetPicker] = useState(false);
 
   // Regimen notes
   const [regimenNotes, setRegimenNotes] = useState<Record<string, string>>({});
@@ -883,46 +879,16 @@ export default function RegimensScreen() {
           <View className="gap-4">
             <View>
               <Text className={labelCls}>Start date</Text>
-              <Pressable
-                onPress={() => setShowStartPicker(true)}
-                className={`${inputCls} justify-center`}
-              >
-                <Text className="text-gray-200 text-base">{sessionStart || 'Select date'}</Text>
-              </Pressable>
-              {showStartPicker && (
-                <DateTimePicker
-                  value={sessionStart ? new Date(sessionStart) : new Date()}
-                  mode="date"
-                  display={Platform.OS === 'ios' ? 'inline' : 'default'}
-                  onChange={(_, date) => {
-                    setShowStartPicker(Platform.OS === 'ios');
-                    if (date) setSessionStart(date.toISOString().slice(0, 10));
-                  }}
-                />
-              )}
+              <DateField value={sessionStart} onChange={setSessionStart} />
             </View>
             <View>
               <Text className={labelCls}>Target date</Text>
-              <Pressable
-                onPress={() => setShowTargetPicker(true)}
-                className={`${inputCls} justify-center`}
-              >
-                <Text className={sessionTarget ? 'text-gray-200 text-base' : 'text-gray-600 text-base'}>
-                  {sessionTarget || 'Select date'}
-                </Text>
-              </Pressable>
-              {showTargetPicker && (
-                <DateTimePicker
-                  value={sessionTarget ? new Date(sessionTarget) : new Date(Date.now() + 90 * 86400000)}
-                  mode="date"
-                  display={Platform.OS === 'ios' ? 'inline' : 'default'}
-                  minimumDate={sessionStart ? new Date(new Date(sessionStart).getTime() + 86400000) : undefined}
-                  onChange={(_, date) => {
-                    setShowTargetPicker(Platform.OS === 'ios');
-                    if (date) setSessionTarget(date.toISOString().slice(0, 10));
-                  }}
-                />
-              )}
+              <DateField
+                value={sessionTarget}
+                onChange={setSessionTarget}
+                placeholder="Select date"
+                minimumDate={sessionStart ? new Date(new Date(sessionStart).getTime() + 86400000) : undefined}
+              />
             </View>
             <View>
               <Text className={labelCls}>Notes</Text>
@@ -947,38 +913,15 @@ export default function RegimensScreen() {
           <View className="gap-4">
             <View>
               <Text className={labelCls}>Start date</Text>
-              <Pressable onPress={() => setShowEditStartPicker(true)} className={`${inputCls} justify-center`}>
-                <Text className="text-gray-200 text-base">{editStart}</Text>
-              </Pressable>
-              {showEditStartPicker && (
-                <DateTimePicker
-                  value={editStart ? new Date(editStart) : new Date()}
-                  mode="date"
-                  display={Platform.OS === 'ios' ? 'inline' : 'default'}
-                  onChange={(_, date) => {
-                    setShowEditStartPicker(Platform.OS === 'ios');
-                    if (date) setEditStart(date.toISOString().slice(0, 10));
-                  }}
-                />
-              )}
+              <DateField value={editStart} onChange={setEditStart} />
             </View>
             <View>
               <Text className={labelCls}>Target date</Text>
-              <Pressable onPress={() => setShowEditTargetPicker(true)} className={`${inputCls} justify-center`}>
-                <Text className="text-gray-200 text-base">{editTarget}</Text>
-              </Pressable>
-              {showEditTargetPicker && (
-                <DateTimePicker
-                  value={editTarget ? new Date(editTarget) : new Date()}
-                  mode="date"
-                  display={Platform.OS === 'ios' ? 'inline' : 'default'}
-                  minimumDate={editStart ? new Date(new Date(editStart).getTime() + 86400000) : undefined}
-                  onChange={(_, date) => {
-                    setShowEditTargetPicker(Platform.OS === 'ios');
-                    if (date) setEditTarget(date.toISOString().slice(0, 10));
-                  }}
-                />
-              )}
+              <DateField
+                value={editTarget}
+                onChange={setEditTarget}
+                minimumDate={editStart ? new Date(new Date(editStart).getTime() + 86400000) : undefined}
+              />
             </View>
             <View>
               <Text className={labelCls}>Notes</Text>
