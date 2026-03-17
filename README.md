@@ -37,6 +37,9 @@ PillPipe answers both questions.
 - **Running Low alerts** — set a reorder threshold per supplement; a warning badge appears on the row and a push notification fires daily when stock is low.
 - **Adherence tracking** — 30-day dot grid (green=taken, red=skipped, gray=missed), adherence % stat, quick-log buttons on regimen cards, bulk "Mark all taken / Skip all" bar, and undo support.
 - **Shortfall Export (CSV)** — download calculation results as a CSV after running Calculate; includes per-regimen rows and grand total.
+- **PDF Export** — generate a formatted PDF of calculation results client-side (no server required).
+- **Reorder Shopping List** — post-calculate modal listing all shortfall items with bottles needed and cost; one-click copy to clipboard.
+- **Dark / Light / System mode** — color scheme toggle in Appearance settings; system mode follows your OS preference automatically.
 - **Mobile touch-friendly UI** — tap to edit, hidden icons, action buttons optimized for phone use.
 - **Settings page** — full-screen tab with collapsible sections for data, templates, appearance, preferences, notifications, and about.
 - **Appearance settings** — theme color (6 presets + custom color picker), font size (small/medium/large); persisted to localStorage and synced to the server so they're included in every backup.
@@ -88,6 +91,14 @@ PillPipe/
 │   └── db.js               # PostgreSQL connection
 ├── db/
 │   └── init.sql            # Schema & seed data
+├── app/                    # Android / Expo app (offline-first, local SQLite)
+├── docs/                   # Project documentation
+│   ├── FEATURES.md         # Feature registry with lifecycle status
+│   ├── TODO.md             # Priority-tiered backlog
+│   ├── DECISIONS.md        # Architectural decision log
+│   ├── CHANGELOG.md        # Release history
+│   ├── ARCHITECTURE.md     # Deep-dive system documentation
+│   └── MEMORY.md           # Runtime gotchas and non-obvious behaviors
 ├── .env.example            # Environment variable template
 ├── docker-compose.yml
 └── README.md
@@ -308,9 +319,12 @@ PillPipe is fully self-hosted. Your data never leaves your own machine unless yo
 
 ## Roadmap
 
+### In Progress
+- **Android app** — offline-first with local SQLite; shortfall engine runs entirely on-device; see `app/` and `docs/TODO.md`
+- **Meal-time dosing** — replace flat daily dose with per-meal slot system (Breakfast/Lunch/Dinner + custom times)
+
 ### Later
 - [ ] **JWT authentication** — multi-user or public hosting support
-- [ ] **Android app** — offline-first with local SQLite; shortfall engine runs entirely on-device
 - [ ] **Doctor portal** — multi-tenant support for providers to push sessions to patients
 - [ ] **Flexible Ads** — opt-in ad levels (0–3); ad-free is always the default and always free
 
