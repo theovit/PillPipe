@@ -16,6 +16,7 @@
     "babel-preset-expo": "~54.0.10",
     "expo": "~54.0.0",
     "expo-file-system": "~19.0.21",
+    "expo-sharing": "~14.0.8",
     "expo-sqlite": "~16.0.10",
     "expo-status-bar": "~3.0.9",
     "nativewind": "^4.2.3",

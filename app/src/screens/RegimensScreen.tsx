@@ -6,6 +6,7 @@ import {
   Modal,
   Pressable,
   ScrollView,
+  Share,
   Switch,
   Text,
   TextInput,
@@ -51,6 +52,9 @@ export default function RegimensScreen() {
   const [calcResults, setCalcResults] = useState<Record<string, ReturnType<typeof calculate>>>({});
   const [regimenModal, setRegimenModal] = useState(false);
   const [selectedSupId, setSelectedSupId] = useState('');
+
+  // Regimen notes
+  const [regimenNotes, setRegimenNotes] = useState<Record<string, string>>({});
 
   // Phase editor state
   const [phaseModal, setPhaseModal] = useState(false);
@@ -102,14 +106,18 @@ export default function RegimensScreen() {
       setRegimens(regs);
 
       const phaseMap: Record<string, Phase[]> = {};
+      const notesMap: Record<string, string> = {};
       for (const r of regs) {
         const ps = await db.getAllAsync<Phase>(
           'SELECT * FROM phases WHERE regimen_id = ? ORDER BY sequence_order',
           [r.id],
         );
         phaseMap[r.id] = ps;
+        notesMap[r.id] = r.notes ?? '';
       }
       setPhases(phaseMap);
+      setRegimenNotes(notesMap);
+      await loadTodayLogs(regs.map((r) => r.id));
     } catch {
       // no-op
     }
@@ -141,10 +149,21 @@ export default function RegimensScreen() {
           phaseMap[r.id] = ps;
         }
         setPhases(phaseMap);
+        const notesMap2: Record<string, string> = {};
+        for (const r of regs) notesMap2[r.id] = r.notes ?? '';
+        setRegimenNotes(notesMap2);
+        await loadTodayLogs(regs.map((r) => r.id));
       } catch {
         // no-op
       }
     }
+  }
+
+  async function saveRegimenNotes(regimenId: string) {
+    try {
+      const db = await getDb();
+      await db.runAsync('UPDATE regimens SET notes=? WHERE id=?', [regimenNotes[regimenId] || null, regimenId]);
+    } catch { /* no-op */ }
   }
 
   async function createSession() {
@@ -286,6 +305,58 @@ export default function RegimensScreen() {
     );
   }
 
+  // ── Dose logging ────────────────────────────────────────────────────────────
+
+  const [todayLogs, setTodayLogs] = useState<Record<string, 'taken' | 'skipped'>>({});
+
+  async function loadTodayLogs(regimenIds: string[]) {
+    if (regimenIds.length === 0) return;
+    try {
+      const db = await getDb();
+      const today = todayISO();
+      const rows = await db.getAllAsync<{ regimen_id: string; status: 'taken' | 'skipped' }>(
+        `SELECT regimen_id, status FROM dose_log WHERE log_date = ? AND regimen_id IN (${regimenIds.map(() => '?').join(',')})`,
+        [today, ...regimenIds],
+      );
+      const map: Record<string, 'taken' | 'skipped'> = {};
+      for (const row of rows) map[row.regimen_id] = row.status;
+      setTodayLogs(map);
+    } catch { /* no-op */ }
+  }
+
+  async function logDose(regimenId: string, status: 'taken' | 'skipped') {
+    setTodayLogs((prev) => ({ ...prev, [regimenId]: status }));
+    try {
+      const db = await getDb();
+      await db.runAsync(
+        `INSERT INTO dose_log (id, regimen_id, log_date, status)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT (regimen_id, log_date) DO UPDATE SET status = excluded.status`,
+        [uuid(), regimenId, todayISO(), status],
+      );
+    } catch { /* non-critical */ }
+  }
+
+  async function logAllToday(status: 'taken' | 'skipped') {
+    const updated: Record<string, 'taken' | 'skipped'> = {};
+    for (const r of regimens) updated[r.id] = status;
+    setTodayLogs((prev) => ({ ...prev, ...updated }));
+    try {
+      const db = await getDb();
+      const today = todayISO();
+      await Promise.all(
+        regimens.map((r) =>
+          db.runAsync(
+            `INSERT INTO dose_log (id, regimen_id, log_date, status)
+             VALUES (?, ?, ?, ?)
+             ON CONFLICT (regimen_id, log_date) DO UPDATE SET status = excluded.status`,
+            [uuid(), r.id, today, status],
+          ),
+        ),
+      );
+    } catch { /* non-critical */ }
+  }
+
   // ── Calculate ───────────────────────────────────────────────────────────────
 
   async function runCalculate() {
@@ -309,6 +380,27 @@ export default function RegimensScreen() {
       });
     }
     setCalcResults(results);
+  }
+
+  async function shareShoppingList() {
+    const session = sessions.find((s) => s.id === openSessionId);
+    if (!session) return;
+    const items = regimens
+      .map((r) => ({ r, res: calcResults[r.id] }))
+      .filter(({ res }) => res && res.bottlesNeeded > 0);
+    if (items.length === 0) { Alert.alert('Nothing to buy — all covered!'); return; }
+    const total = items.reduce((s, { res }) => s + (res.estimatedCost || 0), 0);
+    const lines = [
+      `Shopping List — ${formatDate(session.target_date)}`,
+      '',
+      ...items.map(({ r, res }) => {
+        const name = r.brand ? `${r.supplement_name} (${r.brand})` : r.supplement_name;
+        return `• ${name} — ${res.bottlesNeeded} bottle${res.bottlesNeeded !== 1 ? 's' : ''} — $${(res.estimatedCost || 0).toFixed(2)}`;
+      }),
+      '',
+      `Total: $${total.toFixed(2)}`,
+    ];
+    await Share.share({ message: lines.join('\n') });
   }
 
   const openSess = sessions.find((s) => s.id === openSessionId);
@@ -370,6 +462,43 @@ export default function RegimensScreen() {
             </View>
           </View>
 
+          {/* Results summary + share */}
+          {Object.keys(calcResults).length > 0 && (() => {
+            const totalCost = Object.values(calcResults).reduce((s, r) => s + (r.estimatedCost || 0), 0);
+            const hasShortfall = regimens.some((r) => calcResults[r.id]?.bottlesNeeded > 0);
+            return (
+              <View className="flex-row items-center justify-between mb-3">
+                <Text className="text-xs text-gray-500">
+                  Total to buy: <Text className="text-violet-300 font-mono">${totalCost.toFixed(2)}</Text>
+                </Text>
+                {hasShortfall && (
+                  <Pressable onPress={shareShoppingList} className="bg-gray-700 rounded-lg px-3 py-1.5">
+                    <Text className="text-gray-300 text-xs font-medium">🛒 Share List</Text>
+                  </Pressable>
+                )}
+              </View>
+            );
+          })()}
+
+          {/* Bulk dose log bar */}
+          {regimens.length > 0 && (
+            <View className="flex-row items-center gap-2 mb-3">
+              <Text className="text-xs text-gray-600 mr-1">Today:</Text>
+              <Pressable
+                onPress={() => logAllToday('taken')}
+                className="bg-green-900/60 rounded-lg px-3 py-1.5"
+              >
+                <Text className="text-green-300 text-xs font-medium">✓ All taken</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => logAllToday('skipped')}
+                className="bg-gray-800 rounded-lg px-3 py-1.5"
+              >
+                <Text className="text-gray-400 text-xs font-medium">✗ Skip all</Text>
+              </Pressable>
+            </View>
+          )}
+
           {regimens.length === 0 ? (
             <Text className="text-gray-600 text-sm text-center py-4">No regimens. Tap + Add.</Text>
           ) : (
@@ -399,6 +528,17 @@ export default function RegimensScreen() {
                     {r.brand ? `${r.brand} · ` : ''}{r.pills_per_bottle} {unit}/bottle · ${Number(r.price ?? 0).toFixed(2)}
                   </Text>
 
+                  {/* Notes */}
+                  <TextInput
+                    className="text-gray-500 text-xs mt-2 bg-transparent"
+                    value={regimenNotes[r.id] ?? ''}
+                    onChangeText={(t) => setRegimenNotes((n) => ({ ...n, [r.id]: t }))}
+                    onBlur={() => saveRegimenNotes(r.id)}
+                    placeholder="Notes (e.g. take with food)…"
+                    placeholderTextColor="#4b5563"
+                    multiline
+                  />
+
                   {/* Phases */}
                   <View className="mt-3 border-t border-gray-700/50 pt-3">
                     {regimenPhases.length === 0 ? (
@@ -425,6 +565,38 @@ export default function RegimensScreen() {
                     >
                       <Text className="text-violet-500 text-xs font-medium">+ Add phase</Text>
                     </Pressable>
+                  </View>
+
+                  {/* Dose log buttons */}
+                  <View className="flex-row items-center gap-2 mt-3">
+                    {!todayLogs[r.id] ? (
+                      <>
+                        <Pressable
+                          onPress={() => logDose(r.id, 'taken')}
+                          className="bg-green-900/60 rounded-lg px-3 py-1.5"
+                        >
+                          <Text className="text-green-300 text-xs font-medium">✓ Taken</Text>
+                        </Pressable>
+                        <Pressable
+                          onPress={() => logDose(r.id, 'skipped')}
+                          className="bg-gray-800 rounded-lg px-3 py-1.5"
+                        >
+                          <Text className="text-gray-400 text-xs font-medium">✗ Skip</Text>
+                        </Pressable>
+                      </>
+                    ) : (
+                      <>
+                        <Text className={`text-xs font-medium ${todayLogs[r.id] === 'taken' ? 'text-green-400' : 'text-gray-500'}`}>
+                          {todayLogs[r.id] === 'taken' ? '✓ Taken today' : '✗ Skipped today'}
+                        </Text>
+                        <Pressable
+                          onPress={() => logDose(r.id, todayLogs[r.id] === 'taken' ? 'skipped' : 'taken')}
+                          hitSlop={8}
+                        >
+                          <Text className="text-gray-600 text-xs">change</Text>
+                        </Pressable>
+                      </>
+                    )}
                   </View>
 
                   {/* Shortfall result */}
