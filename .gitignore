@@ -8,3 +8,6 @@ server/package-lock.json
 
 # Dev-only seed data (local SQLite seeding, not for production)
 app/src/db/seed.dev.ts
+
+# Git worktrees
+.worktrees/
