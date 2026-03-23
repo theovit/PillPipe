@@ -966,7 +966,7 @@ export default function RegimensScreen() {
       )}
 
       {/* ── New Session Modal ── */}
-      <Modal visible={sessionModal} animationType="slide" presentationStyle="pageSheet">
+      <Modal visible={sessionModal} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => { setSessionModal(false); setSelectedTemplateId(''); }}>
         <View className="flex-1 bg-background px-5 pt-6">
           <View className="flex-row items-center justify-between mb-6">
             <Text className="text-white text-lg font-semibold">New Session</Text>
@@ -1022,7 +1022,7 @@ export default function RegimensScreen() {
       </Modal>
 
       {/* ── Edit Session Modal ── */}
-      <Modal visible={editModal} animationType="slide" presentationStyle="pageSheet">
+      <Modal visible={editModal} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setEditModal(false)}>
         <ScrollView className="flex-1 bg-background" contentContainerClassName="px-5 pt-6 pb-10">
           <View className="flex-row items-center justify-between mb-6">
             <Text className="text-white text-lg font-semibold">Edit Session</Text>
@@ -1070,7 +1070,7 @@ export default function RegimensScreen() {
       </Modal>
 
       {/* ── Shopping List Modal ── */}
-      <Modal visible={shoppingListModal} animationType="slide" presentationStyle="pageSheet">
+      <Modal visible={shoppingListModal} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShoppingListModal(false)}>
         <View className="flex-1 bg-background px-5 pt-6">
           <View className="flex-row items-center justify-between mb-5">
             <Text className="text-white text-lg font-semibold">Shopping List</Text>
@@ -1143,7 +1143,7 @@ export default function RegimensScreen() {
       </Modal>
 
       {/* Template name modal */}
-      <Modal visible={templateModal} animationType="fade" transparent>
+      <Modal visible={templateModal} animationType="fade" transparent onRequestClose={() => setTemplateModal(false)}>
         <View className="flex-1 bg-black/60 items-center justify-center px-6">
           <View className="bg-gray-900 border border-gray-700 rounded-2xl p-6 w-full">
             <Text className="text-white font-semibold text-base mb-4">Save as Template</Text>
@@ -1174,7 +1174,7 @@ export default function RegimensScreen() {
       </Modal>
 
       {/* ── Add Regimen Modal ── */}
-      <Modal visible={regimenModal} animationType="slide" presentationStyle="pageSheet">
+      <Modal visible={regimenModal} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setRegimenModal(false)}>
         <View className="flex-1 bg-background px-5 pt-6">
           <View className="flex-row items-center justify-between mb-6">
             <Text className="text-white text-lg font-semibold">Add Regimen</Text>
@@ -1208,7 +1208,7 @@ export default function RegimensScreen() {
       </Modal>
 
       {/* ── Phase Editor Modal ── */}
-      <Modal visible={phaseModal} animationType="slide" presentationStyle="pageSheet">
+      <Modal visible={phaseModal} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setPhaseModal(false)}>
         <ScrollView className="flex-1 bg-background" contentContainerClassName="px-5 pt-6 pb-10">
           <View className="flex-row items-center justify-between mb-6">
             <Text className="text-white text-lg font-semibold">

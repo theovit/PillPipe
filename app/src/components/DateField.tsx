@@ -6,6 +6,7 @@
 import React, { useState } from 'react';
 import { Platform, Pressable, Text, TextInput, View } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
+import { formatDate } from '@/utils/dates';
 
 interface Props {
   value: string;          // YYYY-MM-DD
@@ -50,7 +51,7 @@ export default function DateField({ value, onChange, placeholder = 'Select date'
         className={`${inputCls} justify-center`}
       >
         <Text className={value ? 'text-gray-200 text-base' : 'text-gray-600 text-base'}>
-          {value || placeholder}
+          {value ? formatDate(value) : placeholder}
         </Text>
       </Pressable>
       {showPicker && (
