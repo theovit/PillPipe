@@ -11,6 +11,7 @@ import RegimensScreen from '@/screens/RegimensScreen';
 import SupplementsScreen from '@/screens/SupplementsScreen';
 import SettingsScreen from '@/screens/SettingsScreen';
 import '@/utils/notifications'; // registers setNotificationHandler at app startup
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 
 const Tab = createBottomTabNavigator();
 
@@ -36,9 +37,10 @@ export default function App() {
   }, []);
 
   return (
-    <NavigationContainer>
-      <StatusBar style="light" />
-      <Tab.Navigator
+    <SafeAreaProvider>
+      <NavigationContainer>
+        <StatusBar style="light" />
+        <Tab.Navigator
         screenOptions={{
           headerStyle: { backgroundColor: '#0b0d12' },
           headerTintColor: '#e2e6ef',
@@ -72,7 +74,8 @@ export default function App() {
             tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 20 }}>⚙️</Text>,
           }}
         />
-      </Tab.Navigator>
-    </NavigationContainer>
+        </Tab.Navigator>
+      </NavigationContainer>
+    </SafeAreaProvider>
   );
 }
