@@ -75,6 +75,13 @@ async function migrate(db: SQLite.SQLiteDatabase): Promise<void> {
       created_at  TEXT DEFAULT (datetime('now')),
       UNIQUE (regimen_id, log_date)
     );
+
+    CREATE TABLE IF NOT EXISTS session_templates (
+      id         TEXT PRIMARY KEY,
+      name       TEXT NOT NULL,
+      data       TEXT NOT NULL,
+      created_at TEXT DEFAULT (datetime('now'))
+    );
   `);
 }
 
