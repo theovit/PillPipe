@@ -104,53 +104,54 @@ export default function SettingsScreen() {
               setRestoreWorking(true);
               try {
                 const db = await getDb();
-                await db.execAsync(`
-                  DELETE FROM dose_log;
-                  DELETE FROM phases;
-                  DELETE FROM regimens;
-                  DELETE FROM sessions;
-                  DELETE FROM supplements;
-                `);
-                for (const row of (data.supplements ?? [])) {
-                  const keys = Object.keys(row).join(',');
-                  const placeholders = Object.keys(row).map(() => '?').join(',');
-                  await db.runAsync(
-                    `INSERT OR IGNORE INTO supplements (${keys}) VALUES (${placeholders})`,
-                    Object.values(row) as any[],
-                  );
-                }
-                for (const row of (data.sessions ?? [])) {
-                  const keys = Object.keys(row).join(',');
-                  const placeholders = Object.keys(row).map(() => '?').join(',');
-                  await db.runAsync(
-                    `INSERT OR IGNORE INTO sessions (${keys}) VALUES (${placeholders})`,
-                    Object.values(row) as any[],
-                  );
-                }
-                for (const row of (data.regimens ?? [])) {
-                  const keys = Object.keys(row).join(',');
-                  const placeholders = Object.keys(row).map(() => '?').join(',');
-                  await db.runAsync(
-                    `INSERT OR IGNORE INTO regimens (${keys}) VALUES (${placeholders})`,
-                    Object.values(row) as any[],
-                  );
-                }
-                for (const row of (data.phases ?? [])) {
-                  const keys = Object.keys(row).join(',');
-                  const placeholders = Object.keys(row).map(() => '?').join(',');
-                  await db.runAsync(
-                    `INSERT OR IGNORE INTO phases (${keys}) VALUES (${placeholders})`,
-                    Object.values(row) as any[],
-                  );
-                }
-                for (const row of (data.dose_log ?? [])) {
-                  const keys = Object.keys(row).join(',');
-                  const placeholders = Object.keys(row).map(() => '?').join(',');
-                  await db.runAsync(
-                    `INSERT OR IGNORE INTO dose_log (${keys}) VALUES (${placeholders})`,
-                    Object.values(row) as any[],
-                  );
-                }
+                await db.withExclusiveTransactionAsync(async (txn) => {
+                  await txn.runAsync('DELETE FROM dose_log');
+                  await txn.runAsync('DELETE FROM phases');
+                  await txn.runAsync('DELETE FROM regimens');
+                  await txn.runAsync('DELETE FROM sessions');
+                  await txn.runAsync('DELETE FROM supplements');
+
+                  for (const row of (data.supplements ?? [])) {
+                    const keys = Object.keys(row).join(',');
+                    const placeholders = Object.keys(row).map(() => '?').join(',');
+                    await txn.runAsync(
+                      `INSERT OR IGNORE INTO supplements (${keys}) VALUES (${placeholders})`,
+                      Object.values(row) as any[],
+                    );
+                  }
+                  for (const row of (data.sessions ?? [])) {
+                    const keys = Object.keys(row).join(',');
+                    const placeholders = Object.keys(row).map(() => '?').join(',');
+                    await txn.runAsync(
+                      `INSERT OR IGNORE INTO sessions (${keys}) VALUES (${placeholders})`,
+                      Object.values(row) as any[],
+                    );
+                  }
+                  for (const row of (data.regimens ?? [])) {
+                    const keys = Object.keys(row).join(',');
+                    const placeholders = Object.keys(row).map(() => '?').join(',');
+                    await txn.runAsync(
+                      `INSERT OR IGNORE INTO regimens (${keys}) VALUES (${placeholders})`,
+                      Object.values(row) as any[],
+                    );
+                  }
+                  for (const row of (data.phases ?? [])) {
+                    const keys = Object.keys(row).join(',');
+                    const placeholders = Object.keys(row).map(() => '?').join(',');
+                    await txn.runAsync(
+                      `INSERT OR IGNORE INTO phases (${keys}) VALUES (${placeholders})`,
+                      Object.values(row) as any[],
+                    );
+                  }
+                  for (const row of (data.dose_log ?? [])) {
+                    const keys = Object.keys(row).join(',');
+                    const placeholders = Object.keys(row).map(() => '?').join(',');
+                    await txn.runAsync(
+                      `INSERT OR IGNORE INTO dose_log (${keys}) VALUES (${placeholders})`,
+                      Object.values(row) as any[],
+                    );
+                  }
+                });
                 Alert.alert('Restored', 'Backup restored successfully. Navigate to Regimens to see your data.');
               } catch (e) {
                 Alert.alert('Restore failed', String(e));
