@@ -7,9 +7,9 @@ App is currently in **alpha** — items marked [x] are scaffolded but may not be
 
 ## Needs Fixing (built but broken)
 
-- [ ] Adherence calendar — built but not working correctly; verify parity with web
-- [ ] Push notifications — local scheduling unreliable; fix and verify
-- [ ] Backup & restore — partially implemented; fix JSON export/import end-to-end
+- [x] Adherence calendar — built but not working correctly; verify parity with web
+- [x] Push notifications — local scheduling unreliable; fix and verify
+- [x] Backup & restore — partially implemented; fix JSON export/import end-to-end
 
 ---
 
@@ -17,10 +17,16 @@ App is currently in **alpha** — items marked [x] are scaffolded but may not be
 
 - [x] Edit session (change dates, notes)
 - [x] Copy / duplicate session with new dates
-- [ ] Session templates — save as template, create new session from template
+- [x] Session templates — save as template, create new session from template
 - [ ] Multiple sessions open simultaneously (N/A on mobile — single-open is fine)
 - [x] Regimen notes field (textarea, auto-save on blur)
 - [x] Native date pickers — `@react-native-community/datetimepicker`
+
+---
+
+## High
+
+- [ ] Include session_templates in backup export and clear-all-data (currently excluded)
 
 ---
 
@@ -29,10 +35,10 @@ App is currently in **alpha** — items marked [x] are scaffolded but may not be
 - [x] Add / edit / delete phases
 - [x] Indefinite phase support
 - [x] Days-of-week selector
-- [ ] Phase coverage indicator — show defined days vs session total, remaining, status badge
-- [ ] Duration display in weeks ("4wk") when divisible by 7, matching web
-- [ ] Dosage label: show "/dose" instead of "/day" (web terminology)
-- [ ] Day labels: use "Su Mo Tu We Th Fr Sa" not "S M T W T F S" (ambiguous)
+- [x] Phase coverage indicator — show defined days vs session total, remaining, status badge
+- [x] Duration display in weeks ("4wk") when divisible by 7, matching web
+- [x] Dosage label: show "/dose" instead of "/day" (web terminology)
+- [x] Day labels: use "Su Mo Tu We Th Fr Sa" not "S M T W T F S" (ambiguous)
 
 ---
 
@@ -43,7 +49,7 @@ App is currently in **alpha** — items marked [x] are scaffolded but may not be
 - [x] Adherence calendar
 - [x] Reminder time picker per regimen
 - [x] Push notifications — `expo-notifications` local scheduled reminders
-- [ ] Notification tap → auto-log dose
+- [x] Notification tap → auto-log dose
 
 ---
 
@@ -55,11 +61,11 @@ App is currently in **alpha** — items marked [x] are scaffolded but may not be
 
 ## Supplements
 
-- [ ] Drops per ml field in supplement form (missing from form; field exists in DB)
-- [ ] Drops inventory display: "X drops (≈Y ml)" conversion
-- [ ] Reorder alert — threshold + units/days mode + "⚠ low" badge on card
-- [ ] Unit-aware bottle label ("Caps/bottle", "Tabs/bottle", "Volume/bottle (ml)")
-- [ ] Delete supplement from inside edit modal (not overlapping on card)
+- [x] Drops per ml field in supplement form (missing from form; field exists in DB)
+- [x] Drops inventory display: "X drops (≈Y ml)" conversion
+- [x] Reorder alert — threshold + units/days mode + "⚠ low" badge on card
+- [x] Unit-aware bottle label ("Caps/bottle", "Tabs/bottle", "Volume/bottle (ml)")
+- [x] Delete supplement from inside edit modal (not overlapping on card)
 
 ---
 
@@ -67,7 +73,7 @@ App is currently in **alpha** — items marked [x] are scaffolded but may not be
 
 - [x] Shortfall engine (local calculation)
 - [x] Shortfall alert card (covered / bottles needed / cost / on-hand)
-- [ ] Show "X days short" in shortfall alert (matches web)
+- [x] Show "X days short" in shortfall alert (matches web)
 
 ---
 
@@ -82,8 +88,8 @@ App is currently in **alpha** — items marked [x] are scaffolded but may not be
 ## Settings
 
 - [x] Date format preference (MM/DD/YYYY, DD/MM/YYYY, YYYY-MM-DD)
-- [ ] Backup & restore — JSON export/import of all data
-- [ ] Color scheme / accent color preference
+- [x] Backup & restore — JSON export/import of all data
+- [x] Color scheme / accent color preference
 - [x] Push notification permission request + status
 - [ ] Google Drive backup (web-only — N/A for offline app)
 - [x] App version display
