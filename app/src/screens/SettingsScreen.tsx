@@ -17,6 +17,7 @@ export default function SettingsScreen() {
   const [notifStatus, setNotifStatus] = useState<string>('unknown');
   const [backupWorking, setBackupWorking] = useState(false);
   const [restoreWorking, setRestoreWorking] = useState(false);
+  const [templates, setTemplates] = useState<{ id: string; name: string; created_at: string }[]>([]);
 
   useEffect(() => {
     const prefs = loadPrefs();
@@ -25,7 +26,31 @@ export default function SettingsScreen() {
     Notifications.getPermissionsAsync()
       .then((s) => setNotifStatus(s.status))
       .catch(() => setNotifStatus('unavailable'));
+    loadTemplates();
   }, []);
+
+  async function loadTemplates() {
+    try {
+      const db = await getDb();
+      const rows = await db.getAllAsync<{ id: string; name: string; created_at: string }>(
+        'SELECT id, name, created_at FROM session_templates ORDER BY created_at DESC',
+      );
+      setTemplates(rows);
+    } catch { /* no-op */ }
+  }
+
+  async function deleteTemplate(id: string) {
+    Alert.alert('Delete template?', 'This cannot be undone.', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete', style: 'destructive', onPress: async () => {
+          const db = await getDb();
+          await db.runAsync('DELETE FROM session_templates WHERE id=?', [id]);
+          loadTemplates();
+        },
+      },
+    ]);
+  }
 
   function applyDateFormat(fmt: AppPrefs['dateFormat']) {
     setDateFormat(fmt);
@@ -227,6 +252,23 @@ export default function SettingsScreen() {
           ))}
         </View>
       </View>
+
+      {templates.length > 0 && (
+        <View className="bg-gray-900 border border-gray-800 rounded-xl p-4 mb-4">
+          <Text className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-3">Templates</Text>
+          {templates.map((t) => (
+            <View key={t.id} className="flex-row items-center justify-between py-2 border-b border-gray-800 last:border-b-0">
+              <View className="flex-1 mr-3">
+                <Text className="text-gray-200 text-sm font-medium">{t.name}</Text>
+                <Text className="text-gray-600 text-xs">{t.created_at.slice(0, 10)}</Text>
+              </View>
+              <Pressable onPress={() => deleteTemplate(t.id)} hitSlop={8}>
+                <Text className="text-red-400 text-sm">Delete</Text>
+              </Pressable>
+            </View>
+          ))}
+        </View>
+      )}
 
       {/* Accent color */}
       <View className="bg-gray-900 border border-gray-800 rounded-xl p-4 mb-4">

@@ -15,6 +15,7 @@ import {
   View,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
+import * as SQLite from 'expo-sqlite';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import AdherenceCalendar from '@/components/AdherenceCalendar';
@@ -79,6 +80,12 @@ export default function RegimensScreen() {
   const [reminderTimes, setReminderTimes] = useState<Record<string, string>>({});
   const [showReminderPicker, setShowReminderPicker] = useState<string | null>(null);
 
+  // Templates
+  const [templates, setTemplates] = useState<{ id: string; name: string; data: string }[]>([]);
+  const [templateModal, setTemplateModal] = useState(false);
+  const [templateName, setTemplateName] = useState('');
+  const [selectedTemplateId, setSelectedTemplateId] = useState('');
+
   // Shopping list modal
   const [shoppingListModal, setShoppingListModal] = useState(false);
 
@@ -96,6 +103,7 @@ export default function RegimensScreen() {
   useFocusEffect(
     useCallback(() => {
       loadSessions();
+      loadTemplates();
     }, []),
   );
 
@@ -111,6 +119,76 @@ export default function RegimensScreen() {
       // SQLite unavailable (e.g. web preview)
     }
     setLoading(false);
+  }
+
+  async function loadTemplates() {
+    try {
+      const db = await getDb();
+      const rows = await db.getAllAsync<{ id: string; name: string; data: string }>(
+        'SELECT id, name, data FROM session_templates ORDER BY created_at DESC',
+      );
+      setTemplates(rows);
+    } catch { /* no-op */ }
+  }
+
+  async function saveAsTemplate() {
+    if (!editingSession || !templateName.trim()) return;
+    try {
+      const db = await getDb();
+      const regs = await db.getAllAsync<Regimen>(
+        'SELECT * FROM regimens WHERE session_id = ?',
+        [editingSession.id],
+      );
+      const regimenData = await Promise.all(
+        regs.map(async (r) => {
+          const ps = await db.getAllAsync<Phase>(
+            'SELECT dosage, duration_days, days_of_week, indefinite, sequence_order FROM phases WHERE regimen_id = ? ORDER BY sequence_order',
+            [r.id],
+          );
+          return { supplement_id: r.supplement_id, notes: r.notes, phases: ps };
+        }),
+      );
+      const data = JSON.stringify({ regimens: regimenData });
+      await db.runAsync(
+        'INSERT INTO session_templates (id, name, data) VALUES (?, ?, ?)',
+        [uuid(), templateName.trim(), data],
+      );
+      setTemplateModal(false);
+      setTemplateName('');
+      await loadTemplates();
+      Alert.alert('Template saved', `"${templateName.trim()}" saved.`);
+    } catch (e) {
+      Alert.alert('Error', String(e));
+    }
+  }
+
+  async function applyTemplate(db: SQLite.SQLiteDatabase, sessionId: string, templateId: string) {
+    const row = await db.getFirstAsync<{ data: string }>(
+      'SELECT data FROM session_templates WHERE id = ?',
+      [templateId],
+    );
+    if (!row) return;
+    const parsed = JSON.parse(row.data) as {
+      regimens: Array<{ supplement_id: string; notes: string | null; phases: Phase[] }>;
+    };
+    for (const tr of parsed.regimens) {
+      const supExists = await db.getFirstAsync<{ id: string }>(
+        'SELECT id FROM supplements WHERE id = ?',
+        [tr.supplement_id],
+      );
+      if (!supExists) continue;
+      const newRegimenId = uuid();
+      await db.runAsync(
+        'INSERT INTO regimens (id, session_id, supplement_id, notes) VALUES (?, ?, ?, ?)',
+        [newRegimenId, sessionId, tr.supplement_id, tr.notes],
+      );
+      for (const p of tr.phases) {
+        await db.runAsync(
+          'INSERT INTO phases (id, regimen_id, dosage, duration_days, days_of_week, indefinite, sequence_order) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          [uuid(), newRegimenId, p.dosage, p.duration_days, p.days_of_week, p.indefinite, p.sequence_order],
+        );
+      }
+    }
   }
 
   async function openSession(id: string) {
@@ -316,12 +394,18 @@ export default function RegimensScreen() {
     if (sessionTarget <= sessionStart) { Alert.alert('Target must be after start date'); return; }
     try {
       const db = await getDb();
+      const newId = uuid();
       await db.runAsync(
         'INSERT INTO sessions (id,start_date,target_date,notes) VALUES (?,?,?,?)',
-        [uuid(), sessionStart, sessionTarget, sessionNotes.trim() || null],
+        [newId, sessionStart, sessionTarget, sessionNotes.trim() || null],
       );
+      if (selectedTemplateId) {
+        await applyTemplate(db, newId, selectedTemplateId);
+        setSelectedTemplateId('');
+      }
       setSessionModal(false);
-      loadSessions();
+      await loadSessions();
+      setOpenSessionId(newId);
     } catch {
       Alert.alert('Error', 'Could not create session');
     }
@@ -564,7 +648,7 @@ export default function RegimensScreen() {
       {/* Sessions list */}
       <View className="flex-row items-center justify-between mb-3">
         <Text className="text-gray-400 text-xs font-semibold uppercase tracking-wider">Sessions</Text>
-        <Pressable onPress={() => setSessionModal(true)} className="bg-violet-600 rounded-lg px-3 py-1.5">
+        <Pressable onPress={() => { setSelectedTemplateId(''); setSessionModal(true); }} className="bg-violet-600 rounded-lg px-3 py-1.5">
           <Text className="text-white text-sm font-medium">+ New</Text>
         </Pressable>
       </View>
@@ -886,7 +970,7 @@ export default function RegimensScreen() {
         <View className="flex-1 bg-background px-5 pt-6">
           <View className="flex-row items-center justify-between mb-6">
             <Text className="text-white text-lg font-semibold">New Session</Text>
-            <Pressable onPress={() => setSessionModal(false)}>
+            <Pressable onPress={() => { setSessionModal(false); setSelectedTemplateId(''); }}>
               <Text className="text-gray-400">Cancel</Text>
             </Pressable>
           </View>
@@ -908,6 +992,28 @@ export default function RegimensScreen() {
               <Text className={labelCls}>Notes</Text>
               <TextInput className={inputCls} value={sessionNotes} onChangeText={setSessionNotes} placeholder="e.g. Spring protocol" placeholderTextColor="#4b5563" />
             </View>
+            {templates.length > 0 && (
+              <View>
+                <Text className={labelCls}>From template (optional)</Text>
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} className="flex-row gap-2">
+                  <Pressable
+                    onPress={() => setSelectedTemplateId('')}
+                    className={`px-3 py-1.5 rounded-lg mr-2 ${selectedTemplateId === '' ? 'bg-violet-600' : 'bg-gray-800 border border-gray-700'}`}
+                  >
+                    <Text className={`text-sm ${selectedTemplateId === '' ? 'text-white' : 'text-gray-400'}`}>None</Text>
+                  </Pressable>
+                  {templates.map((t) => (
+                    <Pressable
+                      key={t.id}
+                      onPress={() => setSelectedTemplateId(t.id)}
+                      className={`px-3 py-1.5 rounded-lg mr-2 ${selectedTemplateId === t.id ? 'bg-violet-600' : 'bg-gray-800 border border-gray-700'}`}
+                    >
+                      <Text className={`text-sm ${selectedTemplateId === t.id ? 'text-white' : 'text-gray-400'}`}>{t.name}</Text>
+                    </Pressable>
+                  ))}
+                </ScrollView>
+              </View>
+            )}
           </View>
           <Pressable onPress={createSession} className="mt-8 bg-violet-600 rounded-xl py-3.5 items-center">
             <Text className="text-white font-semibold text-base">Create Session</Text>
@@ -944,6 +1050,12 @@ export default function RegimensScreen() {
           </View>
           <Pressable onPress={saveEditSession} className="mt-8 bg-violet-600 rounded-xl py-3.5 items-center">
             <Text className="text-white font-semibold text-base">Save Changes</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => { setTemplateModal(true); setTemplateName(''); }}
+            className="mt-3 bg-gray-800 border border-gray-700 rounded-xl py-3.5 items-center"
+          >
+            <Text className="text-gray-300 font-medium text-base">Save as Template</Text>
           </Pressable>
           <Pressable onPress={copySession} className="mt-3 bg-gray-800 border border-gray-700 rounded-xl py-3.5 items-center">
             <Text className="text-gray-300 font-medium text-base">Duplicate Session</Text>
@@ -1027,6 +1139,37 @@ export default function RegimensScreen() {
               );
             })()}
           </ScrollView>
+        </View>
+      </Modal>
+
+      {/* Template name modal */}
+      <Modal visible={templateModal} animationType="fade" transparent>
+        <View className="flex-1 bg-black/60 items-center justify-center px-6">
+          <View className="bg-gray-900 border border-gray-700 rounded-2xl p-6 w-full">
+            <Text className="text-white font-semibold text-base mb-4">Save as Template</Text>
+            <TextInput
+              className={inputCls}
+              value={templateName}
+              onChangeText={setTemplateName}
+              placeholder="Template name"
+              placeholderTextColor="#4b5563"
+              autoFocus
+            />
+            <View className="flex-row gap-3 mt-4">
+              <Pressable
+                onPress={() => setTemplateModal(false)}
+                className="flex-1 bg-gray-800 rounded-xl py-3 items-center"
+              >
+                <Text className="text-gray-400 font-medium">Cancel</Text>
+              </Pressable>
+              <Pressable
+                onPress={saveAsTemplate}
+                className="flex-1 bg-violet-600 rounded-xl py-3 items-center"
+              >
+                <Text className="text-white font-semibold">Save</Text>
+              </Pressable>
+            </View>
+          </View>
         </View>
       </Modal>
 
