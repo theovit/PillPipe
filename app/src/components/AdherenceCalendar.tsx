@@ -14,7 +14,7 @@ interface Props {
 }
 
 function isoDate(d: Date): string {
-  return d.toISOString().slice(0, 10);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
 export default function AdherenceCalendar({ regimenId, sessionStartDate, todayStatus: todayStatusProp, onLogToday }: Props) {
