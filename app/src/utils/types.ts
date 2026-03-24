@@ -56,3 +56,10 @@ export interface DoseLog {
   status: 'taken' | 'skipped';
   created_at: string;
 }
+
+export interface RegNotif {
+  id: string;
+  regimen_id: string;
+  type: 'morning' | 'lunch' | 'dinner' | 'custom';
+  custom_time: string | null;
+}
