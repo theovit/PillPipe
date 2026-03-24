@@ -211,7 +211,7 @@ export default function SupplementsScreen() {
       )}
 
       {/* Add / Edit Modal */}
-      <Modal visible={modalVisible} animationType="slide" presentationStyle="pageSheet">
+      <Modal visible={modalVisible} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setModalVisible(false)}>
         <ScrollView className="flex-1 bg-background" contentContainerClassName="px-5 pt-6 pb-10">
           <View className="flex-row items-center justify-between mb-6">
             <Text className="text-white text-lg font-semibold">
