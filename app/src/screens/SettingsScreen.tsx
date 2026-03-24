@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { Alert, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as Notifications from 'expo-notifications';
-import * as FileSystem from 'expo-file-system';
+import { File, Paths } from 'expo-file-system/next';
 import * as Sharing from 'expo-sharing';
 import * as DocumentPicker from 'expo-document-picker';
 import { getDb } from '@/db/database';
@@ -142,9 +142,9 @@ export default function SettingsScreen() {
       };
       const json = JSON.stringify(backup, null, 2);
       const date = new Date().toISOString().slice(0, 10);
-      const path = `${FileSystem.cacheDirectory}pillpipe-backup-${date}.json`;
-      await FileSystem.writeAsStringAsync(path, json);
-      await Sharing.shareAsync(path, { mimeType: 'application/json', UTI: 'public.json' });
+      const file = new File(Paths.cache, `pillpipe-backup-${date}.json`);
+      await file.write(json);
+      await Sharing.shareAsync(file.uri, { mimeType: 'application/json', UTI: 'public.json' });
     } catch (e) {
       Alert.alert('Backup failed', String(e));
     }
@@ -159,7 +159,7 @@ export default function SettingsScreen() {
       });
       if (result.canceled || !result.assets?.[0]) return;
 
-      const json = await FileSystem.readAsStringAsync(result.assets[0].uri);
+      const json = await new File(result.assets[0].uri).text();
       const data = JSON.parse(json);
 
       if (!data.supplements || !data.sessions) {
