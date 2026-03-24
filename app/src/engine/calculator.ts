@@ -73,7 +73,7 @@ export function calculate({
 
     const isIndef = phase.indefinite === 1 || phase.indefinite === true;
     const phaseDays = isIndef ? totalDays - currentDay : Number(phase.duration_days);
-    const dosage = Number(phase.dosage);
+    const dosage = phase.dose_morning + phase.dose_lunch + phase.dose_dinner + phase.dose_custom;
 
     for (let d = 0; d < phaseDays; d++) {
       if (currentDay >= totalDays) break;
