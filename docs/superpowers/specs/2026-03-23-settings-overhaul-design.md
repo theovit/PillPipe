@@ -83,6 +83,7 @@ Logic (placed where `setSessionModal(true)` is called):
 
 ```ts
 const prefs = loadPrefs();
+setSessionStart(todayISO());
 if (prefs.defaultDuration > 0) {
   const d = new Date();
   d.setDate(d.getDate() + prefs.defaultDuration);
@@ -91,6 +92,8 @@ if (prefs.defaultDuration > 0) {
   setSessionTarget('');
 }
 ```
+
+`setSessionStart(todayISO())` resets the start date to today on each open, ensuring a clean form regardless of prior modal state.
 
 ---
 
@@ -112,7 +115,7 @@ import { rem } from 'nativewind';
 const fontScaleMap = { small: 12, medium: 14, large: 16 } as const;
 
 // Inside the initPrefs useEffect, after await initPrefs():
-rem.setInput(fontScaleMap[loadPrefs().fontSize]);
+rem.set(fontScaleMap[loadPrefs().fontSize]);
 setPrefsReady(true);
 ```
 
@@ -122,7 +125,21 @@ setPrefsReady(true);
 | Medium | 14px | ~14px (unchanged default) |
 | Large | 16px | ~16px |
 
-Because `rem.setInput` is called before `setPrefsReady(true)`, the font scale is applied before any screen renders — no flash of wrong size.
+Because `rem.set()` is called before `setPrefsReady(true)`, the font scale is applied before any screen renders — no flash of wrong size.
+
+**In SettingsScreen — immediate application:**
+
+When the user changes font size, also call `rem.set()` so the change takes effect immediately without a restart:
+
+```ts
+function applyFontSize(size: AppPrefs['fontSize']) {
+  setFontSize(size);
+  savePrefs({ fontSize: size });
+  rem.set(fontScaleMap[size]);
+}
+```
+
+This means `rem` must be imported in `SettingsScreen.tsx` as well.
 
 ---
 
@@ -131,9 +148,9 @@ Because `rem.setInput` is called before `setPrefsReady(true)`, the font scale is
 | File | Change |
 |---|---|
 | `app/src/utils/prefs.ts` | Add `fontSize` and `defaultDuration` to `AppPrefs` and `DEFAULT` |
-| `app/src/screens/SettingsScreen.tsx` | Collapsible sections; Preferences section with date format + duration + font size |
-| `app/src/screens/RegimensScreen.tsx` | Pre-fill target date in New Session modal using `defaultDuration` |
-| `app/App.tsx` | Call `rem.setInput()` after `initPrefs()` resolves |
+| `app/src/screens/SettingsScreen.tsx` | Collapsible sections; Preferences section with date format + duration + font size; call `rem.set()` on font size change |
+| `app/src/screens/RegimensScreen.tsx` | Pre-fill target date and reset start date in New Session modal using `defaultDuration` |
+| `app/App.tsx` | Call `rem.set()` after `initPrefs()` resolves, before `setPrefsReady(true)` |
 
 ---
 
