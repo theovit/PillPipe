@@ -89,7 +89,6 @@ export default function App() {
               'SELECT * FROM regimen_notifications WHERE regimen_id = ?',
               [r.id],
             );
-            if (entries.length === 0) continue;
             const sup = await db.getFirstAsync<{ name: string }>(
               'SELECT name FROM supplements WHERE id = ?',
               [r.supplement_id],
