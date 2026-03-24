@@ -1,5 +1,7 @@
+// @atlas-entrypoint: App — substantial file
 import React, { useEffect, useState } from 'react';
-import { Alert, Pressable, ScrollView, Text, View } from 'react-native';
+import { Alert, Platform, Pressable, ScrollView, Text, View } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import * as Notifications from 'expo-notifications';
 import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
@@ -33,6 +35,10 @@ export default function SettingsScreen() {
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
   const [fontSize, setFontSize] = useState<FontSize>('medium');
   const [defaultDuration, setDefaultDuration] = useState<AppPrefs['defaultDuration']>(0);
+  const [showTimePicker, setShowTimePicker] = useState<'morning' | 'lunch' | 'dinner' | null>(null);
+  const [morningTime, setMorningTime] = useState<string>('08:00');
+  const [lunchTime, setLunchTime] = useState<string>('12:00');
+  const [dinnerTime, setDinnerTime] = useState<string>('18:00');
 
   function toggleSection(name: string) {
     setOpenSections(p => ({ ...p, [name]: !p[name] }));
@@ -44,6 +50,9 @@ export default function SettingsScreen() {
     setAccentColor(prefs.accentColor);
     setFontSize(prefs.fontSize);
     setDefaultDuration(prefs.defaultDuration);
+    setMorningTime(prefs.morningTime);
+    setLunchTime(prefs.lunchTime);
+    setDinnerTime(prefs.dinnerTime);
     Notifications.getPermissionsAsync()
       .then((s) => setNotifStatus(s.status))
       .catch(() => setNotifStatus('unavailable'));
@@ -92,6 +101,13 @@ export default function SettingsScreen() {
   function applyDefaultDuration(duration: AppPrefs['defaultDuration']) {
     setDefaultDuration(duration);
     savePrefs({ defaultDuration: duration });
+  }
+
+  function applyPresetTime(type: 'morning' | 'lunch' | 'dinner', time: string) {
+    if (type === 'morning') setMorningTime(time);
+    else if (type === 'lunch') setLunchTime(time);
+    else setDinnerTime(time);
+    savePrefs({ [`${type}Time`]: time } as any);
   }
 
   async function requestNotifications() {
@@ -231,19 +247,41 @@ export default function SettingsScreen() {
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Clear', style: 'destructive', onPress: async () => {
-            const db = await getDb();
-            await db.execAsync(`
-              DELETE FROM dose_log;
-              DELETE FROM phases;
-              DELETE FROM regimens;
-              DELETE FROM sessions;
-              DELETE FROM supplements;
-            `);
-            Alert.alert('Cleared', 'All data has been deleted.');
+            try {
+              const db = await getDb();
+              await db.execAsync('DELETE FROM dose_log;');
+              await db.execAsync('DELETE FROM phases;');
+              await db.execAsync('DELETE FROM regimens;');
+              await db.execAsync('DELETE FROM sessions;');
+              await db.execAsync('DELETE FROM supplements;');
+              Alert.alert('Cleared', 'All data has been deleted.');
+            } catch (e) {
+              Alert.alert('Error', 'Could not clear data: ' + String(e));
+            }
           },
         },
       ],
     );
+  }
+
+  async function sendTestNotification() {
+    try {
+      const { status } = await Notifications.getPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Notifications not enabled', 'Tap "Enable Notifications" first.');
+        return;
+      }
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: 'PillPipe',
+          body: 'Test notification — reminders are working!',
+        },
+        trigger: null,
+      });
+      Alert.alert('Sent', 'Check your notification tray.');
+    } catch (e) {
+      Alert.alert('Error', String(e));
+    }
   }
 
   const version: string = (appJson as any).expo.version;
@@ -365,7 +403,7 @@ export default function SettingsScreen() {
                   </Pressable>
                 ))}
               </View>
-              <Text className="text-gray-600 text-xs mt-2">Applies to all text in the app.</Text>
+              <Text className="text-gray-600 text-xs mt-2">Takes effect after restarting the app.</Text>
             </View>
           </View>
         )}
@@ -409,7 +447,47 @@ export default function SettingsScreen() {
                 <Text className="text-white text-sm font-medium">Enable Notifications</Text>
               </Pressable>
             ) : (
-              <Text className="text-gray-600 text-xs">Reminders fire at the time set on each regimen card.</Text>
+              <View className="gap-2">
+                <Text className="text-gray-600 text-xs mt-1 mb-2">
+                  Set default times for Morning, Lunch, and Dinner reminders.
+                  Changes apply on next app open.
+                </Text>
+                {(['morning', 'lunch', 'dinner'] as const).map((type) => {
+                  const label = type.charAt(0).toUpperCase() + type.slice(1);
+                  const time = type === 'morning' ? morningTime : type === 'lunch' ? lunchTime : dinnerTime;
+                  return (
+                    <Pressable
+                      key={type}
+                      onPress={() => setShowTimePicker(type)}
+                      className="flex-row items-center justify-between bg-gray-800 border border-gray-700 rounded-lg px-4 py-3"
+                    >
+                      <Text className="text-gray-300 text-sm font-medium">{label}</Text>
+                      <Text className="text-violet-400 text-sm font-mono">{time}</Text>
+                    </Pressable>
+                  );
+                })}
+                {showTimePicker && (
+                  <DateTimePicker
+                    value={(() => {
+                      const t = showTimePicker === 'morning' ? morningTime : showTimePicker === 'lunch' ? lunchTime : dinnerTime;
+                      return new Date(`1970-01-01T${t}:00`);
+                    })()}
+                    mode="time"
+                    display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                    onChange={(_, date) => {
+                      setShowTimePicker(null);
+                      if (date) {
+                        const hh = String(date.getHours()).padStart(2, '0');
+                        const mm = String(date.getMinutes()).padStart(2, '0');
+                        applyPresetTime(showTimePicker!, `${hh}:${mm}`);
+                      }
+                    }}
+                  />
+                )}
+                <Pressable onPress={sendTestNotification} className="bg-gray-800 border border-gray-700 rounded-lg px-4 py-2.5 items-center mt-1">
+                  <Text className="text-gray-300 text-sm font-medium">Send Test Notification</Text>
+                </Pressable>
+              </View>
             )}
           </View>
         )}
