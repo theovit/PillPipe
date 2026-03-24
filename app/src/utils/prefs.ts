@@ -6,15 +6,23 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export type AccentColor = 'violet' | 'red' | 'orange' | 'amber' | 'green' | 'blue';
+export type FontSize = 'small' | 'medium' | 'large';
 
 export interface AppPrefs {
   dateFormat: 'MM/DD/YYYY' | 'DD/MM/YYYY' | 'YYYY-MM-DD';
   accentColor: AccentColor;
+  fontSize: FontSize;
+  defaultDuration: 0 | 30 | 60 | 90 | 120;
 }
 
 const KEY = 'pillpipe_prefs';
 
-const DEFAULT: AppPrefs = { dateFormat: 'MM/DD/YYYY', accentColor: 'violet' };
+const DEFAULT: AppPrefs = {
+  dateFormat: 'MM/DD/YYYY',
+  accentColor: 'violet',
+  fontSize: 'medium',
+  defaultDuration: 0,
+};
 
 export const ACCENT_HEX: Record<AccentColor, string> = {
   violet: '#7c3aed',
