@@ -18,7 +18,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import DateTimePicker from '@react-native-community/datetimepicker';
-import * as FileSystem from 'expo-file-system';
+import { File, Paths } from 'expo-file-system/next';
 import type { SQLiteDatabase } from 'expo-sqlite';
 import * as Sharing from 'expo-sharing';
 import AdherenceCalendar from '@/components/AdherenceCalendar';
@@ -42,7 +42,7 @@ function phaseDurLabel(days: number): string {
 }
 
 function phaseLabel(p: Phase, unit: string): string {
-  const isIndef = p.indefinite === 1 || p.indefinite === true;
+  const isIndef = p.indefinite === 1;
   const dur = isIndef ? '∞' : phaseDurLabel(p.duration_days);
   const dow = p.days_of_week ? JSON.parse(p.days_of_week) as number[] : null;
   const dowStr = dow && dow.length > 0 && dow.length < 7
@@ -438,9 +438,9 @@ export default function RegimensScreen() {
       `,,,,,,,$${total.toFixed(2)},Total`,
     ].join('\n');
     try {
-      const path = `${FileSystem.cacheDirectory}pillpipe-${session.target_date}.csv`;
-      await FileSystem.writeAsStringAsync(path, csv);
-      await Sharing.shareAsync(path, { mimeType: 'text/csv', UTI: 'public.comma-separated-values-text' });
+      const file = new File(Paths.cache, `pillpipe-${session.target_date}.csv`);
+      await file.write(csv);
+      await Sharing.shareAsync(file.uri, { mimeType: 'text/csv', UTI: 'public.comma-separated-values-text' });
     } catch { Alert.alert('Error', 'Could not export CSV'); }
   }
 
@@ -537,7 +537,7 @@ export default function RegimensScreen() {
         setPhaseDurationUnit('days');
         setPhaseDuration(String(d));
       }
-      setPhaseIndefinite(existing.indefinite === 1 || existing.indefinite === true);
+      setPhaseIndefinite(existing.indefinite === 1);
       setPhaseDow(existing.days_of_week ? JSON.parse(existing.days_of_week) as number[] : []);
     } else {
       setEditingPhase(null);
@@ -960,9 +960,9 @@ export default function RegimensScreen() {
                       const totalDays = Math.ceil(
                         (new Date(openSess.target_date).getTime() - new Date(openSess.start_date).getTime()) / 86400000,
                       );
-                      const hasIndef = regimenPhases.some((p) => p.indefinite === 1 || p.indefinite === true);
+                      const hasIndef = regimenPhases.some((p) => p.indefinite === 1);
                       const definedDays = regimenPhases.reduce((sum, p) => {
-                        if (p.indefinite === 1 || p.indefinite === true) return sum;
+                        if (p.indefinite === 1) return sum;
                         return sum + p.duration_days;
                       }, 0);
                       const remaining = totalDays - definedDays;
@@ -1200,7 +1200,7 @@ export default function RegimensScreen() {
                         Shortfall: <Text className="text-amber-400 font-mono">{fmtAmount(res.shortfall ?? 0, r.unit ?? 'capsules')}</Text>
                       </Text>
                       <Text className="text-gray-400 text-sm">
-                        On hand: <Text className="text-gray-300 font-mono">{fmtAmount(res.onHandNow ?? 0, r.unit ?? 'capsules')}</Text>
+                        On hand: <Text className="text-gray-300 font-mono">{fmtAmount(res.currentOnHand ?? 0, r.unit ?? 'capsules')}</Text>
                       </Text>
                     </View>
                     <View className="items-end gap-1">
