@@ -548,6 +548,7 @@ export default function RegimensScreen() {
       }
       setPhaseIndefinite(existing.indefinite === 1);
       setPhaseDow(existing.days_of_week ? JSON.parse(existing.days_of_week) as number[] : []);
+      setShowPhaseCustomPicker(false);
     } else {
       setEditingPhase(null);
       setPhaseMorning('0');
