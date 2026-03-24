@@ -11,9 +11,55 @@ import RegimensScreen from '@/screens/RegimensScreen';
 import SupplementsScreen from '@/screens/SupplementsScreen';
 import SettingsScreen from '@/screens/SettingsScreen';
 import '@/utils/notifications'; // registers setNotificationHandler at app startup
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const Tab = createBottomTabNavigator();
+
+function Navigation() {
+  const insets = useSafeAreaInsets();
+  return (
+    <Tab.Navigator
+      screenOptions={{
+        headerStyle: { backgroundColor: '#0b0d12' },
+        headerTintColor: '#e2e6ef',
+        headerTitleStyle: { fontWeight: '600' },
+        headerStatusBarHeight: insets.top,
+        tabBarStyle: {
+          backgroundColor: '#0b0d12',
+          borderTopColor: '#1a1d2a',
+          paddingBottom: insets.bottom,
+        },
+        tabBarActiveTintColor: '#7c3aed',
+        tabBarInactiveTintColor: '#4b5563',
+      }}
+    >
+      <Tab.Screen
+        name="Regimens"
+        component={RegimensScreen}
+        options={{
+          title: 'Regimens',
+          tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 20 }}>📋</Text>,
+        }}
+      />
+      <Tab.Screen
+        name="Supplements"
+        component={SupplementsScreen}
+        options={{
+          title: 'Supplements',
+          tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 20 }}>💊</Text>,
+        }}
+      />
+      <Tab.Screen
+        name="Settings"
+        component={SettingsScreen}
+        options={{
+          title: 'Settings',
+          tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 20 }}>⚙️</Text>,
+        }}
+      />
+    </Tab.Navigator>
+  );
+}
 
 export default function App() {
   useEffect(() => {
@@ -40,41 +86,7 @@ export default function App() {
     <SafeAreaProvider>
       <NavigationContainer>
         <StatusBar style="light" />
-        <Tab.Navigator
-        screenOptions={{
-          headerStyle: { backgroundColor: '#0b0d12' },
-          headerTintColor: '#e2e6ef',
-          headerTitleStyle: { fontWeight: '600' },
-          tabBarStyle: { backgroundColor: '#0b0d12', borderTopColor: '#1a1d2a' },
-          tabBarActiveTintColor: '#7c3aed',
-          tabBarInactiveTintColor: '#4b5563',
-        }}
-      >
-        <Tab.Screen
-          name="Regimens"
-          component={RegimensScreen}
-          options={{
-            title: 'Regimens',
-            tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 20 }}>📋</Text>,
-          }}
-        />
-        <Tab.Screen
-          name="Supplements"
-          component={SupplementsScreen}
-          options={{
-            title: 'Supplements',
-            tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 20 }}>💊</Text>,
-          }}
-        />
-        <Tab.Screen
-          name="Settings"
-          component={SettingsScreen}
-          options={{
-            title: 'Settings',
-            tabBarIcon: ({ color }) => <Text style={{ color, fontSize: 20 }}>⚙️</Text>,
-          }}
-        />
-        </Tab.Navigator>
+        <Navigation />
       </NavigationContainer>
     </SafeAreaProvider>
   );
