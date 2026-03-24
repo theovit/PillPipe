@@ -186,7 +186,7 @@ export default function RegimensScreen() {
       const regimenData = await Promise.all(
         regs.map(async (r) => {
           const ps = await db.getAllAsync<Phase>(
-            'SELECT dosage, duration_days, days_of_week, indefinite, sequence_order FROM phases WHERE regimen_id = ? ORDER BY sequence_order',
+            'SELECT dosage, dose_morning, dose_lunch, dose_dinner, dose_custom, custom_time, duration_days, days_of_week, indefinite, sequence_order FROM phases WHERE regimen_id = ? ORDER BY sequence_order',
             [r.id],
           );
           return { supplement_id: r.supplement_id, notes: r.notes, phases: ps };
@@ -228,8 +228,8 @@ export default function RegimensScreen() {
       );
       for (const p of tr.phases) {
         await db.runAsync(
-          'INSERT INTO phases (id, regimen_id, dosage, duration_days, days_of_week, indefinite, sequence_order) VALUES (?, ?, ?, ?, ?, ?, ?)',
-          [uuid(), newRegimenId, p.dosage, p.duration_days, p.days_of_week, p.indefinite, p.sequence_order],
+          'INSERT INTO phases (id, regimen_id, dosage, dose_morning, dose_lunch, dose_dinner, dose_custom, custom_time, duration_days, days_of_week, indefinite, sequence_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          [uuid(), newRegimenId, p.dosage, p.dose_morning, p.dose_lunch, p.dose_dinner, p.dose_custom, p.custom_time, p.duration_days, p.days_of_week, p.indefinite, p.sequence_order],
         );
       }
     }
