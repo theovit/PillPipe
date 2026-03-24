@@ -1,3 +1,4 @@
+// @atlas-entrypoint: App — high export count
 /**
  * Shared preferences — synchronous reads via module-level cache,
  * async persistence via AsyncStorage.
@@ -13,6 +14,9 @@ export interface AppPrefs {
   accentColor: AccentColor;
   fontSize: FontSize;
   defaultDuration: 0 | 30 | 60 | 90 | 120;
+  morningTime: string;  // "HH:MM"
+  lunchTime: string;
+  dinnerTime: string;
 }
 
 const KEY = 'pillpipe_prefs';
@@ -22,6 +26,9 @@ const DEFAULT: AppPrefs = {
   accentColor: 'violet',
   fontSize: 'medium',
   defaultDuration: 0,
+  morningTime: '08:00',
+  lunchTime: '12:00',
+  dinnerTime: '18:00',
 };
 
 export const ACCENT_HEX: Record<AccentColor, string> = {
