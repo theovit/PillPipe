@@ -7,14 +7,16 @@ import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Text } from 'react-native';
-import { initPrefs } from '@/utils/prefs';
+import { initPrefs, loadPrefs } from '@/utils/prefs';
 import RegimensScreen from '@/screens/RegimensScreen';
 import SupplementsScreen from '@/screens/SupplementsScreen';
 import SettingsScreen from '@/screens/SettingsScreen';
 import '@/utils/notifications'; // registers setNotificationHandler at app startup
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { rem } from 'nativewind';
 
 const Tab = createBottomTabNavigator();
+const fontScaleMap: Record<string, number> = { small: 12, medium: 14, large: 16 };
 
 function Navigation() {
   const insets = useSafeAreaInsets();
@@ -68,6 +70,7 @@ export default function App() {
   useEffect(() => {
     (async () => {
       await initPrefs();
+      rem.set(fontScaleMap[loadPrefs().fontSize] ?? 14);
       setPrefsReady(true);
     })();
   }, []);
