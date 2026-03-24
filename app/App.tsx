@@ -1,3 +1,4 @@
+// @atlas-entrypoint: App — root component
 import './global.css';
 import React, { useEffect, useState } from 'react';
 import * as Notifications from 'expo-notifications';
@@ -8,6 +9,8 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Text } from 'react-native';
 import { initPrefs, loadPrefs } from '@/utils/prefs';
+import { RegNotif } from '@/utils/types';
+import { scheduleAllForRegimen } from '@/utils/notifications';
 import RegimensScreen from '@/screens/RegimensScreen';
 import SupplementsScreen from '@/screens/SupplementsScreen';
 import SettingsScreen from '@/screens/SettingsScreen';
@@ -71,6 +74,31 @@ export default function App() {
     (async () => {
       await initPrefs();
       rem.set(fontScaleMap[loadPrefs().fontSize] ?? 14);
+
+      // Reschedule all notifications to reflect current preset times
+      try {
+        const { status } = await Notifications.getPermissionsAsync();
+        if (status === 'granted') {
+          const db = await getDb();
+          const regimens = await db.getAllAsync<{ id: string; supplement_id: string }>(
+            'SELECT id, supplement_id FROM regimens',
+          );
+          const currentPrefs = loadPrefs();
+          for (const r of regimens) {
+            const entries = await db.getAllAsync<RegNotif>(
+              'SELECT * FROM regimen_notifications WHERE regimen_id = ?',
+              [r.id],
+            );
+            if (entries.length === 0) continue;
+            const sup = await db.getFirstAsync<{ name: string }>(
+              'SELECT name FROM supplements WHERE id = ?',
+              [r.supplement_id],
+            );
+            await scheduleAllForRegimen(r.id, sup?.name ?? 'supplement', entries, currentPrefs);
+          }
+        }
+      } catch { /* non-critical — don't block app startup */ }
+
       setPrefsReady(true);
     })();
   }, []);
