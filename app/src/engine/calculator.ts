@@ -1,5 +1,9 @@
 export interface Phase {
-  dosage: number;
+  dosage: number;          // legacy — kept for backward compatibility
+  dose_morning: number;
+  dose_lunch: number;
+  dose_dinner: number;
+  dose_custom: number;
   duration_days: number;
   /** JSON-encoded int[] stored in SQLite, e.g. "[1,3,5]" or null */
   days_of_week: string | null;

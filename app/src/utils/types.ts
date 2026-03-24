@@ -41,7 +41,12 @@ export interface Regimen {
 export interface Phase {
   id: string;
   regimen_id: string;
-  dosage: number;
+  dosage: number;          // legacy — retained for DB compatibility, not used in UI
+  dose_morning: number;
+  dose_lunch: number;
+  dose_dinner: number;
+  dose_custom: number;
+  custom_time: string | null;  // "HH:MM", only populated when dose_custom > 0
   duration_days: number;
   days_of_week: string | null;
   indefinite: number;

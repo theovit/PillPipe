@@ -103,6 +103,21 @@ async function migrate(db: SQLite.SQLiteDatabase): Promise<void> {
   await db.execAsync(`CREATE UNIQUE INDEX IF NOT EXISTS idx_regimen_notif_preset
     ON regimen_notifications(regimen_id, type)
     WHERE type != 'custom';`);
+
+  // Phase time-of-day columns — each wrapped in try/catch for idempotency
+  for (const sql of [
+    'ALTER TABLE phases ADD COLUMN dose_morning REAL NOT NULL DEFAULT 0',
+    'ALTER TABLE phases ADD COLUMN dose_lunch   REAL NOT NULL DEFAULT 0',
+    'ALTER TABLE phases ADD COLUMN dose_dinner  REAL NOT NULL DEFAULT 0',
+    'ALTER TABLE phases ADD COLUMN dose_custom  REAL NOT NULL DEFAULT 0',
+    'ALTER TABLE phases ADD COLUMN custom_time  TEXT',
+  ]) {
+    try { await db.execAsync(sql); } catch { /* column already exists */ }
+  }
+  // Migrate existing single-dosage phases to dose_morning
+  await db.execAsync(
+    'UPDATE phases SET dose_morning = dosage WHERE dose_morning = 0 AND dosage > 0',
+  );
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
