@@ -17,17 +17,18 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
-import * as SQLite from 'expo-sqlite';
+import DateTimePicker from '@react-native-community/datetimepicker';
 import * as FileSystem from 'expo-file-system';
+import type { SQLiteDatabase } from 'expo-sqlite';
 import * as Sharing from 'expo-sharing';
 import AdherenceCalendar from '@/components/AdherenceCalendar';
 import DateField from '@/components/DateField';
 import { getDb, uuid } from '@/db/database';
 import { calculate } from '@/engine/calculator';
-import { Phase, Regimen, Session, Supplement } from '@/utils/types';
+import { Phase, RegNotif, Regimen, Session, Supplement } from '@/utils/types';
 import { daysUntil, fmtAmount, formatDate, todayISO } from '@/utils/dates';
 import { loadPrefs } from '@/utils/prefs';
-import { cancelReminder, scheduleReminder } from '@/utils/notifications';
+import { cancelAllForRegimen, cancelSingleEntry, scheduleAllForRegimen } from '@/utils/notifications';
 
 const inputCls =
   'bg-gray-800 border border-gray-700 rounded-lg px-3 py-2.5 text-gray-200 text-base';
@@ -80,9 +81,9 @@ export default function RegimensScreen() {
   // Regimen notes
   const [regimenNotes, setRegimenNotes] = useState<Record<string, string>>({});
 
-  // Reminder times
-  const [reminderTimes, setReminderTimes] = useState<Record<string, string>>({});
-  const [showReminderPicker, setShowReminderPicker] = useState<string | null>(null);
+  // Notification slots
+  const [notifEntries, setNotifEntries] = useState<Record<string, RegNotif[]>>({});
+  const [showCustomTimePicker, setShowCustomTimePicker] = useState<string | null>(null); // regimenId
 
   // Templates
   const [templates, setTemplates] = useState<{ id: string; name: string; data: string }[]>([]);
@@ -166,7 +167,7 @@ export default function RegimensScreen() {
     }
   }
 
-  async function applyTemplate(db: SQLite.SQLiteDatabase, sessionId: string, templateId: string) {
+  async function applyTemplate(db: SQLiteDatabase, sessionId: string, templateId: string) {
     const row = await db.getFirstAsync<{ data: string }>(
       'SELECT data FROM session_templates WHERE id = ?',
       [templateId],
@@ -226,9 +227,15 @@ export default function RegimensScreen() {
       }
       setPhases(phaseMap);
       setRegimenNotes(notesMap);
-      const timesMap: Record<string, string> = {};
-      for (const r of regs) if (r.reminder_time) timesMap[r.id] = r.reminder_time.slice(0, 5);
-      setReminderTimes(timesMap);
+      const notifMap: Record<string, RegNotif[]> = {};
+      for (const r of regs) {
+        const entries = await db.getAllAsync<RegNotif>(
+          'SELECT * FROM regimen_notifications WHERE regimen_id = ? ORDER BY created_at',
+          [r.id],
+        );
+        notifMap[r.id] = entries;
+      }
+      setNotifEntries(notifMap);
       await loadTodayLogs(regs.map((r) => r.id));
     } catch {
       // no-op
@@ -262,13 +269,19 @@ export default function RegimensScreen() {
         }
         setPhases(phaseMap);
         const notesMap2: Record<string, string> = {};
-        const timesMap2: Record<string, string> = {};
         for (const r of regs) {
           notesMap2[r.id] = r.notes ?? '';
-          if (r.reminder_time) timesMap2[r.id] = r.reminder_time.slice(0, 5);
         }
         setRegimenNotes(notesMap2);
-        setReminderTimes(timesMap2);
+        const notifMap2: Record<string, RegNotif[]> = {};
+        for (const r of regs) {
+          const entries = await db.getAllAsync<RegNotif>(
+            'SELECT * FROM regimen_notifications WHERE regimen_id = ? ORDER BY created_at',
+            [r.id],
+          );
+          notifMap2[r.id] = entries;
+        }
+        setNotifEntries(notifMap2);
         await loadTodayLogs(regs.map((r) => r.id));
       } catch {
         // no-op
@@ -329,26 +342,62 @@ export default function RegimensScreen() {
     } catch { Alert.alert('Error', 'Could not copy session'); }
   }
 
-  // ── Reminder time ────────────────────────────────────────────────────────────
+  // ── Notification slot mutations ───────────────────────────────────────────────
 
-  async function saveReminderTime(regimenId: string, time: string | null) {
-    setReminderTimes((prev) => {
-      const next = { ...prev };
-      if (time) next[regimenId] = time;
-      else delete next[regimenId];
-      return next;
-    });
+  async function togglePresetNotif(regimenId: string, type: 'morning' | 'lunch' | 'dinner') {
     try {
       const db = await getDb();
-      await db.runAsync('UPDATE regimens SET reminder_time=? WHERE id=?', [time, regimenId]);
-    } catch { /* no-op */ }
-    // Schedule/cancel local notification
-    if (time) {
-      const [hh, mm] = time.split(':').map(Number);
-      const reg = regimens.find((r) => r.id === regimenId);
-      if (reg) scheduleReminder(regimenId, reg.supplement_name ?? 'supplement', hh, mm).catch(() => {});
-    } else {
-      cancelReminder(regimenId).catch(() => {});
+      const existing = notifEntries[regimenId]?.find(e => e.type === type);
+      if (existing) {
+        await cancelSingleEntry(regimenId, existing.id, type);
+        await db.runAsync('DELETE FROM regimen_notifications WHERE id=?', [existing.id]);
+      } else {
+        const newId = uuid();
+        await db.runAsync(
+          'INSERT INTO regimen_notifications (id, regimen_id, type) VALUES (?,?,?)',
+          [newId, regimenId, type],
+        );
+        const reg = regimens.find(r => r.id === regimenId);
+        const prefs = loadPrefs();
+        const all = await db.getAllAsync<RegNotif>(
+          'SELECT * FROM regimen_notifications WHERE regimen_id = ?', [regimenId],
+        );
+        await scheduleAllForRegimen(regimenId, reg?.supplement_name ?? 'supplement', all, prefs);
+      }
+      await reloadOpenSession();
+    } catch (e) {
+      Alert.alert('Error', String(e));
+    }
+  }
+
+  async function addCustomNotif(regimenId: string, time: string) {
+    try {
+      const db = await getDb();
+      const newId = uuid();
+      await db.runAsync(
+        'INSERT INTO regimen_notifications (id, regimen_id, type, custom_time) VALUES (?,?,?,?)',
+        [newId, regimenId, 'custom', time],
+      );
+      const reg = regimens.find(r => r.id === regimenId);
+      const prefs = loadPrefs();
+      const all = await db.getAllAsync<RegNotif>(
+        'SELECT * FROM regimen_notifications WHERE regimen_id = ?', [regimenId],
+      );
+      await scheduleAllForRegimen(regimenId, reg?.supplement_name ?? 'supplement', all, prefs);
+      await reloadOpenSession();
+    } catch (e) {
+      Alert.alert('Error', String(e));
+    }
+  }
+
+  async function removeNotifEntry(regimenId: string, entryId: string, type: RegNotif['type']) {
+    try {
+      const db = await getDb();
+      await cancelSingleEntry(regimenId, entryId, type);
+      await db.runAsync('DELETE FROM regimen_notifications WHERE id=?', [entryId]);
+      await reloadOpenSession();
+    } catch (e) {
+      Alert.alert('Error', String(e));
     }
   }
 
@@ -362,7 +411,9 @@ export default function RegimensScreen() {
         [delta, supplementId],
       );
       await reloadOpenSession();
-    } catch { /* no-op */ }
+    } catch (e) {
+      if (__DEV__) console.error('adjustInventory error:', e);
+    }
   }
 
   // ── CSV export ───────────────────────────────────────────────────────────────
@@ -425,7 +476,9 @@ export default function RegimensScreen() {
             await db.runAsync('DELETE FROM sessions WHERE id=?', [id]);
             if (openSessionId === id) setOpenSessionId(null);
             loadSessions();
-          } catch { /* no-op */ }
+          } catch (e) {
+            Alert.alert('Error', 'Could not delete session: ' + String(e));
+          }
         },
       },
     ]);
@@ -454,9 +507,15 @@ export default function RegimensScreen() {
         text: 'Remove', style: 'destructive', onPress: async () => {
           try {
             const db = await getDb();
+            const entries = await db.getAllAsync<RegNotif>(
+              'SELECT * FROM regimen_notifications WHERE regimen_id = ?', [regimenId],
+            );
+            await cancelAllForRegimen(regimenId, entries.filter(e => e.type === 'custom').map(e => e.id));
             await db.runAsync('DELETE FROM regimens WHERE id=?', [regimenId]);
             await reloadOpenSession();
-          } catch { /* no-op */ }
+          } catch (e) {
+            Alert.alert('Error', 'Could not remove regimen: ' + String(e));
+          }
         },
       },
     ]);
@@ -535,7 +594,9 @@ export default function RegimensScreen() {
             await db.runAsync('DELETE FROM phases WHERE id=?', [phaseId]);
             setCalcResults({});
             await reloadOpenSession();
-          } catch { /* no-op */ }
+          } catch (e) {
+            Alert.alert('Error', 'Could not delete phase: ' + String(e));
+          }
         },
       },
     ]);
@@ -646,6 +707,7 @@ export default function RegimensScreen() {
   }
 
   const openSess = sessions.find((s) => s.id === openSessionId);
+  const currentPrefs = loadPrefs();
 
   return (
     <ScrollView className="flex-1 bg-background" contentContainerClassName="px-4 pt-4 pb-8">
@@ -814,38 +876,61 @@ export default function RegimensScreen() {
                     multiline
                   />
 
-                  {/* Reminder time */}
-                  <View className="flex-row items-center gap-2 mt-2">
-                    <Text className="text-xs text-gray-600">Reminder:</Text>
-                    <Pressable
-                      onPress={() => setShowReminderPicker(showReminderPicker === r.id ? null : r.id)}
-                      className="flex-row items-center gap-1"
-                    >
-                      <Text className={`text-xs ${reminderTimes[r.id] ? 'text-violet-400' : 'text-gray-600'}`}>
-                        {reminderTimes[r.id] || 'none'}
-                      </Text>
-                    </Pressable>
-                    {reminderTimes[r.id] && (
-                      <Pressable onPress={() => saveReminderTime(r.id, null)} hitSlop={8}>
-                        <Text className="text-gray-700 text-xs">✕</Text>
+                  {/* Notifications */}
+                  <View className="mt-3 border-t border-gray-700/50 pt-3">
+                    <Text className="text-xs text-gray-500 font-medium uppercase tracking-wider mb-2">Notifications</Text>
+                    <View className="flex-row gap-2 flex-wrap mb-2">
+                      {(['morning', 'lunch', 'dinner'] as const).map((type) => {
+                        const active = notifEntries[r.id]?.some(e => e.type === type);
+                        const time = currentPrefs[`${type}Time` as keyof typeof currentPrefs] as string;
+                        return (
+                          <Pressable
+                            key={type}
+                            onPress={() => togglePresetNotif(r.id, type)}
+                            className={`px-3 py-1.5 rounded-lg border ${active ? 'bg-violet-600 border-violet-500' : 'bg-gray-800 border-gray-700'}`}
+                          >
+                            <Text className={`text-xs font-medium capitalize ${active ? 'text-white' : 'text-gray-400'}`}>
+                              {type.charAt(0).toUpperCase() + type.slice(1)}
+                            </Text>
+                            {active && <Text className="text-violet-200 text-xs font-mono">{time}</Text>}
+                          </Pressable>
+                        );
+                      })}
+                      <Pressable
+                        onPress={() => setShowCustomTimePicker(r.id)}
+                        className="px-3 py-1.5 rounded-lg border bg-gray-800 border-gray-700"
+                      >
+                        <Text className="text-xs font-medium text-gray-400">+ Custom</Text>
                       </Pressable>
+                    </View>
+
+                    {/* Custom time rows */}
+                    {notifEntries[r.id]?.filter(e => e.type === 'custom').map(e => (
+                      <View key={e.id} className="flex-row items-center justify-between py-1">
+                        <Text className="text-gray-400 text-xs font-mono">Custom · {e.custom_time}</Text>
+                        <Pressable onPress={() => removeNotifEntry(r.id, e.id, 'custom')} hitSlop={8}>
+                          <Text className="text-red-700 text-xs px-1">✕</Text>
+                        </Pressable>
+                      </View>
+                    ))}
+
+                    {/* Custom time picker */}
+                    {showCustomTimePicker === r.id && (
+                      <DateTimePicker
+                        value={new Date()}
+                        mode="time"
+                        display={Platform.OS === 'ios' ? 'spinner' : 'default'}
+                        onChange={(_, date) => {
+                          setShowCustomTimePicker(null);
+                          if (date) {
+                            const hh = String(date.getHours()).padStart(2, '0');
+                            const mm = String(date.getMinutes()).padStart(2, '0');
+                            addCustomNotif(r.id, `${hh}:${mm}`);
+                          }
+                        }}
+                      />
                     )}
                   </View>
-                  {showReminderPicker === r.id && (
-                    <DateTimePicker
-                      value={reminderTimes[r.id] ? new Date(`1970-01-01T${reminderTimes[r.id]}:00`) : new Date()}
-                      mode="time"
-                      display={Platform.OS === 'ios' ? 'spinner' : 'default'}
-                      onChange={(_, date) => {
-                        setShowReminderPicker(null);
-                        if (date) {
-                          const hh = String(date.getHours()).padStart(2, '0');
-                          const mm = String(date.getMinutes()).padStart(2, '0');
-                          saveReminderTime(r.id, `${hh}:${mm}`);
-                        }
-                      }}
-                    />
-                  )}
 
                   {/* Phases */}
                   <View className="mt-3 border-t border-gray-700/50 pt-3">
@@ -853,18 +938,21 @@ export default function RegimensScreen() {
                       <Text className="text-gray-600 text-xs mb-2">No phases yet.</Text>
                     ) : (
                       regimenPhases.map((p, idx) => (
-                        <Pressable
-                          key={p.id}
-                          onPress={() => openPhaseModal(r.id, unit, p)}
-                          onLongPress={() => deletePhase(p.id)}
-                          className="flex-row items-center gap-2 mb-1.5"
-                        >
-                          <View className="w-5 h-5 rounded-full bg-violet-900/60 border border-violet-700/50 items-center justify-center">
-                            <Text className="text-violet-400 text-xs font-bold">{idx + 1}</Text>
-                          </View>
-                          <Text className="text-gray-300 text-xs flex-1">{phaseLabel(p, unit)}</Text>
-                          <Text className="text-gray-600 text-xs">›</Text>
-                        </Pressable>
+                        <View key={p.id} className="flex-row items-center gap-2 mb-1.5">
+                          <Pressable
+                            onPress={() => openPhaseModal(r.id, unit, p)}
+                            className="flex-row items-center gap-2 flex-1"
+                          >
+                            <View className="w-5 h-5 rounded-full bg-violet-900/60 border border-violet-700/50 items-center justify-center">
+                              <Text className="text-violet-400 text-xs font-bold">{idx + 1}</Text>
+                            </View>
+                            <Text className="text-gray-300 text-xs flex-1">{phaseLabel(p, unit)}</Text>
+                            <Text className="text-gray-600 text-xs">✎</Text>
+                          </Pressable>
+                          <Pressable onPress={() => deletePhase(p.id)} hitSlop={8}>
+                            <Text className="text-red-700 text-xs px-1">✕</Text>
+                          </Pressable>
+                        </View>
                       ))
                     )}
                     {/* Phase coverage indicator */}
@@ -986,7 +1074,7 @@ export default function RegimensScreen() {
 
       {/* ── New Session Modal ── */}
       <Modal visible={sessionModal} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => { setSessionModal(false); setSelectedTemplateId(''); }}>
-        <View className="flex-1 bg-background px-5" style={{ paddingTop: insets.top + 8 }}>
+        <View className="flex-1 bg-background px-5" style={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 16 }}>
           <View className="flex-row items-center justify-between mb-6">
             <Text className="text-white text-lg font-semibold">New Session</Text>
             <Pressable onPress={() => { setSessionModal(false); setSelectedTemplateId(''); }}>
