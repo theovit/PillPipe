@@ -105,6 +105,7 @@ async function migrate(db: SQLite.SQLiteDatabase): Promise<void> {
     WHERE type != 'custom';`);
 
   // Phase time-of-day columns — each wrapped in try/catch for idempotency
+  let phaseTodColumnsAdded = false;
   for (const sql of [
     'ALTER TABLE phases ADD COLUMN dose_morning REAL NOT NULL DEFAULT 0',
     'ALTER TABLE phases ADD COLUMN dose_lunch   REAL NOT NULL DEFAULT 0',
@@ -112,15 +113,18 @@ async function migrate(db: SQLite.SQLiteDatabase): Promise<void> {
     'ALTER TABLE phases ADD COLUMN dose_custom  REAL NOT NULL DEFAULT 0',
     'ALTER TABLE phases ADD COLUMN custom_time  TEXT',
   ]) {
-    try { await db.execAsync(sql); } catch { /* column already exists */ }
+    try { await db.execAsync(sql); phaseTodColumnsAdded = true; } catch { /* column already exists */ }
   }
   // custom_slots column — stores JSON array of {amount, time} pairs
   try { await db.execAsync('ALTER TABLE phases ADD COLUMN custom_slots TEXT'); } catch { /* already exists */ }
 
-  // Migrate existing single-dosage phases to dose_morning
-  await db.execAsync(
-    'UPDATE phases SET dose_morning = dosage WHERE dose_morning = 0 AND dosage > 0',
-  );
+  // Migrate existing single-dosage phases to dose_morning — only on first run
+  // when the columns were just created to avoid overwriting intentional zero values.
+  if (phaseTodColumnsAdded) {
+    await db.execAsync(
+      'UPDATE phases SET dose_morning = dosage WHERE dose_morning = 0 AND dosage > 0',
+    );
+  }
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────

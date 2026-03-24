@@ -74,9 +74,10 @@ export function calculate({
 
     const isIndef = phase.indefinite === 1 || phase.indefinite === true;
     const phaseDays = isIndef ? totalDays - currentDay : Number(phase.duration_days);
+    let slots: Array<{amount: number; time: string}> = [];
+    try { slots = JSON.parse(phase.custom_slots!); } catch { slots = []; }
     const customTotal = phase.custom_slots
-      ? (JSON.parse(phase.custom_slots) as Array<{amount: number; time: string}>)
-          .reduce((sum, s) => sum + (Number(s.amount) || 0), 0)
+      ? slots.reduce((sum, s) => sum + (Number(s.amount) || 0), 0)
       : phase.dose_custom;
     const dosage = phase.dose_morning + phase.dose_lunch + phase.dose_dinner + customTotal;
 

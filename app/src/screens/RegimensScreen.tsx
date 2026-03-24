@@ -47,7 +47,8 @@ function phaseLabel(p: Phase, unit: string): string {
   if (p.dose_lunch   > 0) parts.push(`${fmtAmount(p.dose_lunch,   unit)} lunch`);
   if (p.dose_dinner  > 0) parts.push(`${fmtAmount(p.dose_dinner,  unit)} dinner`);
   if (p.custom_slots) {
-    const slots = JSON.parse(p.custom_slots) as Array<{amount: number; time: string}>;
+    let slots: Array<{amount: number; time: string}> = [];
+    try { slots = JSON.parse(p.custom_slots!); } catch { slots = []; }
     for (const s of slots) {
       if (s.amount > 0) parts.push(`${fmtAmount(s.amount, unit)} @ ${s.time}`);
     }
@@ -57,7 +58,10 @@ function phaseLabel(p: Phase, unit: string): string {
   const doseStr = parts.length > 0 ? parts.join(' · ') : '0 doses';
   const isIndef = p.indefinite === 1;
   const dur = isIndef ? '∞' : phaseDurLabel(p.duration_days);
-  const dow = p.days_of_week ? JSON.parse(p.days_of_week) as number[] : null;
+  let dow: number[] | null = null;
+  if (p.days_of_week) {
+    try { dow = JSON.parse(p.days_of_week); } catch { dow = null; }
+  }
   const dowStr = dow && dow.length > 0 && dow.length < 7
     ? ' · ' + dow.map((d) => DOW_LABELS[d]).join(' ')
     : '';
