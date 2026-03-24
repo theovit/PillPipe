@@ -5,11 +5,23 @@ import * as FileSystem from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import * as DocumentPicker from 'expo-document-picker';
 import { getDb } from '@/db/database';
-import { ACCENT_HEX, AccentColor, AppPrefs, loadPrefs, savePrefs } from '@/utils/prefs';
+import { ACCENT_HEX, AccentColor, AppPrefs, FontSize, loadPrefs, savePrefs } from '@/utils/prefs';
+import { rem } from 'nativewind';
 import appJson from '../../app.json';
 
 const DATE_FORMATS = ['MM/DD/YYYY', 'DD/MM/YYYY', 'YYYY-MM-DD'] as const;
 const ACCENT_COLORS: AccentColor[] = ['violet', 'red', 'orange', 'amber', 'green', 'blue'];
+
+const fontScaleMap: Record<FontSize, number> = { small: 12, medium: 14, large: 16 };
+
+function SectionHeader({ title, open, onPress }: { title: string; open: boolean; onPress: () => void }) {
+  return (
+    <Pressable onPress={onPress} className="flex-row items-center justify-between px-4 py-3">
+      <Text className="text-gray-400 text-xs font-semibold uppercase tracking-wider">{title}</Text>
+      <Text className="text-gray-600 text-xs">{open ? '▲' : '▼'}</Text>
+    </Pressable>
+  );
+}
 
 export default function SettingsScreen() {
   const [dateFormat, setDateFormat] = useState<AppPrefs['dateFormat']>('MM/DD/YYYY');
@@ -18,11 +30,20 @@ export default function SettingsScreen() {
   const [backupWorking, setBackupWorking] = useState(false);
   const [restoreWorking, setRestoreWorking] = useState(false);
   const [templates, setTemplates] = useState<{ id: string; name: string; created_at: string }[]>([]);
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
+  const [fontSize, setFontSize] = useState<FontSize>('medium');
+  const [defaultDuration, setDefaultDuration] = useState<AppPrefs['defaultDuration']>(0);
+
+  function toggleSection(name: string) {
+    setOpenSections(p => ({ ...p, [name]: !p[name] }));
+  }
 
   useEffect(() => {
     const prefs = loadPrefs();
     setDateFormat(prefs.dateFormat);
     setAccentColor(prefs.accentColor);
+    setFontSize(prefs.fontSize);
+    setDefaultDuration(prefs.defaultDuration);
     Notifications.getPermissionsAsync()
       .then((s) => setNotifStatus(s.status))
       .catch(() => setNotifStatus('unavailable'));
@@ -60,6 +81,17 @@ export default function SettingsScreen() {
   function applyAccentColor(c: AccentColor) {
     setAccentColor(c);
     savePrefs({ accentColor: c });
+  }
+
+  function applyFontSize(size: FontSize) {
+    setFontSize(size);
+    savePrefs({ fontSize: size });
+    rem.set(fontScaleMap[size]);
+  }
+
+  function applyDefaultDuration(duration: AppPrefs['defaultDuration']) {
+    setDefaultDuration(duration);
+    savePrefs({ defaultDuration: duration });
   }
 
   async function requestNotifications() {
@@ -216,132 +248,218 @@ export default function SettingsScreen() {
 
   const version: string = (appJson as any).expo.version;
 
+  const DURATIONS: Array<{ key: AppPrefs['defaultDuration']; label: string }> = [
+    { key: 0,   label: 'None'     },
+    { key: 30,  label: '30 days'  },
+    { key: 60,  label: '60 days'  },
+    { key: 90,  label: '90 days'  },
+    { key: 120, label: '120 days' },
+  ];
+
   return (
     <ScrollView className="flex-1 bg-background" contentContainerClassName="px-4 pt-4 pb-8">
-      {/* About */}
-      <View className="bg-gray-900 border border-gray-800 rounded-xl p-4 mb-4">
-        <Text className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-3">About</Text>
-        <View className="flex-row items-center gap-3 mb-2">
-          <Text className="text-3xl">💊</Text>
-          <View>
-            <Text className="text-white font-semibold text-lg">PillPipe</Text>
-            <Text className="text-gray-500 text-xs">Supplement inventory & shortfall tracking</Text>
-          </View>
-        </View>
-        <Text className="text-gray-600 text-xs mt-2">
-          Version {version} · Offline-first · Local SQLite · No account required
-        </Text>
-      </View>
 
-      {/* Date format */}
-      <View className="bg-gray-900 border border-gray-800 rounded-xl p-4 mb-4">
-        <Text className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-3">Date Format</Text>
-        <View className="flex-row gap-2 flex-wrap">
-          {DATE_FORMATS.map((fmt) => (
-            <Pressable
-              key={fmt}
-              onPress={() => applyDateFormat(fmt)}
-              className={`px-4 py-2 rounded-lg border ${
-                dateFormat === fmt ? 'bg-violet-600 border-violet-500' : 'bg-gray-800 border-gray-700'
-              }`}
-            >
-              <Text className={`text-sm font-medium ${dateFormat === fmt ? 'text-white' : 'text-gray-400'}`}>
-                {fmt}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
-      </View>
-
-      {templates.length > 0 && (
-        <View className="bg-gray-900 border border-gray-800 rounded-xl p-4 mb-4">
-          <Text className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-3">Templates</Text>
-          {templates.map((t) => (
-            <View key={t.id} className="flex-row items-center justify-between py-2 border-b border-gray-800 last:border-b-0">
-              <View className="flex-1 mr-3">
-                <Text className="text-gray-200 text-sm font-medium">{t.name}</Text>
-                <Text className="text-gray-600 text-xs">{t.created_at.slice(0, 10)}</Text>
+      {/* ── About ── */}
+      <View className="bg-gray-900 border border-gray-800 rounded-xl mb-4 overflow-hidden">
+        <SectionHeader title="About" open={!!openSections.about} onPress={() => toggleSection('about')} />
+        {openSections.about && (
+          <View className="px-4 pb-4 border-t border-gray-800">
+            <View className="flex-row items-center gap-3 mt-3 mb-2">
+              <Text className="text-3xl">💊</Text>
+              <View>
+                <Text className="text-white font-semibold text-lg">PillPipe</Text>
+                <Text className="text-gray-500 text-xs">Supplement inventory & shortfall tracking</Text>
               </View>
-              <Pressable onPress={() => deleteTemplate(t.id)} hitSlop={8}>
-                <Text className="text-red-400 text-sm">Delete</Text>
-              </Pressable>
             </View>
-          ))}
-        </View>
-      )}
-
-      {/* Accent color */}
-      <View className="bg-gray-900 border border-gray-800 rounded-xl p-4 mb-4">
-        <Text className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-3">Accent Color</Text>
-        <View className="flex-row gap-3 flex-wrap">
-          {ACCENT_COLORS.map((c) => (
-            <Pressable
-              key={c}
-              onPress={() => applyAccentColor(c)}
-              style={{ backgroundColor: ACCENT_HEX[c] }}
-              className={`w-9 h-9 rounded-full items-center justify-center ${accentColor === c ? 'border-2 border-white' : ''}`}
-            >
-              {accentColor === c && <Text className="text-white font-bold text-xs">✓</Text>}
-            </Pressable>
-          ))}
-        </View>
-        <Text className="text-gray-600 text-xs mt-2">Takes effect on next app launch</Text>
-      </View>
-
-      {/* Notifications */}
-      <View className="bg-gray-900 border border-gray-800 rounded-xl p-4 mb-4">
-        <Text className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-3">Notifications</Text>
-        <View className="flex-row items-center justify-between mb-3">
-          <Text className="text-gray-300 text-sm">Permission status</Text>
-          <Text className={`text-sm font-medium ${notifStatus === 'granted' ? 'text-green-400' : 'text-gray-500'}`}>
-            {notifStatus}
-          </Text>
-        </View>
-        {notifStatus !== 'granted' ? (
-          <Pressable onPress={requestNotifications} className="bg-violet-600 rounded-lg px-4 py-2.5 items-center">
-            <Text className="text-white text-sm font-medium">Enable Notifications</Text>
-          </Pressable>
-        ) : (
-          <Text className="text-gray-600 text-xs">Reminders fire at the time set on each regimen card.</Text>
+            <Text className="text-gray-600 text-xs mt-2">
+              Version {version} · Offline-first · Local SQLite · No account required
+            </Text>
+          </View>
         )}
       </View>
 
-      {/* Backup & Restore */}
-      <View className="bg-gray-900 border border-gray-800 rounded-xl p-4 mb-4">
-        <Text className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-3">Backup & Restore</Text>
-        <Pressable
-          onPress={exportBackup}
-          disabled={backupWorking}
-          className="bg-gray-800 border border-gray-700 rounded-lg px-4 py-3 mb-2"
-        >
-          <Text className="text-gray-200 text-sm font-medium">
-            {backupWorking ? 'Exporting…' : '↑ Export backup (JSON)'}
-          </Text>
-          <Text className="text-gray-600 text-xs mt-0.5">Saves all data to a shareable file</Text>
-        </Pressable>
-        <Pressable
-          onPress={importBackup}
-          disabled={restoreWorking}
-          className="bg-gray-800 border border-gray-700 rounded-lg px-4 py-3"
-        >
-          <Text className="text-gray-200 text-sm font-medium">
-            {restoreWorking ? 'Restoring…' : '↓ Restore from backup'}
-          </Text>
-          <Text className="text-gray-600 text-xs mt-0.5">Replaces all current data with a backup file</Text>
-        </Pressable>
+      {/* ── Appearance ── */}
+      <View className="bg-gray-900 border border-gray-800 rounded-xl mb-4 overflow-hidden">
+        <SectionHeader title="Appearance" open={!!openSections.appearance} onPress={() => toggleSection('appearance')} />
+        {openSections.appearance && (
+          <View className="px-4 pb-4 border-t border-gray-800">
+            <Text className="text-gray-400 text-xs font-semibold uppercase tracking-wider mt-3 mb-2">Accent Color</Text>
+            <View className="flex-row gap-3 flex-wrap">
+              {ACCENT_COLORS.map((c) => (
+                <Pressable
+                  key={c}
+                  onPress={() => applyAccentColor(c)}
+                  style={{ backgroundColor: ACCENT_HEX[c] }}
+                  className={`w-9 h-9 rounded-full items-center justify-center ${accentColor === c ? 'border-2 border-white' : ''}`}
+                >
+                  {accentColor === c && <Text className="text-white font-bold text-xs">✓</Text>}
+                </Pressable>
+              ))}
+            </View>
+            <Text className="text-gray-600 text-xs mt-2">Takes effect on next app launch</Text>
+          </View>
+        )}
       </View>
 
-      {/* Data */}
-      <View className="bg-gray-900 border border-gray-800 rounded-xl p-4 mb-4">
-        <Text className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-3">Data</Text>
-        <Pressable
-          onPress={clearAllData}
-          className="bg-red-900/20 border border-red-900/40 rounded-lg px-4 py-3"
-        >
-          <Text className="text-red-400 text-sm font-medium">Clear all data</Text>
-          <Text className="text-gray-600 text-xs mt-0.5">Permanently deletes everything on this device</Text>
-        </Pressable>
+      {/* ── Preferences ── */}
+      <View className="bg-gray-900 border border-gray-800 rounded-xl mb-4 overflow-hidden">
+        <SectionHeader title="Preferences" open={!!openSections.preferences} onPress={() => toggleSection('preferences')} />
+        {openSections.preferences && (
+          <View className="px-4 pb-4 border-t border-gray-800 gap-5">
+            {/* Date format */}
+            <View className="mt-3">
+              <Text className="text-gray-300 text-sm font-medium mb-2">Date Format</Text>
+              <View className="flex-row gap-2 flex-wrap">
+                {DATE_FORMATS.map((fmt) => (
+                  <Pressable
+                    key={fmt}
+                    onPress={() => applyDateFormat(fmt)}
+                    className={`px-4 py-2 rounded-lg border ${
+                      dateFormat === fmt ? 'bg-violet-600 border-violet-500' : 'bg-gray-800 border-gray-700'
+                    }`}
+                  >
+                    <Text className={`text-sm font-medium ${dateFormat === fmt ? 'text-white' : 'text-gray-400'}`}>
+                      {fmt}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+
+            {/* Default session duration */}
+            <View>
+              <Text className="text-gray-300 text-sm font-medium mb-1">Default Session Duration</Text>
+              <Text className="text-gray-500 text-xs mb-2">Pre-fills the target date when creating a new session.</Text>
+              <View className="flex-row gap-2 flex-wrap">
+                {DURATIONS.map(({ key, label }) => (
+                  <Pressable
+                    key={key}
+                    onPress={() => applyDefaultDuration(key)}
+                    className={`px-4 py-2 rounded-lg border ${
+                      defaultDuration === key ? 'bg-violet-600 border-violet-500' : 'bg-gray-800 border-gray-700'
+                    }`}
+                  >
+                    <Text className={`text-sm font-medium ${defaultDuration === key ? 'text-white' : 'text-gray-400'}`}>
+                      {label}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+
+            {/* Font size */}
+            <View>
+              <Text className="text-gray-300 text-sm font-medium mb-2">Font Size</Text>
+              <View className="flex-row gap-2">
+                {(['small', 'medium', 'large'] as FontSize[]).map((size) => (
+                  <Pressable
+                    key={size}
+                    onPress={() => applyFontSize(size)}
+                    className={`px-4 py-2 rounded-lg border ${
+                      fontSize === size ? 'bg-violet-600 border-violet-500' : 'bg-gray-800 border-gray-700'
+                    }`}
+                  >
+                    <Text className={`text-sm font-medium capitalize ${fontSize === size ? 'text-white' : 'text-gray-400'}`}>
+                      {size}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+              <Text className="text-gray-600 text-xs mt-2">Applies to all text in the app.</Text>
+            </View>
+          </View>
+        )}
       </View>
+
+      {/* ── Templates ── */}
+      {templates.length > 0 && (
+        <View className="bg-gray-900 border border-gray-800 rounded-xl mb-4 overflow-hidden">
+          <SectionHeader title="Templates" open={!!openSections.templates} onPress={() => toggleSection('templates')} />
+          {openSections.templates && (
+            <View className="px-4 pb-4 border-t border-gray-800">
+              {templates.map((t) => (
+                <View key={t.id} className="flex-row items-center justify-between py-2 border-b border-gray-800 last:border-b-0 mt-2">
+                  <View className="flex-1 mr-3">
+                    <Text className="text-gray-200 text-sm font-medium">{t.name}</Text>
+                    <Text className="text-gray-600 text-xs">{t.created_at.slice(0, 10)}</Text>
+                  </View>
+                  <Pressable onPress={() => deleteTemplate(t.id)} hitSlop={8}>
+                    <Text className="text-red-400 text-sm">Delete</Text>
+                  </Pressable>
+                </View>
+              ))}
+            </View>
+          )}
+        </View>
+      )}
+
+      {/* ── Notifications ── */}
+      <View className="bg-gray-900 border border-gray-800 rounded-xl mb-4 overflow-hidden">
+        <SectionHeader title="Notifications" open={!!openSections.notifications} onPress={() => toggleSection('notifications')} />
+        {openSections.notifications && (
+          <View className="px-4 pb-4 border-t border-gray-800">
+            <View className="flex-row items-center justify-between mt-3 mb-3">
+              <Text className="text-gray-300 text-sm">Permission status</Text>
+              <Text className={`text-sm font-medium ${notifStatus === 'granted' ? 'text-green-400' : 'text-gray-500'}`}>
+                {notifStatus}
+              </Text>
+            </View>
+            {notifStatus !== 'granted' ? (
+              <Pressable onPress={requestNotifications} className="bg-violet-600 rounded-lg px-4 py-2.5 items-center">
+                <Text className="text-white text-sm font-medium">Enable Notifications</Text>
+              </Pressable>
+            ) : (
+              <Text className="text-gray-600 text-xs">Reminders fire at the time set on each regimen card.</Text>
+            )}
+          </View>
+        )}
+      </View>
+
+      {/* ── Backup & Restore ── */}
+      <View className="bg-gray-900 border border-gray-800 rounded-xl mb-4 overflow-hidden">
+        <SectionHeader title="Backup & Restore" open={!!openSections.backup} onPress={() => toggleSection('backup')} />
+        {openSections.backup && (
+          <View className="px-4 pb-4 border-t border-gray-800 gap-2 mt-3">
+            <Pressable
+              onPress={exportBackup}
+              disabled={backupWorking}
+              className="bg-gray-800 border border-gray-700 rounded-lg px-4 py-3"
+            >
+              <Text className="text-gray-200 text-sm font-medium">
+                {backupWorking ? 'Exporting…' : '↑ Export backup (JSON)'}
+              </Text>
+              <Text className="text-gray-600 text-xs mt-0.5">Saves all data to a shareable file</Text>
+            </Pressable>
+            <Pressable
+              onPress={importBackup}
+              disabled={restoreWorking}
+              className="bg-gray-800 border border-gray-700 rounded-lg px-4 py-3"
+            >
+              <Text className="text-gray-200 text-sm font-medium">
+                {restoreWorking ? 'Restoring…' : '↓ Restore from backup'}
+              </Text>
+              <Text className="text-gray-600 text-xs mt-0.5">Replaces all current data with a backup file</Text>
+            </Pressable>
+          </View>
+        )}
+      </View>
+
+      {/* ── Data ── */}
+      <View className="bg-gray-900 border border-gray-800 rounded-xl mb-4 overflow-hidden">
+        <SectionHeader title="Data" open={!!openSections.data} onPress={() => toggleSection('data')} />
+        {openSections.data && (
+          <View className="px-4 pb-4 border-t border-gray-800 mt-3">
+            <Pressable
+              onPress={clearAllData}
+              className="bg-red-900/20 border border-red-900/40 rounded-lg px-4 py-3"
+            >
+              <Text className="text-red-400 text-sm font-medium">Clear all data</Text>
+              <Text className="text-gray-600 text-xs mt-0.5">Permanently deletes everything on this device</Text>
+            </Pressable>
+          </View>
+        )}
+      </View>
+
     </ScrollView>
   );
 }
