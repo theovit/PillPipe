@@ -1,3 +1,4 @@
+// @atlas-entrypoint: App — substantial file
 import React, { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
@@ -969,7 +970,7 @@ export default function RegimensScreen() {
 
       {/* ── New Session Modal ── */}
       <Modal visible={sessionModal} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => { setSessionModal(false); setSelectedTemplateId(''); }}>
-        <View className="flex-1 bg-background px-5 pt-6">
+        <View className="flex-1 bg-background px-5" style={{ paddingTop: insets.top + 8 }}>
           <View className="flex-row items-center justify-between mb-6">
             <Text className="text-white text-lg font-semibold">New Session</Text>
             <Pressable onPress={() => { setSessionModal(false); setSelectedTemplateId(''); }}>
@@ -1025,7 +1026,7 @@ export default function RegimensScreen() {
 
       {/* ── Edit Session Modal ── */}
       <Modal visible={editModal} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setEditModal(false)}>
-        <ScrollView className="flex-1 bg-background" contentContainerClassName="px-5 pt-6 pb-10">
+        <ScrollView className="flex-1 bg-background" contentContainerClassName="px-5 pb-10" contentContainerStyle={{ paddingTop: insets.top + 8 }}>
           <View className="flex-row items-center justify-between mb-6">
             <Text className="text-white text-lg font-semibold">Edit Session</Text>
             <Pressable onPress={() => setEditModal(false)}>
@@ -1073,7 +1074,7 @@ export default function RegimensScreen() {
 
       {/* ── Shopping List Modal ── */}
       <Modal visible={shoppingListModal} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setShoppingListModal(false)}>
-        <View className="flex-1 bg-background px-5 pt-6">
+        <View className="flex-1 bg-background px-5" style={{ paddingTop: insets.top + 8 }}>
           <View className="flex-row items-center justify-between mb-5">
             <Text className="text-white text-lg font-semibold">Shopping List</Text>
             <Pressable onPress={() => setShoppingListModal(false)}>
@@ -1177,7 +1178,7 @@ export default function RegimensScreen() {
 
       {/* ── Add Regimen Modal ── */}
       <Modal visible={regimenModal} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setRegimenModal(false)}>
-        <View className="flex-1 bg-background px-5 pt-6" style={{ paddingBottom: insets.bottom + 16 }}>
+        <View className="flex-1 bg-background px-5" style={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 16 }}>
           <View className="flex-row items-center justify-between mb-6">
             <Text className="text-white text-lg font-semibold">Add Regimen</Text>
             <Pressable onPress={() => setRegimenModal(false)}>
@@ -1211,7 +1212,7 @@ export default function RegimensScreen() {
 
       {/* ── Phase Editor Modal ── */}
       <Modal visible={phaseModal} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setPhaseModal(false)}>
-        <ScrollView className="flex-1 bg-background" contentContainerClassName="px-5 pt-6 pb-10">
+        <ScrollView className="flex-1 bg-background" contentContainerClassName="px-5 pb-10" contentContainerStyle={{ paddingTop: insets.top + 8 }}>
           <View className="flex-row items-center justify-between mb-6">
             <Text className="text-white text-lg font-semibold">
               {editingPhase ? 'Edit Phase' : 'Add Phase'}

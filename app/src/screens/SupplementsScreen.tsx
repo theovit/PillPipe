@@ -1,3 +1,4 @@
+// @atlas-entrypoint: App — substantial file
 import React, { useCallback, useState } from 'react';
 import {
   ActivityIndicator,
@@ -11,6 +12,7 @@ import {
   View,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getDb, uuid } from '@/db/database';
 import { Supplement } from '@/utils/types';
 
@@ -53,6 +55,7 @@ function isLow(s: Supplement): boolean {
 }
 
 export default function SupplementsScreen() {
+  const insets = useSafeAreaInsets();
   const [supplements, setSupplements] = useState<Supplement[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalVisible, setModalVisible] = useState(false);
@@ -212,7 +215,7 @@ export default function SupplementsScreen() {
 
       {/* Add / Edit Modal */}
       <Modal visible={modalVisible} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setModalVisible(false)}>
-        <ScrollView className="flex-1 bg-background" contentContainerClassName="px-5 pt-6 pb-10">
+        <ScrollView className="flex-1 bg-background" contentContainerClassName="px-5 pb-10" contentContainerStyle={{ paddingTop: insets.top + 8 }}>
           <View className="flex-row items-center justify-between mb-6">
             <Text className="text-white text-lg font-semibold">
               {editing ? 'Edit Supplement' : 'New Supplement'}
