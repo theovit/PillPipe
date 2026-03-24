@@ -14,6 +14,7 @@ import {
   TextInput,
   View,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import * as SQLite from 'expo-sqlite';
 import * as FileSystem from 'expo-file-system';
@@ -48,6 +49,7 @@ function phaseLabel(p: Phase, unit: string): string {
 }
 
 export default function RegimensScreen() {
+  const insets = useSafeAreaInsets();
   const [sessions, setSessions] = useState<Session[]>([]);
   const [openSessionId, setOpenSessionId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -1175,7 +1177,7 @@ export default function RegimensScreen() {
 
       {/* ── Add Regimen Modal ── */}
       <Modal visible={regimenModal} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setRegimenModal(false)}>
-        <View className="flex-1 bg-background px-5 pt-6">
+        <View className="flex-1 bg-background px-5 pt-6" style={{ paddingBottom: insets.bottom + 16 }}>
           <View className="flex-row items-center justify-between mb-6">
             <Text className="text-white text-lg font-semibold">Add Regimen</Text>
             <Pressable onPress={() => setRegimenModal(false)}>
