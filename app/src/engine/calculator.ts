@@ -4,6 +4,7 @@ export interface Phase {
   dose_lunch: number;
   dose_dinner: number;
   dose_custom: number;
+  custom_slots: string | null;
   duration_days: number;
   /** JSON-encoded int[] stored in SQLite, e.g. "[1,3,5]" or null */
   days_of_week: string | null;
@@ -73,7 +74,11 @@ export function calculate({
 
     const isIndef = phase.indefinite === 1 || phase.indefinite === true;
     const phaseDays = isIndef ? totalDays - currentDay : Number(phase.duration_days);
-    const dosage = phase.dose_morning + phase.dose_lunch + phase.dose_dinner + phase.dose_custom;
+    const customTotal = phase.custom_slots
+      ? (JSON.parse(phase.custom_slots) as Array<{amount: number; time: string}>)
+          .reduce((sum, s) => sum + (Number(s.amount) || 0), 0)
+      : phase.dose_custom;
+    const dosage = phase.dose_morning + phase.dose_lunch + phase.dose_dinner + customTotal;
 
     for (let d = 0; d < phaseDays; d++) {
       if (currentDay >= totalDays) break;

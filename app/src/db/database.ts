@@ -114,6 +114,9 @@ async function migrate(db: SQLite.SQLiteDatabase): Promise<void> {
   ]) {
     try { await db.execAsync(sql); } catch { /* column already exists */ }
   }
+  // custom_slots column — stores JSON array of {amount, time} pairs
+  try { await db.execAsync('ALTER TABLE phases ADD COLUMN custom_slots TEXT'); } catch { /* already exists */ }
+
   // Migrate existing single-dosage phases to dose_morning
   await db.execAsync(
     'UPDATE phases SET dose_morning = dosage WHERE dose_morning = 0 AND dosage > 0',

@@ -46,7 +46,8 @@ export interface Phase {
   dose_lunch: number;
   dose_dinner: number;
   dose_custom: number;
-  custom_time: string | null;  // "HH:MM", only populated when dose_custom > 0
+  custom_time: string | null;  // "HH:MM", legacy — only populated when dose_custom > 0
+  custom_slots: string | null;  // JSON: Array<{amount: number; time: string}>
   duration_days: number;
   days_of_week: string | null;
   indefinite: number;

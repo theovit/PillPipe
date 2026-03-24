@@ -46,7 +46,14 @@ function phaseLabel(p: Phase, unit: string): string {
   if (p.dose_morning > 0) parts.push(`${fmtAmount(p.dose_morning, unit)} morning`);
   if (p.dose_lunch   > 0) parts.push(`${fmtAmount(p.dose_lunch,   unit)} lunch`);
   if (p.dose_dinner  > 0) parts.push(`${fmtAmount(p.dose_dinner,  unit)} dinner`);
-  if (p.dose_custom  > 0) parts.push(`${fmtAmount(p.dose_custom,  unit)} @ ${p.custom_time ?? '?'}`);
+  if (p.custom_slots) {
+    const slots = JSON.parse(p.custom_slots) as Array<{amount: number; time: string}>;
+    for (const s of slots) {
+      if (s.amount > 0) parts.push(`${fmtAmount(s.amount, unit)} @ ${s.time}`);
+    }
+  } else if (p.dose_custom > 0) {
+    parts.push(`${fmtAmount(p.dose_custom, unit)} @ ${p.custom_time ?? '?'}`);
+  }
   const doseStr = parts.length > 0 ? parts.join(' · ') : '0 doses';
   const isIndef = p.indefinite === 1;
   const dur = isIndef ? '∞' : phaseDurLabel(p.duration_days);
@@ -136,9 +143,8 @@ export default function RegimensScreen() {
   const [phaseMorning, setPhaseMorning] = useState('0');
   const [phaseLunch, setPhaseLunch] = useState('0');
   const [phaseDinner, setPhaseDinner] = useState('0');
-  const [phaseCustom, setPhaseCustom] = useState('0');
-  const [phaseCustomTime, setPhaseCustomTime] = useState('12:00');
-  const [showPhaseCustomPicker, setShowPhaseCustomPicker] = useState(false);
+  const [phaseCustomSlots, setPhaseCustomSlots] = useState<Array<{amount: string; time: string}>>([]);
+  const [showCustomPickerIdx, setShowCustomPickerIdx] = useState<number | null>(null);
   const [phaseDuration, setPhaseDuration] = useState('30');
   const [phaseDurationUnit, setPhaseDurationUnit] = useState<'days' | 'weeks'>('days');
   const [phaseIndefinite, setPhaseIndefinite] = useState(false);
@@ -186,7 +192,7 @@ export default function RegimensScreen() {
       const regimenData = await Promise.all(
         regs.map(async (r) => {
           const ps = await db.getAllAsync<Phase>(
-            'SELECT dosage, dose_morning, dose_lunch, dose_dinner, dose_custom, custom_time, duration_days, days_of_week, indefinite, sequence_order FROM phases WHERE regimen_id = ? ORDER BY sequence_order',
+            'SELECT dosage, dose_morning, dose_lunch, dose_dinner, dose_custom, custom_slots, duration_days, days_of_week, indefinite, sequence_order FROM phases WHERE regimen_id = ? ORDER BY sequence_order',
             [r.id],
           );
           return { supplement_id: r.supplement_id, notes: r.notes, phases: ps };
@@ -228,8 +234,8 @@ export default function RegimensScreen() {
       );
       for (const p of tr.phases) {
         await db.runAsync(
-          'INSERT INTO phases (id, regimen_id, dosage, dose_morning, dose_lunch, dose_dinner, dose_custom, custom_time, duration_days, days_of_week, indefinite, sequence_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-          [uuid(), newRegimenId, p.dosage, p.dose_morning, p.dose_lunch, p.dose_dinner, p.dose_custom, p.custom_time, p.duration_days, p.days_of_week, p.indefinite, p.sequence_order],
+          'INSERT INTO phases (id, regimen_id, dosage, dose_morning, dose_lunch, dose_dinner, dose_custom, custom_slots, duration_days, days_of_week, indefinite, sequence_order) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          [uuid(), newRegimenId, p.dosage, p.dose_morning, p.dose_lunch, p.dose_dinner, p.dose_custom, p.custom_slots, p.duration_days, p.days_of_week, p.indefinite, p.sequence_order],
         );
       }
     }
@@ -570,8 +576,16 @@ export default function RegimensScreen() {
       setPhaseMorning(String(existing.dose_morning));
       setPhaseLunch(String(existing.dose_lunch));
       setPhaseDinner(String(existing.dose_dinner));
-      setPhaseCustom(String(existing.dose_custom));
-      setPhaseCustomTime(existing.custom_time ?? '12:00');
+      if (existing.custom_slots) {
+        const parsed = JSON.parse(existing.custom_slots) as Array<{amount: number; time: string}>;
+        setPhaseCustomSlots(parsed.map(s => ({ amount: String(s.amount), time: s.time })));
+      } else if (existing.dose_custom > 0) {
+        // migrate legacy single custom dose
+        setPhaseCustomSlots([{ amount: String(existing.dose_custom), time: existing.custom_time ?? '12:00' }]);
+      } else {
+        setPhaseCustomSlots([]);
+      }
+      setShowCustomPickerIdx(null);
       const d = existing.duration_days;
       if (d % 7 === 0 && d > 0 && d !== 9999) {
         setPhaseDurationUnit('weeks');
@@ -582,15 +596,13 @@ export default function RegimensScreen() {
       }
       setPhaseIndefinite(existing.indefinite === 1);
       setPhaseDow(existing.days_of_week ? JSON.parse(existing.days_of_week) as number[] : []);
-      setShowPhaseCustomPicker(false);
     } else {
       setEditingPhase(null);
       setPhaseMorning('0');
       setPhaseLunch('0');
       setPhaseDinner('0');
-      setPhaseCustom('0');
-      setPhaseCustomTime('12:00');
-      setShowPhaseCustomPicker(false);
+      setPhaseCustomSlots([]);
+      setShowCustomPickerIdx(null);
       setPhaseDuration('30');
       setPhaseDurationUnit('days');
       setPhaseIndefinite(false);
@@ -603,7 +615,7 @@ export default function RegimensScreen() {
     const morning = parseFloat(phaseMorning) || 0;
     const lunch   = parseFloat(phaseLunch)   || 0;
     const dinner  = parseFloat(phaseDinner)  || 0;
-    const custom  = parseFloat(phaseCustom)  || 0;
+    const custom = phaseCustomSlots.reduce((sum, s) => sum + (parseFloat(s.amount) || 0), 0);
     if (morning + lunch + dinner + custom <= 0) {
       Alert.alert('Enter at least one dose');
       return;
@@ -615,14 +627,16 @@ export default function RegimensScreen() {
       return;
     }
     const daysJson = phaseDow.length > 0 ? JSON.stringify([...phaseDow].sort()) : null;
-    const ct = custom > 0 ? phaseCustomTime : null;
+    const customSlotsJson = phaseCustomSlots.length > 0
+      ? JSON.stringify(phaseCustomSlots.map(s => ({ amount: parseFloat(s.amount) || 0, time: s.time })))
+      : null;
 
     try {
       const db = await getDb();
       if (editingPhase) {
         await db.runAsync(
-          'UPDATE phases SET dose_morning=?, dose_lunch=?, dose_dinner=?, dose_custom=?, custom_time=?, duration_days=?, days_of_week=?, indefinite=? WHERE id=?',
-          [morning, lunch, dinner, custom, ct, dur, daysJson, phaseIndefinite ? 1 : 0, editingPhase.id],
+          'UPDATE phases SET dose_morning=?, dose_lunch=?, dose_dinner=?, dose_custom=?, custom_slots=?, duration_days=?, days_of_week=?, indefinite=? WHERE id=?',
+          [morning, lunch, dinner, custom, customSlotsJson, dur, daysJson, phaseIndefinite ? 1 : 0, editingPhase.id],
         );
       } else {
         const rows = await db.getAllAsync<{ m: number | null }>(
@@ -631,8 +645,8 @@ export default function RegimensScreen() {
         );
         const nextOrder = (rows[0]?.m ?? -1) + 1;
         await db.runAsync(
-          'INSERT INTO phases (id,regimen_id,dosage,dose_morning,dose_lunch,dose_dinner,dose_custom,custom_time,duration_days,days_of_week,indefinite,sequence_order) VALUES (?,?,0,?,?,?,?,?,?,?,?,?)',
-          [uuid(), phaseRegimenId, morning, lunch, dinner, custom, ct, dur, daysJson, phaseIndefinite ? 1 : 0, nextOrder],
+          'INSERT INTO phases (id,regimen_id,dosage,dose_morning,dose_lunch,dose_dinner,dose_custom,custom_slots,duration_days,days_of_week,indefinite,sequence_order) VALUES (?,?,0,?,?,?,?,?,?,?,?,?)',
+          [uuid(), phaseRegimenId, morning, lunch, dinner, custom, customSlotsJson, dur, daysJson, phaseIndefinite ? 1 : 0, nextOrder],
         );
       }
       setPhaseModal(false);
@@ -1402,9 +1416,9 @@ export default function RegimensScreen() {
 
           <View className="gap-5">
             {/* Time-of-day doses */}
-            {(['morning', 'lunch', 'dinner', 'custom'] as const).map((slot) => {
-              const val   = slot === 'morning' ? phaseMorning : slot === 'lunch' ? phaseLunch : slot === 'dinner' ? phaseDinner : phaseCustom;
-              const setVal = slot === 'morning' ? setPhaseMorning : slot === 'lunch' ? setPhaseLunch : slot === 'dinner' ? setPhaseDinner : setPhaseCustom;
+            {(['morning', 'lunch', 'dinner'] as const).map((slot) => {
+              const val   = slot === 'morning' ? phaseMorning : slot === 'lunch' ? phaseLunch : phaseDinner;
+              const setVal = slot === 'morning' ? setPhaseMorning : slot === 'lunch' ? setPhaseLunch : setPhaseDinner;
               const label  = slot.charAt(0).toUpperCase() + slot.slice(1);
               return (
                 <View key={slot} className="flex-row items-center justify-between py-2 border-b border-gray-700/50">
@@ -1419,31 +1433,57 @@ export default function RegimensScreen() {
                 </View>
               );
             })}
-            {/* Custom time picker row — only visible when custom dose > 0 */}
-            {parseFloat(phaseCustom) > 0 && (
-              <Pressable
-                onPress={() => setShowPhaseCustomPicker(true)}
-                className="flex-row items-center justify-between py-2 border-b border-gray-700/50"
-              >
-                <Text className="text-gray-500 text-xs ml-24">Custom time</Text>
-                <Text className="text-violet-400 text-sm font-mono mr-4">{phaseCustomTime}</Text>
-              </Pressable>
-            )}
-            {showPhaseCustomPicker && (
+
+            {/* Custom dose slots */}
+            {phaseCustomSlots.map((slot, idx) => (
+              <View key={idx} className="flex-row items-center justify-between py-2 border-b border-gray-700/50">
+                <Pressable
+                  onPress={() => setShowCustomPickerIdx(idx)}
+                  className="bg-gray-800 rounded px-3 py-1.5 w-20 items-center"
+                >
+                  <Text className="text-violet-400 text-sm font-mono">{slot.time}</Text>
+                </Pressable>
+                <TextInput
+                  value={slot.amount}
+                  onChangeText={(v) => {
+                    const updated = [...phaseCustomSlots];
+                    updated[idx] = { ...updated[idx], amount: v };
+                    setPhaseCustomSlots(updated);
+                  }}
+                  keyboardType="decimal-pad"
+                  className="bg-gray-800 text-white text-sm rounded px-3 py-1.5 w-20 text-right"
+                />
+                <Text className="text-gray-500 text-sm w-12">{phaseUnit}</Text>
+                <Pressable onPress={() => setPhaseCustomSlots(phaseCustomSlots.filter((_, i) => i !== idx))} hitSlop={8}>
+                  <Text className="text-red-700 text-xs px-1">✕</Text>
+                </Pressable>
+              </View>
+            ))}
+            {showCustomPickerIdx !== null && (
               <DateTimePicker
-                value={new Date(`1970-01-01T${phaseCustomTime}:00`)}
+                value={new Date(`1970-01-01T${phaseCustomSlots[showCustomPickerIdx]?.time ?? '12:00'}:00`)}
                 mode="time"
                 display={Platform.OS === 'ios' ? 'spinner' : 'default'}
                 onChange={(_, date) => {
-                  setShowPhaseCustomPicker(false);
-                  if (date) {
+                  const idx = showCustomPickerIdx;
+                  setShowCustomPickerIdx(null);
+                  if (date && idx !== null) {
                     const hh = String(date.getHours()).padStart(2, '0');
                     const mm = String(date.getMinutes()).padStart(2, '0');
-                    setPhaseCustomTime(`${hh}:${mm}`);
+                    const updated = [...phaseCustomSlots];
+                    updated[idx] = { ...updated[idx], time: `${hh}:${mm}` };
+                    setPhaseCustomSlots(updated);
                   }
                 }}
               />
             )}
+            {/* Add Custom button */}
+            <Pressable
+              onPress={() => setPhaseCustomSlots([...phaseCustomSlots, { amount: '0', time: '12:00' }])}
+              className="flex-row items-center gap-2 py-2"
+            >
+              <Text className="text-violet-400 text-sm">+ Add Custom Dose</Text>
+            </Pressable>
 
             {/* Indefinite toggle */}
             <View className="flex-row items-center justify-between">
