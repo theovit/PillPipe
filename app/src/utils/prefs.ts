@@ -1,7 +1,9 @@
 /**
- * Shared preferences — synchronous, backed by localStorage (works on both web
- * and React Native via Expo's global localStorage polyfill).
+ * Shared preferences — synchronous reads via module-level cache,
+ * async persistence via AsyncStorage.
+ * Call initPrefs() once at app startup before rendering screens.
  */
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export type AccentColor = 'violet' | 'red' | 'orange' | 'amber' | 'green' | 'blue';
 
@@ -23,23 +25,29 @@ export const ACCENT_HEX: Record<AccentColor, string> = {
   blue:   '#2563eb',
 };
 
-function ls() { return (globalThis as any).localStorage as Storage | undefined; }
+// Module-level cache — populated by initPrefs() at app startup.
+let _cache: AppPrefs = { ...DEFAULT };
 
-export function loadPrefs(): AppPrefs {
+/** Load persisted prefs from AsyncStorage into the module cache. Call once at app startup. */
+export async function initPrefs(): Promise<void> {
   try {
-    const raw = ls()?.getItem(KEY);
-    if (raw) return { ...DEFAULT, ...JSON.parse(raw) };
-  } catch { /* no-op */ }
-  return { ...DEFAULT };
+    const raw = await AsyncStorage.getItem(KEY);
+    if (raw) _cache = { ...DEFAULT, ...JSON.parse(raw) };
+  } catch { /* use defaults */ }
 }
 
-export function savePrefs(patch: Partial<AppPrefs>) {
-  const current = loadPrefs();
-  const next = { ...current, ...patch };
-  try { ls()?.setItem(KEY, JSON.stringify(next)); } catch { /* no-op */ }
+/** Synchronous read from the module cache. Always up-to-date after initPrefs() resolves. */
+export function loadPrefs(): AppPrefs {
+  return { ..._cache };
+}
+
+/** Update the cache and persist asynchronously (fire-and-forget). */
+export function savePrefs(patch: Partial<AppPrefs>): void {
+  _cache = { ..._cache, ...patch };
+  AsyncStorage.setItem(KEY, JSON.stringify(_cache)).catch(() => { /* no-op */ });
 }
 
 /** Returns a React Native style object for the current accent color background. */
 export function accentBg(): { backgroundColor: string } {
-  return { backgroundColor: ACCENT_HEX[loadPrefs().accentColor] };
+  return { backgroundColor: ACCENT_HEX[_cache.accentColor] };
 }

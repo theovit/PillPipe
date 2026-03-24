@@ -1,5 +1,5 @@
 import './global.css';
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import * as Notifications from 'expo-notifications';
 import { getDb, uuid } from '@/db/database';
 import { todayISO } from '@/utils/dates';
@@ -7,6 +7,7 @@ import { StatusBar } from 'expo-status-bar';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { Text } from 'react-native';
+import { initPrefs } from '@/utils/prefs';
 import RegimensScreen from '@/screens/RegimensScreen';
 import SupplementsScreen from '@/screens/SupplementsScreen';
 import SettingsScreen from '@/screens/SettingsScreen';
@@ -62,6 +63,15 @@ function Navigation() {
 }
 
 export default function App() {
+  const [prefsReady, setPrefsReady] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      await initPrefs();
+      setPrefsReady(true);
+    })();
+  }, []);
+
   useEffect(() => {
     const sub = Notifications.addNotificationResponseReceivedListener((response) => {
       const regimenId = response.notification.request.content.data?.regimenId as string | undefined;
@@ -81,6 +91,8 @@ export default function App() {
     });
     return () => sub.remove();
   }, []);
+
+  if (!prefsReady) return null;
 
   return (
     <SafeAreaProvider>
