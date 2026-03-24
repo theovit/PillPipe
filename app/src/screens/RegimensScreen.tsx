@@ -42,13 +42,47 @@ function phaseDurLabel(days: number): string {
 }
 
 function phaseLabel(p: Phase, unit: string): string {
+  const parts: string[] = [];
+  if (p.dose_morning > 0) parts.push(`${fmtAmount(p.dose_morning, unit)} morning`);
+  if (p.dose_lunch   > 0) parts.push(`${fmtAmount(p.dose_lunch,   unit)} lunch`);
+  if (p.dose_dinner  > 0) parts.push(`${fmtAmount(p.dose_dinner,  unit)} dinner`);
+  if (p.dose_custom  > 0) parts.push(`${fmtAmount(p.dose_custom,  unit)} @ ${p.custom_time ?? '?'}`);
+  const doseStr = parts.length > 0 ? parts.join(' · ') : '0 doses';
   const isIndef = p.indefinite === 1;
   const dur = isIndef ? '∞' : phaseDurLabel(p.duration_days);
   const dow = p.days_of_week ? JSON.parse(p.days_of_week) as number[] : null;
   const dowStr = dow && dow.length > 0 && dow.length < 7
     ? ' · ' + dow.map((d) => DOW_LABELS[d]).join(' ')
     : '';
-  return `${fmtAmount(Number(p.dosage), unit)}/dose · ${dur}${dowStr}`;
+  return `${doseStr} · ${dur}${dowStr}`;
+}
+
+type PhaseStatus = { status: 'completed' | 'active' | 'upcoming'; daysLeft: number | null };
+
+function getPhaseStatus(phase: Phase, allPhases: Phase[], sessionStartDate: string): PhaseStatus {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const start = new Date(sessionStartDate);
+  start.setHours(0, 0, 0, 0);
+
+  const sorted = [...allPhases].sort((a, b) => a.sequence_order - b.sequence_order);
+  let dayOffset = 0;
+  for (const p of sorted) {
+    const phaseStart = new Date(start);
+    phaseStart.setDate(phaseStart.getDate() + dayOffset);
+    const phaseEnd = new Date(phaseStart);
+    phaseEnd.setDate(phaseEnd.getDate() + (p.indefinite === 1 ? 99999 : p.duration_days));
+
+    if (p.id === phase.id) {
+      if (today < phaseStart) return { status: 'upcoming', daysLeft: null };
+      if (today >= phaseEnd && p.indefinite !== 1) return { status: 'completed', daysLeft: 0 };
+      const msLeft = phaseEnd.getTime() - today.getTime();
+      const daysLeft = p.indefinite === 1 ? null : Math.ceil(msLeft / 86400000);
+      return { status: 'active', daysLeft };
+    }
+    dayOffset += p.indefinite === 1 ? 0 : p.duration_days;
+  }
+  return { status: 'upcoming', daysLeft: null };
 }
 
 export default function RegimensScreen() {
@@ -962,23 +996,38 @@ export default function RegimensScreen() {
                     {regimenPhases.length === 0 ? (
                       <Text className="text-gray-600 text-xs mb-2">No phases yet.</Text>
                     ) : (
-                      regimenPhases.map((p, idx) => (
-                        <View key={p.id} className="flex-row items-center gap-2 mb-1.5">
-                          <Pressable
-                            onPress={() => openPhaseModal(r.id, unit, p)}
-                            className="flex-row items-center gap-2 flex-1"
-                          >
-                            <View className="w-5 h-5 rounded-full bg-violet-900/60 border border-violet-700/50 items-center justify-center">
-                              <Text className="text-violet-400 text-xs font-bold">{idx + 1}</Text>
-                            </View>
-                            <Text className="text-gray-300 text-xs flex-1">{phaseLabel(p, unit)}</Text>
-                            <Text className="text-gray-600 text-xs">✎</Text>
-                          </Pressable>
-                          <Pressable onPress={() => deletePhase(p.id)} hitSlop={8}>
-                            <Text className="text-red-700 text-xs px-1">✕</Text>
-                          </Pressable>
-                        </View>
-                      ))
+                      regimenPhases.map((p, idx) => {
+                        const { status, daysLeft } = openSess
+                          ? getPhaseStatus(p, regimenPhases, openSess.start_date)
+                          : { status: 'upcoming' as const, daysLeft: null };
+                        return (
+                          <View key={p.id} className="flex-row items-center gap-2 mb-1.5">
+                            <Pressable
+                              onPress={() => openPhaseModal(r.id, unit, p)}
+                              className="flex-row items-center gap-2 flex-1"
+                            >
+                              <View className="w-5 h-5 rounded-full bg-violet-900/60 border border-violet-700/50 items-center justify-center">
+                                <Text className="text-violet-400 text-xs font-bold">{idx + 1}</Text>
+                              </View>
+                              <Text className={`text-xs flex-1 ${status === 'completed' ? 'line-through text-gray-600' : status === 'upcoming' ? 'text-gray-600' : 'text-gray-300'}`}>
+                                {phaseLabel(p, unit)}
+                              </Text>
+                              {status === 'active' && (
+                                <View className="bg-violet-900/60 border border-violet-700/50 rounded px-1.5 py-0.5">
+                                  <Text className="text-violet-300 text-xs font-mono">
+                                    {daysLeft === null ? '∞' : `${daysLeft}d`}
+                                  </Text>
+                                </View>
+                              )}
+                              {status === 'completed' && <Text className="text-gray-600 text-xs">✓</Text>}
+                              <Text className="text-gray-600 text-xs">✎</Text>
+                            </Pressable>
+                            <Pressable onPress={() => deletePhase(p.id)} hitSlop={8}>
+                              <Text className="text-red-700 text-xs px-1">✕</Text>
+                            </Pressable>
+                          </View>
+                        );
+                      })
                     )}
                     {/* Phase coverage indicator */}
                     {openSess && regimenPhases.length > 0 && (() => {
