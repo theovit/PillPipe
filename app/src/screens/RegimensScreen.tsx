@@ -889,7 +889,7 @@ export default function RegimensScreen() {
                             onPress={() => togglePresetNotif(r.id, type)}
                             className={`px-3 py-1.5 rounded-lg border ${active ? 'bg-violet-600 border-violet-500' : 'bg-gray-800 border-gray-700'}`}
                           >
-                            <Text className={`text-xs font-medium capitalize ${active ? 'text-white' : 'text-gray-400'}`}>
+                            <Text className={`text-xs font-medium ${active ? 'text-white' : 'text-gray-400'}`}>
                               {type.charAt(0).toUpperCase() + type.slice(1)}
                             </Text>
                             {active && <Text className="text-violet-200 text-xs font-mono">{time}</Text>}
@@ -907,7 +907,7 @@ export default function RegimensScreen() {
                     {/* Custom time rows */}
                     {notifEntries[r.id]?.filter(e => e.type === 'custom').map(e => (
                       <View key={e.id} className="flex-row items-center justify-between py-1">
-                        <Text className="text-gray-400 text-xs font-mono">Custom · {e.custom_time}</Text>
+                        <Text className="text-gray-400 text-xs font-mono">Custom · {e.custom_time ?? '??:??'}</Text>
                         <Pressable onPress={() => removeNotifEntry(r.id, e.id, 'custom')} hitSlop={8}>
                           <Text className="text-red-700 text-xs px-1">✕</Text>
                         </Pressable>
