@@ -284,8 +284,8 @@ Update the phase list in the regimen card to use `getPhaseStatus`:
 
 ```tsx
 {regimenPhases.map((p, idx) => {
-  const { status, daysLeft } = session
-    ? getPhaseStatus(p, regimenPhases, session.start_date)
+  const { status, daysLeft } = openSess
+    ? getPhaseStatus(p, regimenPhases, openSess.start_date)
     : { status: 'upcoming' as const, daysLeft: null };
   return (
     <View key={p.id} className="flex-row items-center gap-2 mb-1.5">
@@ -314,7 +314,7 @@ Update the phase list in the regimen card to use `getPhaseStatus`:
 })}
 ```
 
-Note: `session` here is the open session object, used to get `start_date`. If no session is open, all phases show as upcoming.
+Note: Inside the `regimens.map()` render block, the open session is available as `openSess` (declared just above the `return` statement). Use `openSess` — there is no local variable named `session` at this scope. If `openSess` is undefined (no open session), all phases show as upcoming.
 
 ---
 
@@ -322,14 +322,27 @@ Note: `session` here is the open session object, used to get `start_date`. If no
 
 **File:** `app/src/engine/calculator.ts`
 
-Wherever `p.dosage` is used to compute daily pill counts, replace with the sum of the four dose fields:
+The calculator defines its own local `Phase` interface (separate from `types.ts`). Add the four new dose fields to it:
+
+```ts
+interface Phase {
+  // existing fields ...
+  dose_morning: number;
+  dose_lunch:   number;
+  dose_dinner:  number;
+  dose_custom:  number;
+  // dosage retained for legacy compatibility
+}
+```
+
+Then wherever `p.dosage` is used to compute daily pill counts (one location), replace with the sum:
 
 ```ts
 // Before:
-const dailyDose = p.dosage;
+const dailyDose = Number(phase.dosage);
 
 // After:
-const dailyDose = p.dose_morning + p.dose_lunch + p.dose_dinner + p.dose_custom;
+const dailyDose = phase.dose_morning + phase.dose_lunch + phase.dose_dinner + phase.dose_custom;
 ```
 
 This keeps shortfall, bottles needed, and estimated cost calculations correct.
@@ -342,8 +355,44 @@ This keeps shortfall, bottles needed, and estimated cost calculations correct.
 |---|---|
 | `app/src/db/database.ts` | Add 5 `ALTER TABLE` calls + `UPDATE` data migration in `migrate()` |
 | `app/src/utils/types.ts` | Add 5 new fields to `Phase` interface |
-| `app/src/screens/RegimensScreen.tsx` | Replace `phaseDosage` state with 5 new vars; update `openPhaseModal`; replace dosage input with 4-field UI + custom time picker; update `savePhase`; update `phaseLabel`; add `getPhaseStatus` helper; update phase row rendering |
-| `app/src/engine/calculator.ts` | Replace `p.dosage` with sum of four dose fields |
+| `app/src/screens/RegimensScreen.tsx` | Replace `phaseDosage` state with 5 new vars; update `openPhaseModal`; replace dosage input with 4-field UI + custom time picker; update `savePhase`; update `phaseLabel`; add `getPhaseStatus` helper; update phase row rendering; update `saveAsTemplate`/`applyTemplate` column lists |
+| `app/src/engine/calculator.ts` | Add four dose fields to local `Phase` interface; replace `p.dosage` with sum |
+
+---
+
+## Section 7 — Template Snapshot Update
+
+**File:** `app/src/screens/RegimensScreen.tsx`
+
+`saveAsTemplate()` contains a hard-coded query that snapshots phase columns:
+
+```ts
+// Current (must be updated):
+SELECT dosage, duration_days, days_of_week, indefinite, sequence_order FROM phases
+```
+
+Update to include all new dose fields:
+
+```ts
+SELECT dosage, dose_morning, dose_lunch, dose_dinner, dose_custom, custom_time,
+       duration_days, days_of_week, indefinite, sequence_order FROM phases
+```
+
+Also update the corresponding `applyTemplate()` INSERT statement to include the new columns:
+
+```ts
+// Updated INSERT in applyTemplate():
+await db.runAsync(
+  `INSERT INTO phases (id, regimen_id, dosage, dose_morning, dose_lunch, dose_dinner, dose_custom,
+   custom_time, duration_days, days_of_week, indefinite, sequence_order)
+   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  [uuid(), regimenId, row.dosage, row.dose_morning, row.dose_lunch, row.dose_dinner,
+   row.dose_custom, row.custom_time, row.duration_days, row.days_of_week,
+   row.indefinite, row.sequence_order],
+);
+```
+
+Without this, templates saved after migration will restore phases with all dose fields zeroed out — silent data loss.
 
 ---
 
