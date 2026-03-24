@@ -12,7 +12,7 @@ Migrate all `expo-file-system` legacy API calls in the Android app to the modern
 
 ## Background
 
-`FileSystem.writeAsStringAsync` and `FileSystem.readAsStringAsync` from `expo-file-system` are deprecated in Expo SDK 54. The JSON backup export throws a deprecation warning; the CSV export fails entirely. The modern replacement is the `File` and `Directory` class API from `expo-file-system/next`, combined with `Paths` for standard directory references.
+`FileSystem.writeAsStringAsync` and `FileSystem.readAsStringAsync` from `expo-file-system` are deprecated in Expo SDK 54. The JSON backup export throws a deprecation warning; the CSV export fails entirely. The modern replacement is the `File` class API from `expo-file-system/next`, combined with `Paths` for standard directory references.
 
 ---
 
@@ -21,11 +21,16 @@ Migrate all `expo-file-system` legacy API calls in the Android app to the modern
 | Legacy call | Modern replacement |
 |---|---|
 | `import * as FileSystem from 'expo-file-system'` | `import { File, Paths } from 'expo-file-system/next'` |
-| `FileSystem.writeAsStringAsync(path, content)` | `await new File(path).write(content)` |
+| `import { cacheDirectory } from 'expo-file-system/legacy'` | removed (use `Paths.cache` instead) |
+| `FileSystem.writeAsStringAsync(path, content)` | `await new File(Paths.cache, 'filename').write(content)` |
 | `FileSystem.readAsStringAsync(uri)` | `await new File(uri).text()` |
-| `FileSystem.cacheDirectory + 'filename'` | `Paths.cache + '/filename'` |
+| `` `${cacheDirectory}filename` `` | `new File(Paths.cache, 'filename')` — note: `Paths.cache` is a `Directory` object, NOT a string; use the two-argument `File` constructor |
 
-No other file system APIs (`copyAsync`, `deleteAsync`, `getInfoAsync`, etc.) are used in the affected files — only read and write.
+**Import cleanup:** Both `RegimensScreen.tsx` and `SettingsScreen.tsx` currently have two legacy imports that must both be removed:
+- `import * as FileSystem from 'expo-file-system'`
+- `import { cacheDirectory } from 'expo-file-system/legacy'`
+
+Replace with: `import { File, Paths } from 'expo-file-system/next'`
 
 ---
 
@@ -36,7 +41,7 @@ No other file system APIs (`copyAsync`, `deleteAsync`, `getInfoAsync`, etc.) are
 
 ### Current flow (broken)
 ```ts
-const path = FileSystem.cacheDirectory + 'pillpipe-export.csv';
+const path = `${cacheDirectory}pillpipe-${session.target_date}.csv`;
 await FileSystem.writeAsStringAsync(path, csvString);
 await Sharing.shareAsync(path);
 ```
@@ -45,12 +50,12 @@ await Sharing.shareAsync(path);
 ```ts
 import { File, Paths } from 'expo-file-system/next';
 
-const file = new File(Paths.cache + '/pillpipe-export.csv');
+const file = new File(Paths.cache, `pillpipe-${session.target_date}.csv`);
 await file.write(csvString);
 await Sharing.shareAsync(file.uri);
 ```
 
-Error handling: existing try/catch block retained; `Alert.alert('Export Failed', String(e))` on failure.
+The dynamic filename using `session.target_date` is preserved. Error handling: existing try/catch block retained; `Alert.alert('Export Failed', String(e))` on failure.
 
 ---
 
@@ -61,21 +66,21 @@ Error handling: existing try/catch block retained; `Alert.alert('Export Failed',
 
 ### Current flow (deprecated warning)
 ```ts
-const path = FileSystem.cacheDirectory + 'pillpipe-backup.json';
-await FileSystem.writeAsStringAsync(path, jsonString);
-await Sharing.shareAsync(path);
+const path = `${cacheDirectory}pillpipe-backup-${date}.json`;
+await FileSystem.writeAsStringAsync(path, json);
+await Sharing.shareAsync(path, { mimeType: 'application/json', UTI: 'public.json' });
 ```
 
 ### New flow
 ```ts
 import { File, Paths } from 'expo-file-system/next';
 
-const file = new File(Paths.cache + '/pillpipe-backup.json');
-await file.write(jsonString);
-await Sharing.shareAsync(file.uri);
+const file = new File(Paths.cache, `pillpipe-backup-${date}.json`);
+await file.write(json);
+await Sharing.shareAsync(file.uri, { mimeType: 'application/json', UTI: 'public.json' });
 ```
 
-Error handling: existing try/catch retained; `Alert.alert('Backup Failed', String(e))` on failure.
+The dynamic filename and `shareAsync` options (`mimeType`, `UTI`) are preserved. Error handling: existing try/catch retained; `Alert.alert('Backup Failed', String(e))` on failure.
 
 ---
 
@@ -84,7 +89,7 @@ Error handling: existing try/catch retained; `Alert.alert('Backup Failed', Strin
 **File:** `app/src/screens/SettingsScreen.tsx`
 **Function:** `importBackup()`
 
-The document picker call (`expo-document-picker`) is unchanged — it returns a URI for the user-selected file. Only the read call changes.
+The document picker call (`expo-document-picker`) is unchanged. The picker is called with `copyToCacheDirectory: true`, which ensures the returned URI is always a `file://` URI (Android copies the `content://` provider file to a cache path). This makes `new File(uri)` safe.
 
 ### Current flow
 ```ts
@@ -98,7 +103,7 @@ import { File } from 'expo-file-system/next';
 const content = await new File(pickedUri).text();
 ```
 
-Error handling: existing try/catch retained; `Alert.alert('Restore Failed', String(e))` on failure.
+The `copyToCacheDirectory: true` option on the picker call must remain in place. Error handling: existing try/catch retained; `Alert.alert('Restore Failed', String(e))` on failure.
 
 ---
 
@@ -106,14 +111,16 @@ Error handling: existing try/catch retained; `Alert.alert('Restore Failed', Stri
 
 No storage permission changes are needed. The share-sheet approach (`expo-sharing`) writes to the app's internal cache directory (`Paths.cache`) which requires no `WRITE_EXTERNAL_STORAGE` permission, then hands off to the OS share sheet for the user to route the file to Downloads, Google Drive, email, etc.
 
+`Sharing.isAvailableAsync()` check: out of scope for this sprint. On Android the share sheet is always available; the existing error handling (try/catch → Alert) is sufficient.
+
 ---
 
 ## File Changelist
 
 | File | Change |
 |---|---|
-| `app/src/screens/RegimensScreen.tsx` | Update `exportCSV()`: replace legacy FileSystem write with `File.write()` |
-| `app/src/screens/SettingsScreen.tsx` | Update `exportBackup()` and `importBackup()`: replace legacy FileSystem calls |
+| `app/src/screens/RegimensScreen.tsx` | `exportCSV()`: remove both legacy FileSystem imports; replace write path with `new File(Paths.cache, filename).write()`; update `shareAsync` call |
+| `app/src/screens/SettingsScreen.tsx` | `exportBackup()` and `importBackup()`: remove both legacy FileSystem imports; replace write/read with modern `File` API |
 
 ---
 
@@ -122,4 +129,5 @@ No storage permission changes are needed. The share-sheet approach (`expo-sharin
 - Web app export (uses browser Blob API — not affected)
 - PDF export (web-only, not affected)
 - Storage permission dialogs
+- `Sharing.isAvailableAsync()` guard
 - Any other `expo-file-system` usage outside the three listed functions
