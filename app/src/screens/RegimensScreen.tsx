@@ -26,6 +26,7 @@ import { getDb, uuid } from '@/db/database';
 import { calculate } from '@/engine/calculator';
 import { Phase, Regimen, Session, Supplement } from '@/utils/types';
 import { daysUntil, fmtAmount, formatDate, todayISO } from '@/utils/dates';
+import { loadPrefs } from '@/utils/prefs';
 import { cancelReminder, scheduleReminder } from '@/utils/notifications';
 
 const inputCls =
@@ -651,7 +652,22 @@ export default function RegimensScreen() {
       {/* Sessions list */}
       <View className="flex-row items-center justify-between mb-3">
         <Text className="text-gray-400 text-xs font-semibold uppercase tracking-wider">Sessions</Text>
-        <Pressable onPress={() => { setSelectedTemplateId(''); setSessionModal(true); }} className="bg-violet-600 rounded-lg px-3 py-1.5">
+        <Pressable
+          onPress={() => {
+            const prefs = loadPrefs();
+            setSelectedTemplateId('');
+            setSessionStart(todayISO());
+            if (prefs.defaultDuration > 0) {
+              const d = new Date();
+              d.setDate(d.getDate() + prefs.defaultDuration);
+              setSessionTarget(d.toISOString().slice(0, 10));
+            } else {
+              setSessionTarget('');
+            }
+            setSessionModal(true);
+          }}
+          className="bg-violet-600 rounded-lg px-3 py-1.5"
+        >
           <Text className="text-white text-sm font-medium">+ New</Text>
         </Pressable>
       </View>
