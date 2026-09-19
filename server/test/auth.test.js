@@ -25,6 +25,9 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 // The backend trusts one proxy hop, so a unique X-Forwarded-For per call gives every request its
 // own rate-limit bucket; tests that exercise the limiter pass a fixed `ip`.
 let ipCounter = 0;
+// Rate-limit tests need fixed IPs, but the limiter remembers them for 15 minutes — randomise per run
+// so the suite can be re-run against the same stack.
+const randomIp = () => `198.51.${Math.floor(Math.random() * 250)}.${Math.floor(Math.random() * 250) + 1}`;
 const nextIp = () => `10.20.${Math.floor(ipCounter / 250)}.${(ipCounter++ % 250) + 1}`;
 
 async function call(method, url, { cookie, body, headers = {}, raw, ip, noCsrf } = {}) {
@@ -150,7 +153,7 @@ test('POST /restore with an empty or malformed body is 400 and deletes nothing',
   const { cookie } = await login();
   const before = (await call('GET', '/supplements', { cookie })).json.length;
   assert.ok(before > 0, 'expected seed supplements from db/init.sql');
-  for (const body of [{}, { supplements: 'nope' }, { version: 2, supplements: [], sessions: [], regimens: [], phases: [] }, []]) {
+  for (const body of [{}, { supplements: 'nope' }, { version: 3, supplements: [], sessions: [], regimens: [], phases: [] }, []]) {
     const res = await call('POST', '/restore', { cookie, body });
     assert.equal(res.status, 400, JSON.stringify(body));
   }
@@ -209,16 +212,16 @@ test('state-changing requests need the CSRF header, a matching Origin and a same
 });
 
 test('login is rate limited per IP; only failures count; other IPs are unaffected', async () => {
-  const ip = '203.0.113.50';
+  const ip = randomIp();
   for (let i = 0; i < 5; i++) assert.equal((await login('wrong-password-' + i, { ip })).status, 401);
   const blocked = await login(PASSWORD, { ip });
   assert.equal(blocked.status, 429, 'even the correct password is refused once the limit is hit');
   assert.equal(blocked.setCookie.length, 0);
-  assert.equal((await login(PASSWORD, { ip: '203.0.113.51' })).status, 200);
+  assert.equal((await login(PASSWORD, { ip: randomIp() })).status, 200);
 });
 
 test('successful logins do not count toward the login limit', async () => {
-  const ip = '203.0.113.60';
+  const ip = randomIp();
   for (let i = 0; i < 8; i++) assert.equal((await login(PASSWORD, { ip })).status, 200, `login ${i}`);
 });
 

@@ -142,3 +142,18 @@ test('validatePhaseBody rejects bad input', () => {
 test('a custom-only phase is valid', () => {
   assert.equal(validatePhaseBody({ custom_slots: [{ amount: 1, time: '15:00' }], duration_days: 3 }).ok, true);
 });
+
+const { normalizePhaseRow } = require('../dosing');
+
+test('normalizePhaseRow maps any row vintage into the current shape', () => {
+  assert.deepEqual(normalizePhaseRow({ dosage: '2.5', duration_days: 5 }),
+    { dose_morning: 2.5, dose_lunch: 0, dose_dinner: 0, custom_slots: [] }, 'version-1 / legacy row');
+  assert.deepEqual(
+    normalizePhaseRow({ dose_morning: '1', dose_lunch: 0, dose_dinner: '2', custom_slots: [{ amount: 1, time: '14:00' }], dosage: 0 }),
+    { dose_morning: 1, dose_lunch: 0, dose_dinner: 2, custom_slots: [{ amount: 1, time: '14:00' }] });
+  assert.deepEqual(
+    normalizePhaseRow({ dose_morning: 1, custom_slots: '[{"amount":2,"time":"09:00"},{"amount":0,"time":"10:00"},{"amount":1,"time":"bad"}]' }).custom_slots,
+    [{ amount: 2, time: '09:00' }], 'drops zero-amount and malformed slots');
+  assert.deepEqual(normalizePhaseRow({ dose_morning: null, dose_lunch: null, dose_dinner: null, custom_slots: null }),
+    { dose_morning: 0, dose_lunch: 0, dose_dinner: 0, custom_slots: [] }, 'explicit NULLs become zeros');
+});

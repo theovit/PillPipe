@@ -33,6 +33,7 @@ services:
       SESSION_IDLE_TTL: ${TEST_IDLE_TTL:-4}
       SESSION_ABS_TTL: ${TEST_ABS_TTL:-9}
       LOGIN_MAX_FAILS: "5"
+      LOGIN_SLOWDOWN_AFTER: "1000"   # keep the failed-login delay out of the test runs
       APP_ORIGIN: ${TEST_APP_ORIGIN:-http://127.0.0.1:13000}
       # Fake Google credentials: enough for generateAuthUrl(); the token exchange always fails.
       GOOGLE_CLIENT_ID: test-client-id

@@ -34,7 +34,7 @@ const OAUTH_STATE_TTL = "interval '10 minutes'";
 const MAX_CONCURRENT_VERIFY = 2;
 // Under a distributed guessing attack, slow every failed login down instead of locking the
 // owner out (a global lockout would be a denial-of-service lever).
-const GLOBAL_FAIL_SLOWDOWN = 20;
+const GLOBAL_FAIL_SLOWDOWN = positiveInt(process.env.LOGIN_SLOWDOWN_AFTER, 20);
 const SLOWDOWN_MS = 1500;
 
 const ENV_HASH = (process.env.APP_PASSWORD_HASH || '').trim();
@@ -216,14 +216,15 @@ const router = express.Router();
 
 router.post('/auth/login', loginLimiter, express.json({ limit: '1kb' }), w(async (req, res) => {
   const password = req.body && req.body.password;
-  const fail = () => {
+  // Under a guessing attack every failed response is delayed; a correct password never is.
+  const fail = async () => {
     globalFails++;
     console.warn(`Failed login from ${req.ip}`);
+    if (globalFails > GLOBAL_FAIL_SLOWDOWN) await sleep(SLOWDOWN_MS);
     return res.status(401).json({ error: 'Invalid password' });
   };
   if (typeof password !== 'string' || !password || password.length > 256) return fail();
   if (activeVerifications >= MAX_CONCURRENT_VERIFY) return tooMany(req, res);
-  if (globalFails > GLOBAL_FAIL_SLOWDOWN) await sleep(SLOWDOWN_MS);
   activeVerifications++;
   let ok;
   try {

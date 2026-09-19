@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 ### Added
+- Web (server): a Take With Food flag on supplements and an As Needed flag on regimens (excluded from shortfall and days-remaining math); both are kept by copy, templates and backups
 - Web (server): meal-time dosing foundation — each phase now takes Breakfast / Lunch / Dinner amounts plus up to 12 custom time+amount doses, stored as `dose_morning/lunch/dinner` and a `custom_slots` JSON list; the shortfall calculator sums them, fractional amounts work for every unit, and existing single doses migrate to Breakfast automatically. The editor, notifications and other flows follow in later commits
 - Web: password login (server side) — every API route now requires a session except `/health`, `/auth/login` and `/auth/me`. scrypt password hash in `APP_PASSWORD_HASH` (the backend refuses to start without it; generate with `node scripts/hash-password.js`), DB-backed sessions in an HttpOnly cookie, CSRF header check, login/API rate limiting, and a `state` check on the Google Drive connect flow. `POST /restore` now rejects empty/malformed backups instead of wiping the database, and accepts backups up to 25 MB
 - Web: sign-in screen and a Session card in Settings (Log out / Log out everywhere); an expired or revoked session drops back to the sign-in screen, and a server outage shows a Retry state instead of a misleading login form
@@ -11,12 +12,17 @@
 - Android app: collapsible Settings sections, font size preference, default session duration (pre-fills new session target date)
 - Android app: phase labels show time-of-day doses; the active phase shows a days-left badge
 ### Changed
+- Backups are now version 2 (they include the new dosing fields); older version-1 files still restore, with their single dose becoming the Breakfast dose, and files from a newer version are refused instead of silently zeroing doses
+- Days-remaining and the low-stock alert now use each regimen's currently active phase at its full daily total, summed across regimens, in your timezone (previously the first phase of an arbitrary regimen)
 - Dependencies upgraded to clear known vulnerabilities: `jspdf` 4.2.1, `dompurify` 3.4.15, `fflate` 0.8.3 (web); `express` 4.22.3 (pulls patched `qs` 6.16), `node-cron` 4.6 (drops vulnerable `uuid`) (server); `npm audit` now reports 0 vulnerabilities for both the web client and the server (vite 8.3, postcss, nanoid, js-yaml, browserslist and others updated via `npm audit fix`)
 - `tailwindcss` / `@tailwindcss/vite` 4.3.3 — they now support vite 8, so `client/Dockerfile` installs without `--legacy-peer-deps`
 - Android app: preferences now stored in AsyncStorage with a synchronous cache
 - Android app: CSV export and JSON backup/restore use `expo-file-system/next`
 - Android app: font sizes are rem-based so the font size preference scales all text
 ### Fixed
+- Copying a session no longer drops the indefinite flag on its phases
+- Changing a regimen's As Needed flag (or notes) no longer wipes the other field
+- The login concurrency cap now still holds while the failed-login slowdown is active
 - Adding a phase after deleting one in the middle no longer fails (the server now assigns the phase order)
 - Shortfall math no longer misjudges coverage on decimal doses (e.g. 0.1 three times a day against 0.3)
 - Web: the add/edit supplement form now accepts whole numbers (e.g. 30 capsules per bottle). It previously demanded values like 29.001 because the field's `min` and `step` didn't line up

@@ -7,7 +7,9 @@ const pool = require('./db');
 const { calculate } = require('./calculator');
 const { version } = require('./package.json');
 const auth = require('./auth');
-const { validatePhaseBody } = require('./dosing');
+const { validatePhaseBody, normalizePhaseRow, supplementDaysRemaining, activePhase, dayIndex } = require('./dosing');
+const { buildBackup, isValidBackup, restoreBackup } = require('./backup');
+const { nowInTz } = require('./tz');
 
 // ── Google OAuth2 setup ───────────────────────────────────────────────────────
 const oauth2Client = new google.auth.OAuth2(
@@ -81,43 +83,82 @@ app.get('/health', (req, res) => res.json({ status: 'ok' }));
 app.get('/version', (req, res) => res.json({ version }));
 
 // ── Supplements ───────────────────────────────────────────────────────────────
+// The owner's timezone (prefs.timezone) decides what "today" is; the server clock is UTC.
+async function userTimezone() {
+  const { rows } = await pool.query("SELECT prefs->>'timezone' AS tz FROM user_settings WHERE singleton = TRUE");
+  return rows[0]?.tz ?? null;
+}
+
+// Map supplement_id -> [currently active phase of every non-as-needed regimen using it today].
+async function activePhasesBySupplement(todayStr) {
+  const [sessions, regimens, phases] = await Promise.all([
+    pool.query("SELECT id, to_char(start_date, 'YYYY-MM-DD') AS start_date, to_char(target_date, 'YYYY-MM-DD') AS target_date FROM sessions"),
+    pool.query('SELECT id, session_id, supplement_id FROM regimens WHERE as_needed = FALSE'),
+    pool.query('SELECT * FROM phases'),
+  ]);
+  const sessionById = new Map(sessions.rows.map(s => [s.id, s]));
+  const phasesByRegimen = new Map();
+  for (const ph of phases.rows) {
+    if (!phasesByRegimen.has(ph.regimen_id)) phasesByRegimen.set(ph.regimen_id, []);
+    phasesByRegimen.get(ph.regimen_id).push(ph);
+  }
+  const active = new Map();
+  for (const r of regimens.rows) {
+    const s = sessionById.get(r.session_id);
+    if (!s) continue;
+    const current = activePhase(phasesByRegimen.get(r.id) ?? [], s.start_date, todayStr, dayIndex(s.start_date, s.target_date));
+    if (!current) continue;
+    if (!active.has(r.supplement_id)) active.set(r.supplement_id, []);
+    active.get(r.supplement_id).push(current.phase);
+  }
+  return active;
+}
+
+// Copies a phase's schedule onto a regimen / template regimen from a row of any vintage.
+function insertPhaseCopy(regimenId, p) {
+  const d = normalizePhaseRow(p);
+  return pool.query(
+    `INSERT INTO phases (regimen_id, dose_morning, dose_lunch, dose_dinner, custom_slots, duration_days, days_of_week, indefinite, sequence_order)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+    [regimenId, d.dose_morning, d.dose_lunch, d.dose_dinner, JSON.stringify(d.custom_slots), p.duration_days, p.days_of_week ?? null, !!p.indefinite, p.sequence_order]
+  );
+}
+
+function insertTemplatePhaseCopy(templateRegimenId, p) {
+  const d = normalizePhaseRow(p);
+  return pool.query(
+    `INSERT INTO template_phases (template_regimen_id, dose_morning, dose_lunch, dose_dinner, custom_slots, duration_days, days_of_week, indefinite, sequence_order)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+    [templateRegimenId, d.dose_morning, d.dose_lunch, d.dose_dinner, JSON.stringify(d.custom_slots), p.duration_days, p.days_of_week ?? null, !!p.indefinite, p.sequence_order]
+  );
+}
+
 app.get('/supplements', w(async (req, res) => {
-  // Include computed days_remaining from the first active-session phase for each supplement
-  const { rows } = await pool.query(`
-    SELECT s.*,
-      (
-        SELECT FLOOR(s.current_inventory / NULLIF(p.dosage * (COALESCE(array_length(p.days_of_week, 1), 7) / 7.0), 0))
-        FROM phases p
-        JOIN regimens r ON r.id = p.regimen_id
-        JOIN sessions sess ON sess.id = r.session_id
-        WHERE r.supplement_id = s.id
-          AND sess.start_date <= CURRENT_DATE
-          AND sess.target_date >= CURRENT_DATE
-        ORDER BY p.sequence_order
-        LIMIT 1
-      ) AS days_remaining
-    FROM supplements s
-    ORDER BY s.name
-  `);
-  res.json(rows);
+  const { rows } = await pool.query('SELECT * FROM supplements ORDER BY name');
+  const active = await activePhasesBySupplement(nowInTz(await userTimezone()).date);
+  // days_remaining: supply left at the current active-phase rate across every active regimen (null = none scheduled)
+  res.json(rows.map(s => ({ ...s, days_remaining: supplementDaysRemaining(s.current_inventory, active.get(s.id) ?? []) })));
 }));
 
 app.post('/supplements', w(async (req, res) => {
-  const { name, brand, pills_per_bottle, price, type, current_inventory, unit, drops_per_ml, reorder_threshold, reorder_threshold_mode } = req.body;
+  const { name, brand, pills_per_bottle, price, type, current_inventory, unit, drops_per_ml, reorder_threshold, reorder_threshold_mode, take_with_food } = req.body;
   const { rows } = await pool.query(
-    `INSERT INTO supplements (name, brand, pills_per_bottle, price, type, current_inventory, unit, drops_per_ml, reorder_threshold, reorder_threshold_mode)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
-    [name, brand, pills_per_bottle, price, type, current_inventory ?? 0, unit || 'capsules', drops_per_ml ?? 20, reorder_threshold ?? null, reorder_threshold_mode || 'units']
+    `INSERT INTO supplements (name, brand, pills_per_bottle, price, type, current_inventory, unit, drops_per_ml, reorder_threshold, reorder_threshold_mode, take_with_food)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
+    [name, brand, pills_per_bottle, price, type, current_inventory ?? 0, unit || 'capsules', drops_per_ml ?? 20, reorder_threshold ?? null, reorder_threshold_mode || 'units', !!take_with_food]
   );
   res.status(201).json(rows[0]);
 }));
 
 app.put('/supplements/:id', w(async (req, res) => {
-  const { name, brand, pills_per_bottle, price, type, current_inventory, unit, drops_per_ml, reorder_threshold, reorder_threshold_mode } = req.body;
+  const { name, brand, pills_per_bottle, price, type, current_inventory, unit, drops_per_ml, reorder_threshold, reorder_threshold_mode, take_with_food } = req.body;
+  // take_with_food is only changed when sent, so an older client's edit can't silently reset it.
   const { rows } = await pool.query(
-    `UPDATE supplements SET name=$1, brand=$2, pills_per_bottle=$3, price=$4, type=$5, current_inventory=$6, unit=$7, drops_per_ml=$8, reorder_threshold=$9, reorder_threshold_mode=$10
-     WHERE id=$11 RETURNING *`,
-    [name, brand, pills_per_bottle, price, type, current_inventory ?? 0, unit || 'capsules', drops_per_ml ?? 20, reorder_threshold ?? null, reorder_threshold_mode || 'units', req.params.id]
+    `UPDATE supplements SET name=$1, brand=$2, pills_per_bottle=$3, price=$4, type=$5, current_inventory=$6, unit=$7, drops_per_ml=$8, reorder_threshold=$9, reorder_threshold_mode=$10,
+       take_with_food=COALESCE($11, take_with_food)
+     WHERE id=$12 RETURNING *`,
+    [name, brand, pills_per_bottle, price, type, current_inventory ?? 0, unit || 'capsules', drops_per_ml ?? 20, reorder_threshold ?? null, reorder_threshold_mode || 'units',
+      typeof take_with_food === 'boolean' ? take_with_food : null, req.params.id]
   );
   if (!rows.length) return res.status(404).json({ error: 'Not found' });
   res.json(rows[0]);
@@ -157,17 +198,14 @@ app.post('/sessions', w(async (req, res) => {
     );
     for (const tr of tmplRegimens) {
       const { rows: [newRegimen] } = await pool.query(
-        'INSERT INTO regimens (session_id, supplement_id) VALUES ($1,$2) RETURNING *',
-        [session.id, tr.supplement_id]
+        'INSERT INTO regimens (session_id, supplement_id, as_needed) VALUES ($1,$2,$3) RETURNING *',
+        [session.id, tr.supplement_id, !!tr.as_needed]
       );
       const { rows: tmplPhases } = await pool.query(
         'SELECT * FROM template_phases WHERE template_regimen_id=$1 ORDER BY sequence_order', [tr.id]
       );
       for (const tp of tmplPhases) {
-        await pool.query(
-          'INSERT INTO phases (regimen_id, dosage, duration_days, days_of_week, sequence_order, indefinite) VALUES ($1,$2,$3,$4,$5,$6)',
-          [newRegimen.id, tp.dosage, tp.duration_days, tp.days_of_week, tp.sequence_order, tp.indefinite]
-        );
+        await insertPhaseCopy(newRegimen.id, tp);
       }
     }
   }
@@ -195,17 +233,14 @@ app.post('/sessions/:id/copy', w(async (req, res) => {
   );
   for (const r of srcRegimens) {
     const { rows: [newRegimen] } = await pool.query(
-      'INSERT INTO regimens (session_id, supplement_id) VALUES ($1,$2) RETURNING *',
-      [newSession.id, r.supplement_id]
+      'INSERT INTO regimens (session_id, supplement_id, as_needed) VALUES ($1,$2,$3) RETURNING *',
+      [newSession.id, r.supplement_id, !!r.as_needed]
     );
     const { rows: srcPhases } = await pool.query(
       'SELECT * FROM phases WHERE regimen_id=$1 ORDER BY sequence_order', [r.id]
     );
     for (const p of srcPhases) {
-      await pool.query(
-        'INSERT INTO phases (regimen_id, dosage, duration_days, days_of_week, sequence_order) VALUES ($1,$2,$3,$4,$5)',
-        [newRegimen.id, p.dosage, p.duration_days, p.days_of_week, p.sequence_order]
-      );
+      await insertPhaseCopy(newRegimen.id, p);
     }
   }
   res.status(201).json(newSession);
@@ -233,17 +268,14 @@ app.post('/sessions/:id/save-as-template', w(async (req, res) => {
   );
   for (const r of srcRegimens) {
     const { rows: [tr] } = await pool.query(
-      'INSERT INTO template_regimens (template_id, supplement_id) VALUES ($1,$2) RETURNING *',
-      [tmpl.id, r.supplement_id]
+      'INSERT INTO template_regimens (template_id, supplement_id, as_needed) VALUES ($1,$2,$3) RETURNING *',
+      [tmpl.id, r.supplement_id, !!r.as_needed]
     );
     const { rows: srcPhases } = await pool.query(
       'SELECT * FROM phases WHERE regimen_id=$1 ORDER BY sequence_order', [r.id]
     );
     for (const p of srcPhases) {
-      await pool.query(
-        'INSERT INTO template_phases (template_regimen_id, dosage, duration_days, days_of_week, sequence_order, indefinite) VALUES ($1,$2,$3,$4,$5,$6)',
-        [tr.id, p.dosage, p.duration_days, p.days_of_week, p.sequence_order, !!p.indefinite]
-      );
+      await insertTemplatePhaseCopy(tr.id, p);
     }
   }
   res.status(201).json(tmpl);
@@ -257,7 +289,7 @@ app.delete('/templates/:id', w(async (req, res) => {
 // ── Regimens ──────────────────────────────────────────────────────────────────
 app.get('/sessions/:sessionId/regimens', w(async (req, res) => {
   const { rows } = await pool.query(
-    `SELECT r.*, s.name AS supplement_name, s.brand, s.pills_per_bottle, s.price, s.type, s.current_inventory, s.unit, s.drops_per_ml
+    `SELECT r.*, s.name AS supplement_name, s.brand, s.pills_per_bottle, s.price, s.type, s.current_inventory, s.unit, s.drops_per_ml, s.take_with_food
      FROM regimens r
      JOIN supplements s ON s.id = r.supplement_id
      WHERE r.session_id = $1`,
@@ -276,11 +308,14 @@ app.post('/sessions/:sessionId/regimens', w(async (req, res) => {
 }));
 
 app.patch('/regimens/:id', w(async (req, res) => {
-  const { notes } = req.body;
+  // Partial update: only the fields present in the body change (notes used to be wiped by any PATCH).
+  const { notes, as_needed } = req.body;
   const { rows } = await pool.query(
-    `UPDATE regimens SET notes=$1 WHERE id=$2 RETURNING *`,
-    [notes || null, req.params.id]
+    `UPDATE regimens SET notes = CASE WHEN $1::boolean THEN $2 ELSE notes END, as_needed = COALESCE($3, as_needed)
+     WHERE id=$4 RETURNING *`,
+    [Object.prototype.hasOwnProperty.call(req.body, 'notes'), notes || null, typeof as_needed === 'boolean' ? as_needed : null, req.params.id]
   );
+  if (!rows.length) return res.status(404).json({ error: 'Not found' });
   res.json(rows[0]);
 }));
 
@@ -342,7 +377,7 @@ app.get('/sessions/:sessionId/calculate', w(async (req, res) => {
   const { rows: regimens } = await pool.query(
     `SELECT r.*, s.pills_per_bottle, s.price, s.current_inventory, s.unit, s.drops_per_ml
      FROM regimens r JOIN supplements s ON s.id = r.supplement_id
-     WHERE r.session_id=$1`,
+     WHERE r.session_id=$1 AND r.as_needed = FALSE`,
     [req.params.sessionId]
   );
 
@@ -373,84 +408,13 @@ app.get('/sessions/:sessionId/calculate', w(async (req, res) => {
 
 // ── Backup / Restore ──────────────────────────────────────────────────────────
 app.get('/backup', w(async (req, res) => {
-  const { rows: supplements } = await pool.query('SELECT * FROM supplements');
-  const { rows: sessions } = await pool.query('SELECT * FROM sessions');
-  const { rows: regimens } = await pool.query('SELECT * FROM regimens');
-  const { rows: phases } = await pool.query('SELECT * FROM phases');
-  const { rows: templates } = await pool.query('SELECT * FROM templates');
-  const { rows: template_regimens } = await pool.query('SELECT * FROM template_regimens');
-  const { rows: template_phases } = await pool.query('SELECT * FROM template_phases');
-  const { rows: settingsRows } = await pool.query('SELECT prefs FROM user_settings WHERE singleton = TRUE');
-  const prefs = settingsRows[0]?.prefs ?? {};
-  res.json({ version: 1, exported_at: new Date().toISOString(), supplements, sessions, regimens, phases, templates, template_regimens, template_phases, prefs });
+  res.json(await buildBackup());
 }));
-
-// A restore TRUNCATEs everything first, so reject anything that isn't a real backup export
-// (otherwise `{}` would wipe the database). Older exports may lack `version`.
-function isValidBackup(b) {
-  return !!b && typeof b === 'object'
-    && (b.version === undefined || b.version === 1)
-    && ['supplements', 'sessions', 'regimens', 'phases'].every(k => Array.isArray(b[k]))
-    && ['templates', 'template_regimens', 'template_phases'].every(k => b[k] === undefined || Array.isArray(b[k]));
-}
 
 app.post('/restore', express.json({ limit: '25mb' }), w(async (req, res) => {
   if (!isValidBackup(req.body)) return res.status(400).json({ error: 'Invalid backup file' });
-  const { supplements = [], sessions = [], regimens = [], phases = [], templates = [], template_regimens = [], template_phases = [], prefs = null } = req.body;
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-    await client.query('TRUNCATE supplements, sessions, templates CASCADE');
-    for (const s of supplements)
-      await client.query(
-        'INSERT INTO supplements (id,name,brand,pills_per_bottle,price,type,current_inventory,unit,drops_per_ml,reorder_threshold,reorder_threshold_mode) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)',
-        [s.id, s.name, s.brand, s.pills_per_bottle, s.price, s.type, s.current_inventory, s.unit || 'capsules', s.drops_per_ml ?? 20, s.reorder_threshold ?? null, s.reorder_threshold_mode || 'units']
-      );
-    for (const s of sessions)
-      await client.query(
-        'INSERT INTO sessions (id,start_date,target_date,notes) VALUES ($1,$2,$3,$4)',
-        [s.id, s.start_date, s.target_date, s.notes]
-      );
-    for (const r of regimens)
-      await client.query(
-        'INSERT INTO regimens (id,session_id,supplement_id,notes,reminder_time) VALUES ($1,$2,$3,$4,$5)',
-        [r.id, r.session_id, r.supplement_id, r.notes, r.reminder_time ?? null]
-      );
-    for (const p of phases)
-      await client.query(
-        'INSERT INTO phases (id,regimen_id,dosage,duration_days,days_of_week,indefinite,sequence_order) VALUES ($1,$2,$3,$4,$5,$6,$7)',
-        [p.id, p.regimen_id, p.dosage, p.duration_days, p.days_of_week, p.indefinite, p.sequence_order]
-      );
-    for (const t of templates)
-      await client.query(
-        'INSERT INTO templates (id,name,notes,created_at) VALUES ($1,$2,$3,$4)',
-        [t.id, t.name, t.notes ?? null, t.created_at]
-      );
-    for (const tr of template_regimens)
-      await client.query(
-        'INSERT INTO template_regimens (id,template_id,supplement_id,created_at) VALUES ($1,$2,$3,$4)',
-        [tr.id, tr.template_id, tr.supplement_id, tr.created_at]
-      );
-    for (const tp of template_phases)
-      await client.query(
-        'INSERT INTO template_phases (id,template_regimen_id,dosage,duration_days,days_of_week,indefinite,sequence_order,created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)',
-        [tp.id, tp.template_regimen_id, tp.dosage, tp.duration_days, tp.days_of_week, tp.indefinite, tp.sequence_order, tp.created_at]
-      );
-    if (prefs) {
-      await client.query(`
-        INSERT INTO user_settings (singleton, prefs, updated_at)
-        VALUES (TRUE, $1, NOW())
-        ON CONFLICT (singleton) DO UPDATE SET prefs = $1, updated_at = NOW()
-      `, [prefs]);
-    }
-    await client.query('COMMIT');
-    res.json({ ok: true, prefs });
-  } catch (e) {
-    await client.query('ROLLBACK');
-    throw e;
-  } finally {
-    client.release();
-  }
+  const prefs = await restoreBackup(req.body);
+  res.json({ ok: true, prefs });
 }));
 
 app.delete('/data', w(async (req, res) => {
@@ -575,41 +539,8 @@ app.post('/drive/restore/:fileId', w(async (req, res) => {
   );
   const parsed = JSON.parse(response.data);
   if (!isValidBackup(parsed)) return res.status(400).json({ error: 'Invalid backup file' });
-  const { supplements=[], sessions=[], regimens=[], phases=[], templates=[], template_regimens=[], template_phases=[], prefs=null } = parsed;
-  const client = await pool.connect();
-  try {
-    await client.query('BEGIN');
-    await client.query('TRUNCATE supplements, sessions, templates CASCADE');
-    for (const s of supplements)
-      await client.query('INSERT INTO supplements (id,name,brand,pills_per_bottle,price,type,current_inventory,unit,drops_per_ml,reorder_threshold,reorder_threshold_mode) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)',
-        [s.id, s.name, s.brand, s.pills_per_bottle, s.price, s.type, s.current_inventory, s.unit||'capsules', s.drops_per_ml??20, s.reorder_threshold??null, s.reorder_threshold_mode||'units']);
-    for (const s of sessions)
-      await client.query('INSERT INTO sessions (id,start_date,target_date,notes) VALUES ($1,$2,$3,$4)', [s.id, s.start_date, s.target_date, s.notes]);
-    for (const r of regimens)
-      await client.query('INSERT INTO regimens (id,session_id,supplement_id,notes,reminder_time) VALUES ($1,$2,$3,$4,$5)', [r.id, r.session_id, r.supplement_id, r.notes, r.reminder_time??null]);
-    for (const p of phases)
-      await client.query('INSERT INTO phases (id,regimen_id,dosage,duration_days,days_of_week,indefinite,sequence_order) VALUES ($1,$2,$3,$4,$5,$6,$7)', [p.id, p.regimen_id, p.dosage, p.duration_days, p.days_of_week, p.indefinite, p.sequence_order]);
-    for (const t of templates)
-      await client.query('INSERT INTO templates (id,name,notes,created_at) VALUES ($1,$2,$3,$4)', [t.id, t.name, t.notes??null, t.created_at]);
-    for (const tr of template_regimens)
-      await client.query('INSERT INTO template_regimens (id,template_id,supplement_id,created_at) VALUES ($1,$2,$3,$4)', [tr.id, tr.template_id, tr.supplement_id, tr.created_at]);
-    for (const tp of template_phases)
-      await client.query('INSERT INTO template_phases (id,template_regimen_id,dosage,duration_days,days_of_week,indefinite,sequence_order,created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)', [tp.id, tp.template_regimen_id, tp.dosage, tp.duration_days, tp.days_of_week, tp.indefinite, tp.sequence_order, tp.created_at]);
-    if (prefs) {
-      await client.query(`
-        INSERT INTO user_settings (singleton, prefs, updated_at)
-        VALUES (TRUE, $1, NOW())
-        ON CONFLICT (singleton) DO UPDATE SET prefs = $1, updated_at = NOW()
-      `, [prefs]);
-    }
-    await client.query('COMMIT');
-    res.json({ ok: true, prefs });
-  } catch (e) {
-    await client.query('ROLLBACK');
-    throw e;
-  } finally {
-    client.release();
-  }
+  const prefs = await restoreBackup(parsed);
+  res.json({ ok: true, prefs });
 }));
 
 // ── Push Notifications ────────────────────────────────────────────────────────
@@ -844,24 +775,7 @@ async function driveBackup() {
     folderId = created.data.id;
   }
 
-  // Build backup payload
-  const [supp, sess, reg, ph, tmpl, tr, tp, settingsRows] = await Promise.all([
-    pool.query('SELECT * FROM supplements'),
-    pool.query('SELECT * FROM sessions'),
-    pool.query('SELECT * FROM regimens'),
-    pool.query('SELECT * FROM phases'),
-    pool.query('SELECT * FROM templates'),
-    pool.query('SELECT * FROM template_regimens'),
-    pool.query('SELECT * FROM template_phases'),
-    pool.query('SELECT prefs FROM user_settings WHERE singleton = TRUE'),
-  ]);
-  const prefs = settingsRows.rows[0]?.prefs ?? {};
-  const payload = JSON.stringify({
-    version: 1, exported_at: new Date().toISOString(),
-    supplements: supp.rows, sessions: sess.rows, regimens: reg.rows, phases: ph.rows,
-    templates: tmpl.rows, template_regimens: tr.rows, template_phases: tp.rows,
-    prefs,
-  });
+  const payload = JSON.stringify(await buildBackup());
 
   const filename = `pillpipe-backup-${new Date().toISOString().slice(0,19).replace(/:/g,'-')}.json`;
   const file = await drive.files.create({
@@ -894,6 +808,7 @@ async function checkLowStock() {
   if (!candidates.length) return;
   const { rows: subs } = await pool.query('SELECT * FROM push_subscriptions');
   if (!subs.length) return;
+  const active = await activePhasesBySupplement(nowInTz(await userTimezone()).date);
 
   for (const supp of candidates) {
     const unit = supp.unit || 'capsules';
@@ -902,27 +817,8 @@ async function checkLowStock() {
     const threshold = Number(supp.reorder_threshold);
     const mode = supp.reorder_threshold_mode || 'units';
 
-    // Get dosage from active session phase (needed for days mode + notification body)
-    const { rows: phases } = await pool.query(`
-      SELECT p.dosage, p.days_of_week
-      FROM phases p
-      JOIN regimens r ON r.id = p.regimen_id
-      JOIN sessions s ON s.id = r.session_id
-      WHERE r.supplement_id = $1
-        AND s.start_date <= CURRENT_DATE
-        AND s.target_date >= CURRENT_DATE
-      ORDER BY p.sequence_order
-      LIMIT 1
-    `, [supp.id]);
-
-    let daysRemaining = null;
-    if (phases.length) {
-      const dosage = Number(phases[0].dosage);
-      const dow = phases[0].days_of_week;
-      const daysPerWeek = dow ? dow.length : 7;
-      const dailyDose = dosage * (daysPerWeek / 7);
-      if (dailyDose > 0) daysRemaining = Math.floor(inv / dailyDose);
-    }
+    // Days of supply at the current active-phase rate (null when nothing is scheduled)
+    const daysRemaining = supplementDaysRemaining(inv, active.get(supp.id) ?? []);
 
     // Check threshold against the chosen mode
     const isLow = mode === 'days'
