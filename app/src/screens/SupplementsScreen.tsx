@@ -115,22 +115,26 @@ export default function SupplementsScreen() {
 
   async function save() {
     if (!name.trim()) { Alert.alert('Name is required'); return; }
-    const db = await getDb();
-    const threshold = reorderThreshold.trim() ? Number(reorderThreshold) : null;
-    const dpm = unit === 'drops' ? (Number(dropsPerMl) || 20) : 20;
-    if (editing) {
-      await db.runAsync(
-        `UPDATE supplements SET name=?,brand=?,pills_per_bottle=?,price=?,type=?,unit=?,current_inventory=?,drops_per_ml=?,reorder_threshold=?,reorder_threshold_mode=? WHERE id=?`,
-        [name.trim(), brand.trim() || null, Number(pillsPerBottle), Number(price), type, unit, Number(inventory), dpm, threshold, reorderThresholdMode, editing.id],
-      );
-    } else {
-      await db.runAsync(
-        `INSERT INTO supplements (id,name,brand,pills_per_bottle,price,type,unit,current_inventory,drops_per_ml,reorder_threshold,reorder_threshold_mode) VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
-        [uuid(), name.trim(), brand.trim() || null, Number(pillsPerBottle), Number(price), type, unit, Number(inventory), dpm, threshold, reorderThresholdMode],
-      );
+    try {
+      const db = await getDb();
+      const threshold = reorderThreshold.trim() ? Number(reorderThreshold) : null;
+      const dpm = unit === 'drops' ? (Number(dropsPerMl) || 20) : 20;
+      if (editing) {
+        await db.runAsync(
+          `UPDATE supplements SET name=?,brand=?,pills_per_bottle=?,price=?,type=?,unit=?,current_inventory=?,drops_per_ml=?,reorder_threshold=?,reorder_threshold_mode=? WHERE id=?`,
+          [name.trim(), brand.trim() || null, Number(pillsPerBottle), Number(price), type, unit, Number(inventory), dpm, threshold, reorderThresholdMode, editing.id],
+        );
+      } else {
+        await db.runAsync(
+          `INSERT INTO supplements (id,name,brand,pills_per_bottle,price,type,unit,current_inventory,drops_per_ml,reorder_threshold,reorder_threshold_mode) VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+          [uuid(), name.trim(), brand.trim() || null, Number(pillsPerBottle), Number(price), type, unit, Number(inventory), dpm, threshold, reorderThresholdMode],
+        );
+      }
+      setModalVisible(false);
+      loadSupplements();
+    } catch (e) {
+      Alert.alert('Error saving', String(e));
     }
-    setModalVisible(false);
-    loadSupplements();
   }
 
   async function deleteSupplement(id: string) {
@@ -214,7 +218,7 @@ export default function SupplementsScreen() {
 
       {/* Add / Edit Modal */}
       <Modal visible={modalVisible} animationType="slide" presentationStyle="pageSheet" onRequestClose={() => setModalVisible(false)}>
-        <ScrollView className="flex-1 bg-background" contentContainerClassName="px-5 pb-10" contentContainerStyle={{ paddingTop: insets.top + 8 }}>
+        <ScrollView className="flex-1 bg-background" contentContainerClassName="px-5" contentContainerStyle={{ paddingTop: insets.top + 8, paddingBottom: insets.bottom + 24 }}>
           <View className="flex-row items-center justify-between mb-6">
             <Text className="text-white text-lg font-semibold">
               {editing ? 'Edit Supplement' : 'New Supplement'}

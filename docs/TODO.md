@@ -30,7 +30,6 @@ Context (decided 2026-09-19): single user, reachable over the internet — not p
 ## On hold (until the web app is clean and hardened)
 - [ ] Android app — React Native / Expo; offline-first SQLite; parity pass paused 2026-09-19. Granular status in `app/TODO.md`.
   - [ ] Dependency vulnerabilities not yet addressed: 35 in `npm audit --omit=dev` (2 critical, 18 high — Expo/RN tooling, `ws`, `yaml`)
-  - [ ] Uncommitted in the working tree: `SupplementsScreen.tsx` save() try/catch + modal bottom padding
 
 ## Long-term
 - [ ] Flexible Ads — opt-in ad system (ad-free default); AdSense; four levels; deferred until larger public user base

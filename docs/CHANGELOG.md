@@ -22,6 +22,7 @@
 - Android app: adherence calendar no longer drifts a day in non-UTC timezones
 - Android app: tapping a dose notification logs the dose; notification handler registered at startup
 - Android app: backup restore runs in a single transaction so a failed restore can't leave partial data
+- Android app: saving a supplement now shows an error instead of failing silently; the supplement modal clears the Android nav bar
 ### Removed
 
 ## [2.0.0-app] — 2025-03-17
