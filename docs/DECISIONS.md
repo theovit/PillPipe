@@ -1,13 +1,20 @@
 # Decisions
 
-## No authentication layer
+## Web app will be internet-reachable (single user) — authentication + hardening required
+**Date:** 2026-09-19
+**Decision:** The web interface will be reachable from the internet by its one owner. That supersedes "No authentication layer" and "Tailscale for remote access" below: authentication, production serving, HTTPS and hardening are prerequisites (see Blockers in `docs/TODO.md`). Android work is paused until the web app is clean and hardened.
+**Why:** The owner wants access from anywhere without depending on a VPN. Exposing the current app as-is would let anyone read or wipe the data (`DELETE /data`, `POST /restore`).
+**Alternatives considered:** Staying Tailscale-only (still valid as defense in depth); an identity-aware proxy in front (Cloudflare Access / Tailscale Funnel) vs. built-in login — to be decided when auth is implemented.
+**Consequences:** Multi-user/public sign-up is still out of scope. Every route needs an auth check; the dev-server Docker setup can no longer be the deployed form.
+
+## No authentication layer (superseded 2026-09-19)
 **Date:** 2024-01-01
 **Decision:** No login, no user accounts. The app is kept off the public internet entirely.
 **Why:** Auth adds significant complexity and the app is self-hosted for personal use. Tailscale provides private remote access without exposing the app publicly.
 **Alternatives considered:** JWT-based auth — rejected as over-engineering for a single-user self-hosted tool.
 **Consequences:** Cannot safely host on the public internet. Multi-user support is blocked until auth is added.
 
-## Tailscale for remote access
+## Tailscale for remote access (superseded 2026-09-19 — may remain as an extra layer)
 **Date:** 2024-01-01
 **Decision:** Remote access is handled entirely by Tailscale VPN — no reverse proxy, no auth middleware.
 **Why:** Zero config, zero maintenance, and no exposed ports. Keeps the threat surface minimal.

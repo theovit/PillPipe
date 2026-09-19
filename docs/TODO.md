@@ -1,20 +1,38 @@
 # TODO
 
 ## WIP
-- [ ] Android app — React Native / Expo; offline-first SQLite; parity pass with web features ongoing (granular status in `app/TODO.md`)
+- [ ] Web app cleanup and hardening — get the web app clean, correct and safe to reach from the internet, *then* resume the Android port
+
+## Blockers before exposing the web app to the internet
+Context (decided 2026-09-19): single user, reachable over the internet — not public sign-up. Today there is **no authentication**, and one unauthenticated request can wipe the database (`DELETE /data`, `POST /restore`, `POST /drive/restore/:fileId`). Do not expose the app until at least auth, production serving and HTTPS are done.
+- [ ] **Authentication** — single-user login: password hash (argon2/bcrypt) from env; server-side session in an HttpOnly + Secure + SameSite=Strict cookie (or JWT); protect *every* route incl. `/auth/google`, `/drive/*`, `/push/*`, `/backup`, `/restore`, `/data`; CSRF protection for cookie sessions; login rate limiting + lockout. Decide built-in login vs an identity proxy in front (Cloudflare Access, Tailscale Funnel) and record it in DECISIONS.
+- [ ] **Production serving** — Docker currently runs the Vite dev server (`npm run dev -- --host`, `allowedHosts: true`) and nodemon with source bind-mounts. Build the client (`vite build`) and serve static files (Express or nginx/Caddy); run the backend with `node`; add a production compose file without bind mounts.
+- [ ] **HTTPS/TLS** — terminate at a reverse proxy (Caddy/nginx) or tunnel; HSTS; `trust proxy`; Secure cookies. Service workers and Web Push require HTTPS anyway.
+- [ ] Security headers + limits — `helmet` (CSP etc.), `express-rate-limit` (stricter on login/restore), body size limits (`/restore`), restrict Vite `allowedHosts` to known hosts in dev.
+- [ ] Input validation — none today. Validate/coerce every request body (e.g. zod), return 400s, and confirm the error handler doesn't leak stack traces or DB errors. (SQL is already parameterized — no string interpolation found in `server/index.js`.)
+- [ ] Protect destructive endpoints — require re-auth/confirmation for `DELETE /data`, `/restore`, `/drive/restore`; take an automatic backup before any restore.
+- [ ] Secrets — Google OAuth tokens sit in plaintext in `google_tokens`: encrypt at rest or document the risk. Use strong unique DB password/VAPID keys; keep them out of images and logs.
+- [ ] Reproducible, auditable installs — `server/package-lock.json` is gitignored, so server dependency versions aren't pinned or auditable from the repo. Track it, use `npm ci` in both Dockerfiles, and make `npm audit` part of every release.
+- [ ] Network exposure — publish only the reverse proxy (443). Keep the backend (3000) and Postgres (5432) on the internal Docker network (true today); firewall the host.
+- [ ] Automated tests for auth and the destructive routes before going live (DECISIONS "No automated tests" needs revisiting for these).
 
 ## High
-- [ ] Dependency vulnerabilities (`npm audit --omit=dev`, 2026-09-19): server 6 (2 high; `qs`, `uuid` via `node-cron`), app 35 (2 critical, 18 high — mostly Expo/RN tooling, `ws`, `yaml`), client 3 (1 critical: `jspdf` ≤4.2.0 object/HTML injection; plus `dompurify`, `fflate`). `npm audit fix` is available for the client, `qs`, `ws` and `yaml`. Client installs need `--legacy-peer-deps` (vite 8 vs `@tailwindcss/vite` peer range; same flag as `client/Dockerfile`).
-- [ ] Find what writes `// @atlas-entrypoint: …` first-line comments into source files (removed 2026-09-19; source unconfirmed) — if it re-adds them, disable it.
-- [ ] Meal-time dosing — **Android done, web/server not started.** Android shipped a simpler design than the planned `dosing_slots` table (see DECISIONS): fixed `dose_morning/lunch/dinner/custom` columns + `custom_slots` JSON on phases, Morning/Lunch/Dinner time prefs, per-regimen multi-slot local notifications. Remaining:
-  - [ ] Web/server port — schema (`phases` still has flat `dosage`), Settings meal-time pickers, phase editor, calculator, backup/templates
+- [ ] Re-run `npm audit` on client and server once the npm advisory service is back (it returned 503 "maintenance" on 2026-09-19). Targeted upgrades were applied (see CHANGELOG) but a clean audit is not yet confirmed.
+- [ ] Meal-time dosing — web/server port. Android already has it (fixed `dose_morning/lunch/dinner/custom` columns + `custom_slots` JSON on phases, Morning/Lunch/Dinner time prefs, per-regimen multi-slot notifications; see DECISIONS) but web/server still use a flat `dosage`. Remaining:
+  - [ ] Schema, Settings meal-time pickers, phase editor, calculator, backup/templates on web
   - [ ] Web notification overhaul — batched per-time-slot push; replaces per-regimen `reminder_time`
-  - [ ] Compact slot notation on regimen cards (B1 L1 D2). Android currently shows "1 morning · 2 dinner" text
+  - [ ] Compact slot notation on regimen cards (B1 L1 D2)
   - [ ] "Take With Food" flag on supplement record
   - [ ] "As Needed" dosing — UI-only flag on regimen; no slots, no notifications, no inventory math; shows "As Needed" label on card
+- [ ] Find what writes `// @atlas-entrypoint: …` first-line comments into source files (removed 2026-09-19; source unconfirmed) — if it re-adds them, disable it.
+- [ ] Remove the obsolete `version:` key from `docker-compose.yml` (Compose warns on every command).
+
+## On hold (until the web app is clean and hardened)
+- [ ] Android app — React Native / Expo; offline-first SQLite; parity pass paused 2026-09-19. Granular status in `app/TODO.md`.
+  - [ ] Dependency vulnerabilities not yet addressed: 35 in `npm audit --omit=dev` (2 critical, 18 high — Expo/RN tooling, `ws`, `yaml`)
+  - [ ] Uncommitted in the working tree: `SupplementsScreen.tsx` save() try/catch + modal bottom padding
 
 ## Long-term
-- [ ] Authentication — JWT-based login for multi-user or public hosting; blocked on decision to open app to public internet
 - [ ] Flexible Ads — opt-in ad system (ad-free default); AdSense; four levels; deferred until larger public user base
-- [ ] Doctor Portal — multi-tenant support for healthcare providers; requires auth + user/role model first
+- [ ] Doctor Portal — multi-tenant support for healthcare providers; requires multi-user auth + user/role model (single-user auth is in Blockers above)
 - [ ] Activate Donate / Support section — remove `false &&` guard in Dashboard.jsx once Ko-fi / GitHub Sponsors pages are live

@@ -180,4 +180,4 @@ boundary. See `vite.config.js` and `server/nodemon.json`. See also `docs/MEMORY.
 |---|---|
 | Google Drive (OAuth2) | Optional cloud backup |
 | Web Push / VAPID | Dose reminders and low-stock alerts |
-| Tailscale | Private remote access — no auth layer needed |
+| Tailscale | Current private remote access. **Planned:** internet exposure with authentication + hardening — see `docs/DECISIONS.md` (2026-09-19) and Blockers in `docs/TODO.md`. The app has no auth today. |

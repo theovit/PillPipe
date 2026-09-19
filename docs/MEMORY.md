@@ -38,9 +38,16 @@ equal to (or a multiple of) `step`. This was the "won't accept 30 when adding a 
 ## Local `client/node_modules` can be stale
 `npm run build` locally fails with "failed to resolve import jspdf" because `jspdf` /
 `jspdf-autotable` are declared in `client/package.json` but were never installed on the host (the
-Docker container installs its own). Run `npm install --legacy-peer-deps` in `client/` before a local
-build (plain `npm install` fails with ERESOLVE: vite 8 vs `@tailwindcss/vite`'s peer range; the
-Dockerfile uses the same flag). Lint works without it.
+Docker container installs its own). Run `npm install` in `client/` before a local build. Lint works
+without it. (`--legacy-peer-deps` is no longer needed since `tailwindcss`/`@tailwindcss/vite` 4.3.3
+support vite 8 — if an ERESOLVE peer conflict reappears, check for a package pinned to an old vite.)
+
+## Docker keeps a stale `node_modules` after dependency changes
+`docker-compose.yml` bind-mounts `./server` and `./client` and masks `node_modules` with an anonymous
+volume. `docker compose up --build` **reuses the old volume**, so containers keep running the old
+dependency versions (this hid the express/node-cron upgrade until checked). After changing
+`package.json`/lockfiles run `docker compose up --build -V` (renews anonymous volumes; the named
+`postgres_data` volume is untouched). Verify with `docker compose exec backend npm ls --all`.
 
 ## A junk first-line comment in `package-lock.json` breaks npm
 Stray `// @atlas-entrypoint: …` lines were being written at the top of source files (and, in the

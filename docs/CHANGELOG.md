@@ -8,6 +8,8 @@
 - Android app: collapsible Settings sections, font size preference, default session duration (pre-fills new session target date)
 - Android app: phase labels show time-of-day doses; the active phase shows a days-left badge
 ### Changed
+- Dependencies upgraded to clear known vulnerabilities: `jspdf` 4.2.1, `dompurify` 3.4.15, `fflate` 0.8.3 (web); `express` 4.22.3 (pulls patched `qs` 6.16), `node-cron` 4.6 (drops vulnerable `uuid`) (server)
+- `tailwindcss` / `@tailwindcss/vite` 4.3.3 — they now support vite 8, so `client/Dockerfile` installs without `--legacy-peer-deps`
 - Android app: preferences now stored in AsyncStorage with a synchronous cache
 - Android app: CSV export and JSON backup/restore use `expo-file-system/next`
 - Android app: font sizes are rem-based so the font size preference scales all text
