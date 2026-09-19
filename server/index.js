@@ -6,6 +6,7 @@ const { Readable } = require('stream');
 const pool = require('./db');
 const { calculate } = require('./calculator');
 const { version } = require('./package.json');
+const auth = require('./auth');
 
 // ── Google OAuth2 setup ───────────────────────────────────────────────────────
 const oauth2Client = new google.auth.OAuth2(
@@ -40,6 +41,10 @@ if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
 }
 
 const app = express();
+app.disable('x-powered-by');
+// Keep the gate FIRST: every route needs a session unless allowlisted in auth.js.
+app.use(auth.gate);
+app.use(auth.router);
 app.use(express.json());
 
 const w = fn => (req, res, next) => fn(req, res, next).catch(next);
@@ -359,7 +364,17 @@ app.get('/backup', w(async (req, res) => {
   res.json({ version: 1, exported_at: new Date().toISOString(), supplements, sessions, regimens, phases, templates, template_regimens, template_phases, prefs });
 }));
 
+// A restore TRUNCATEs everything first, so reject anything that isn't a real backup export
+// (otherwise `{}` would wipe the database). Older exports may lack `version`.
+function isValidBackup(b) {
+  return !!b && typeof b === 'object'
+    && (b.version === undefined || b.version === 1)
+    && ['supplements', 'sessions', 'regimens', 'phases'].every(k => Array.isArray(b[k]))
+    && ['templates', 'template_regimens', 'template_phases'].every(k => b[k] === undefined || Array.isArray(b[k]));
+}
+
 app.post('/restore', w(async (req, res) => {
+  if (!isValidBackup(req.body)) return res.status(400).json({ error: 'Invalid backup file' });
   const { supplements = [], sessions = [], regimens = [], phases = [], templates = [], template_regimens = [], template_phases = [], prefs = null } = req.body;
   const client = await pool.connect();
   try {
@@ -528,6 +543,7 @@ app.post('/drive/restore/:fileId', w(async (req, res) => {
     { responseType: 'text' }
   );
   const parsed = JSON.parse(response.data);
+  if (!isValidBackup(parsed)) return res.status(400).json({ error: 'Invalid backup file' });
   const { supplements=[], sessions=[], regimens=[], phases=[], templates=[], template_regimens=[], template_phases=[], prefs=null } = parsed;
   const client = await pool.connect();
   try {
@@ -643,6 +659,8 @@ app.post('/push/low-stock-check', w(async (req, res) => {
 
 // ── Error handler ─────────────────────────────────────────────────────────────
 app.use((err, req, res, next) => {
+  // Body-parser style client errors (malformed JSON, too large) carry a 4xx status.
+  if (err.status >= 400 && err.status < 500) return res.status(err.status).json({ error: 'Bad request' });
   console.error(err.stack);
   res.status(500).json({ error: 'Internal server error' });
 });
@@ -941,5 +959,11 @@ cron.schedule('* * * * *', async () => {
   }
 });
 
+// ── Daily expired-session purge (runs at 3am) ─────────────────────────────────
+cron.schedule('0 3 * * *', () => auth.purgeExpired().catch(e => console.error('Session purge error:', e.message)));
+
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`PillPipe API v${version} running on port ${PORT}`));
+// Do not listen until the auth schema exists and the password hash is valid (fail closed).
+auth.init()
+  .then(() => app.listen(PORT, () => console.log(`PillPipe API v${version} running on port ${PORT}`)))
+  .catch(e => { console.error(e.message); process.exit(1); });

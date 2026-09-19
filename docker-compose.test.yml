@@ -1,0 +1,43 @@
+# Throwaway stack for server tests. Separate project name, no volumes (Postgres data is tmpfs),
+# no bind mounts — a failing test can never touch real data.
+#
+#   export TEST_APP_PASSWORD_HASH=$(echo 'correct-horse-battery' | node server/scripts/hash-password.js | sed -n 's/^APP_PASSWORD_HASH=//p')
+#   docker compose -p pillpipe-test -f docker-compose.test.yml up -d --build --wait
+#   (cd server && TEST_PASSWORD=correct-horse-battery npm test)
+#   docker compose -p pillpipe-test -f docker-compose.test.yml down -v
+services:
+  db:
+    image: postgres:13
+    environment:
+      POSTGRES_USER: test
+      POSTGRES_PASSWORD: test
+      POSTGRES_DB: pillpipe_test
+    tmpfs:
+      - /var/lib/postgresql/data
+    volumes:
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U test -d pillpipe_test"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  backend:
+    build: ./server
+    command: ["node", "index.js"]
+    environment:
+      DATABASE_URL: postgres://test:test@db:5432/pillpipe_test
+      APP_PASSWORD_HASH: ${TEST_APP_PASSWORD_HASH:?set TEST_APP_PASSWORD_HASH}
+      COOKIE_SECURE: "false"
+      SESSION_IDLE_TTL: "4"
+      SESSION_ABS_TTL: "9"
+    ports:
+      - "127.0.0.1:13000:3000"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
