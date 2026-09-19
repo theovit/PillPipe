@@ -78,3 +78,10 @@ test('todayInTz gives a YYYY-MM-DD date and survives a bad zone', async () => {
   assert.match(c.todayInTz('Mars/Olympus'), /^\d{4}-\d{2}-\d{2}$/);
   assert.match(c.todayInTz(null), /^\d{4}-\d{2}-\d{2}$/);
 });
+
+test('server and client agree on the meal-time defaults', async () => {
+  const client = await loadClient();
+  const { MEAL_DEFAULTS } = require('../notifications');
+  assert.deepEqual(client.MEAL_DEFAULTS, MEAL_DEFAULTS);
+  assert.deepEqual(client.SLOTS.map(s => s.prefKey), ['morningTime', 'lunchTime', 'dinnerTime']);
+});

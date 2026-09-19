@@ -250,3 +250,14 @@ test('a version-1 (flat dosage) backup restores into dose_morning; unknown versi
   delete noVersion.version;
   assert.equal((await call('POST', '/restore', { cookie, body: noVersion })).status, 200, 'files without a version still restore');
 });
+
+test('the old per-regimen reminder route is gone and the test push works without subscriptions', async () => {
+  const cookie = await login();
+  const { supp, sess } = await setup(cookie);
+  const reg = await addRegimen(cookie, sess, supp);
+  assert.equal((await call('PATCH', `/regimens/${reg.id}/reminder`, { cookie, body: { reminder_time: '08:00' } })).status, 404);
+  const regs = (await call('GET', `/sessions/${sess.id}/regimens`, { cookie })).json;
+  assert.ok(regs.find(r => r.id === reg.id), 'regimens still load');
+  const push = await call('POST', '/push/test', { cookie, body: {} });
+  assert.equal(push.status, 404, 'no subscriptions -> a clean 404, not a crash');
+});

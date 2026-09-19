@@ -10,6 +10,7 @@ const auth = require('./auth');
 const { validatePhaseBody, normalizePhaseRow, supplementDaysRemaining, activePhase, dayIndex } = require('./dosing');
 const { buildBackup, isValidBackup, restoreBackup } = require('./backup');
 const { nowInTz } = require('./tz');
+const { normalizeSchedulePrefs, dueNotifications, sendBatch, createDeduper } = require('./notifications');
 
 // ── Google OAuth2 setup ───────────────────────────────────────────────────────
 const oauth2Client = new google.auth.OAuth2(
@@ -568,27 +569,12 @@ app.delete('/push/subscribe', w(async (req, res) => {
 app.post('/push/test', w(async (req, res) => {
   const { rows } = await pool.query('SELECT * FROM push_subscriptions');
   if (!rows.length) return res.status(404).json({ error: 'No subscriptions' });
-  const payload = JSON.stringify({ title: 'PillPipe Test', body: 'Notifications are working!' });
-  await Promise.allSettled(rows.map(sub =>
-    webpush.sendNotification({ endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } }, payload)
-      .catch(async (err) => {
-        if (err.statusCode === 410) await pool.query('DELETE FROM push_subscriptions WHERE endpoint=$1', [sub.endpoint]);
-      })
-  ));
-  res.json({ ok: true, sent: rows.length });
+  const payload = JSON.stringify({ title: 'PillPipe Test', body: 'Notifications are working!', tag: 'pillpipe-test', data: { kind: 'test', url: '/' } });
+  const result = await sendBatchPayload(rows, payload);
+  res.json({ ok: true, sent: result.sent, failed: result.failed });
 }));
 
 // ── Reminder times ────────────────────────────────────────────────────────────
-app.patch('/regimens/:id/reminder', w(async (req, res) => {
-  const { reminder_time } = req.body; // HH:MM or null
-  const { rows } = await pool.query(
-    'UPDATE regimens SET reminder_time=$1 WHERE id=$2 RETURNING *',
-    [reminder_time || null, req.params.id]
-  );
-  if (!rows.length) return res.status(404).json({ error: 'Not found' });
-  res.json(rows[0]);
-}));
-
 // ── Dose Log ──────────────────────────────────────────────────────────────────
 app.post('/dose-log', w(async (req, res) => {
   const { regimen_id, date, status } = req.body; // status: 'taken' | 'skipped'
@@ -841,6 +827,7 @@ async function checkLowStock() {
       title: `⚠️ Low stock: ${supp.name}`,
       body: `${invStr} on hand${daysStr}`,
       tag: `low-stock-${supp.id}`,
+      data: { kind: 'low-stock', url: '/' },
     });
 
     await Promise.allSettled(subs.map(sub =>
@@ -860,52 +847,67 @@ cron.schedule('0 2 * * *', () => triggerDriveBackup('daily').catch(e => console.
 // ── Daily low-stock cron (runs at 8am every day) ──────────────────────────────
 cron.schedule('0 8 * * *', () => checkLowStock().catch(e => console.error('Low-stock cron error:', e.message)));
 
-// ── Notification cron (runs every minute) ─────────────────────────────────────
-cron.schedule('* * * * *', async () => {
-  if (!process.env.VAPID_PUBLIC_KEY) return;
-  try {
-    const now = new Date();
-    const hhmm = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
-    const today = now.toISOString().slice(0, 10);
+// ── Dose reminders: one push per time slot (runs every minute) ──────────────────────────────────
+const sendPush = (sub, payload) => webpush.sendNotification(
+  { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } }, payload
+);
+const dropSubscription = sub => pool.query('DELETE FROM push_subscriptions WHERE endpoint=$1', [sub.endpoint]);
 
-    // Find regimens with reminder_time == now, belonging to an active session
-    const { rows: regimens } = await pool.query(`
-      SELECT r.id, r.reminder_time, s.name AS supplement_name, s.unit, s.drops_per_ml,
-             sess.start_date, sess.target_date
-      FROM regimens r
-      JOIN supplements s ON s.id = r.supplement_id
-      JOIN sessions sess ON sess.id = r.session_id
-      WHERE r.reminder_time IS NOT NULL
-        AND to_char(r.reminder_time, 'HH24:MI') = $1
-        AND sess.start_date <= CURRENT_DATE
-        AND sess.target_date >= CURRENT_DATE
-    `, [hhmm]);
-
-    if (!regimens.length) return;
-
-    const { rows: subs } = await pool.query('SELECT * FROM push_subscriptions');
-    if (!subs.length) return;
-
-    for (const r of regimens) {
-      const payload = JSON.stringify({
-        title: `Time to take ${r.supplement_name}`,
-        body: `Your ${r.supplement_name} reminder`,
-        tag: `dose-${r.id}-${today}`,
-        url: '/',
-      });
-      await Promise.allSettled(subs.map(sub =>
-        webpush.sendNotification(
-          { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
-          payload
-        ).catch(async (err) => {
-          if (err.statusCode === 410) await pool.query('DELETE FROM push_subscriptions WHERE endpoint=$1', [sub.endpoint]);
-        })
-      ));
+// Sends a ready-made payload to every subscription; subscriptions the push service says are gone are removed.
+async function sendBatchPayload(subscriptions, payload) {
+  let sent = 0;
+  let failed = 0;
+  await Promise.all(subscriptions.map(async sub => {
+    try {
+      await sendPush(sub, payload);
+      sent++;
+    } catch (err) {
+      failed++;
+      if (err && (err.statusCode === 404 || err.statusCode === 410)) await dropSubscription(sub);
     }
-  } catch (e) {
-    console.error('Cron notification error:', e.message);
+  }));
+  return { sent, failed };
+}
+
+const notifiedMinutes = createDeduper();
+
+async function loadNotificationRegimens() {
+  const [regimens, phases] = await Promise.all([
+    pool.query(`SELECT r.id, r.as_needed, s.name AS supplement_name, s.unit, s.take_with_food,
+                       to_char(sess.start_date, 'YYYY-MM-DD') AS start_date, to_char(sess.target_date, 'YYYY-MM-DD') AS target_date
+                FROM regimens r
+                JOIN supplements s ON s.id = r.supplement_id
+                JOIN sessions sess ON sess.id = r.session_id
+                WHERE r.as_needed = FALSE`),
+    pool.query('SELECT * FROM phases'),
+  ]);
+  const byRegimen = new Map();
+  for (const ph of phases.rows) {
+    if (!byRegimen.has(ph.regimen_id)) byRegimen.set(ph.regimen_id, []);
+    byRegimen.get(ph.regimen_id).push(ph);
   }
-});
+  return regimens.rows.map(r => ({ ...r, phases: byRegimen.get(r.id) ?? [] }));
+}
+
+async function runDoseNotifications(now = new Date()) {
+  if (!process.env.VAPID_PUBLIC_KEY) return;
+  const { rows: settings } = await pool.query('SELECT prefs FROM user_settings WHERE singleton = TRUE');
+  const prefs = normalizeSchedulePrefs(settings[0]?.prefs);
+  // The previous minute is re-checked as well, so a delayed tick or a restart doesn't drop a reminder.
+  const clock = [nowInTz(prefs.timezone, new Date(now.getTime() - 60000)), nowInTz(prefs.timezone, now)];
+  const pending = clock.filter(c => !notifiedMinutes.has(`${c.date}|${c.hhmm}`));
+  if (!pending.length) return;
+  const { rows: subs } = await pool.query('SELECT * FROM push_subscriptions');
+  const regimens = subs.length ? await loadNotificationRegimens() : [];
+  for (const c of pending) {
+    const batch = dueNotifications({ now: c, prefs, regimens });
+    notifiedMinutes.add(`${c.date}|${c.hhmm}`);
+    if (batch && subs.length) await sendBatch({ batch, subscriptions: subs, send: sendPush, onGone: dropSubscription });
+  }
+  notifiedMinutes.prune(clock[1].date);
+}
+
+cron.schedule('* * * * *', () => runDoseNotifications().catch(e => console.error('Cron notification error:', e.message)));
 
 // ── Daily expired-session purge (runs at 3am) ─────────────────────────────────
 cron.schedule('0 3 * * *', () => auth.purgeExpired().catch(e => console.error('Session purge error:', e.message)));

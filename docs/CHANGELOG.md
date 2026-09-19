@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 ### Added
+- Web: batched dose reminders — one push notification per time, listing every supplement due then with its amount (and "with food"); driven by each phase's Breakfast / Lunch / Dinner / custom times in your timezone, and only for regimens active today (right phase, a dosing day, not As Needed)
 - Web: meal-time dosing in the phase editor — Breakfast / Lunch / Dinner amounts plus up to 12 custom-time doses per phase, fractional amounts for every unit (half a tablet, 2.5 ml), a live daily total, and inline error messages
 - Web: regimen cards show a compact schedule for the phase active today, e.g. `B1 L1 D2 +1@2:30 PM · 5 caps/day`
 - Web: Meal Times section in Settings — your Breakfast / Lunch / Dinner times and your timezone (detected automatically)
@@ -17,6 +18,7 @@
 - Android app: collapsible Settings sections, font size preference, default session duration (pre-fills new session target date)
 - Android app: phase labels show time-of-day doses; the active phase shows a days-left badge
 ### Changed
+- Reminders are no longer set per regimen — the Reminder time picker is gone. Taken / Skip on a notification is now recorded by the service worker itself (even with the app closed), and only for regimens with a single dose that day; the app shows a notice if it couldn't be logged
 - Backups are now version 2 (they include the new dosing fields); older version-1 files still restore, with their single dose becoming the Breakfast dose, and files from a newer version are refused instead of silently zeroing doses
 - Days-remaining and the low-stock alert now use each regimen's currently active phase at its full daily total, summed across regimens, in your timezone (previously the first phase of an arbitrary regimen)
 - Dependencies upgraded to clear known vulnerabilities: `jspdf` 4.2.1, `dompurify` 3.4.15, `fflate` 0.8.3 (web); `express` 4.22.3 (pulls patched `qs` 6.16), `node-cron` 4.6 (drops vulnerable `uuid`) (server); `npm audit` now reports 0 vulnerabilities for both the web client and the server (vite 8.3, postcss, nanoid, js-yaml, browserslist and others updated via `npm audit fix`)
@@ -25,6 +27,7 @@
 - Android app: CSV export and JSON backup/restore use `expo-file-system/next`
 - Android app: font sizes are rem-based so the font size preference scales all text
 ### Fixed
+- Web: reminders no longer fire at the server's UTC hour instead of yours
 - Web: "today" now follows your timezone (it was UTC, so evenings showed tomorrow's date for new sessions, dose logs and the adherence calendar)
 - Copying a session no longer drops the indefinite flag on its phases
 - Changing a regimen's As Needed flag (or notes) no longer wipes the other field

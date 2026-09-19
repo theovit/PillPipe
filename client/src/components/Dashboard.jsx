@@ -791,7 +791,7 @@ export default function Dashboard() {
                       </div>
                     )}
                     <div className="border-t border-gray-800 pt-3">
-                      <p className="text-xs text-gray-500">Reminder times are set per-regimen in the Regimens view.</p>
+                      <p className="text-xs text-gray-500">Reminders follow each phase's dose times: set your Breakfast / Lunch / Dinner times under Meal Times. You get one notification per time, listing everything due.</p>
                     </div>
                   </>
                 )}
@@ -1067,7 +1067,6 @@ export default function Dashboard() {
                     session={s}
                     supplements={supplements}
                     prefs={prefs}
-                    notifStatus={notifStatus}
                     onClose={() => setOpenSessionIds(prev => prev.filter(sid => sid !== id))}
                   />
                 ) : null;

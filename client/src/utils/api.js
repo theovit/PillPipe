@@ -81,9 +81,6 @@ export const api = {
   pushTest: () => request('/push/test', { method: 'POST' }),
   pushLowStockCheck: () => request('/push/low-stock-check', { method: 'POST' }),
 
-  // Reminder time
-  setReminderTime: (regimenId, reminder_time) => request(`/regimens/${regimenId}/reminder`, { method: 'PATCH', body: { reminder_time } }),
-
   // Dose log
   logDose: (body) => request('/dose-log', { method: 'POST', body }),
   getDoseLog: (params = {}) => request(`/dose-log?${new URLSearchParams(params)}`),

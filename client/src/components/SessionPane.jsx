@@ -10,12 +10,11 @@ import { activePhase, phaseNotation, todayInTz, totalLabel } from '../utils/dosi
 
 const inputCls = 'w-full rounded bg-gray-800 border border-gray-700 px-3 py-2.5 sm:py-1.5 text-base sm:text-sm text-gray-200 focus:outline-none focus:border-violet-500';
 
-export default function SessionPane({ session, supplements, prefs, notifStatus }) {
+export default function SessionPane({ session, supplements, prefs }) {
   const [regimens, setRegimens] = useState([]);
   const [phases, setPhases] = useState({});
   const [calcResults, setCalcResults] = useState({});
   const [regimenNotes, setRegimenNotes] = useState({});
-  const [reminderTimes, setReminderTimesMap] = useState({});
   const [todayLogs, setTodayLogs] = useState({});
   const [expandedRegimen, setExpandedRegimen] = useState(null);
   const [addingRegimen, setAddingRegimen] = useState(false);
@@ -36,9 +35,10 @@ export default function SessionPane({ session, supplements, prefs, notifStatus }
     }
     setPhases(phasesMap);
     setRegimenNotes(notesMap);
-    const timesMap = {};
-    for (const r of data) if (r.reminder_time) timesMap[r.id] = r.reminder_time.slice(0, 5);
-    setReminderTimesMap(timesMap);
+    await loadTodayLogs();
+  }
+
+  async function loadTodayLogs() {
     try {
       const entries = await api.getDoseLog({ since: today });
       const logsMap = {};
@@ -97,11 +97,6 @@ export default function SessionPane({ session, supplements, prefs, notifStatus }
   async function saveRegimenNotes(id) {
     await api.updateRegimen(id, { notes: regimenNotes[id] || null });
     setRegimens(prev => prev.map(r => r.id === id ? { ...r, notes: regimenNotes[id] || null } : r));
-  }
-
-  async function setReminderTime(regimenId, time) {
-    setReminderTimesMap(p => ({ ...p, [regimenId]: time }));
-    await api.setReminderTime(regimenId, time || null);
   }
 
   async function setAsNeeded(id, value) {
@@ -174,22 +169,14 @@ export default function SessionPane({ session, supplements, prefs, notifStatus }
     loadRegimens();
   }, [session.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Handle Taken/Skip actions tapped from push notifications
+  // The service worker logs Taken/Skip taps itself (so it works with the app closed) and then tells
+  // open panes to refresh today's log.
   useEffect(() => {
     if (!('serviceWorker' in navigator)) return;
-    const handler = async (event) => {
-      if (event.data?.type !== 'DOSE_ACTION') return;
-      const { action, tag } = event.data;
-      // tag format: "dose-{uuid}-{YYYY-MM-DD}"
-      const regimenId = tag.slice(5, -11);
-      const date      = tag.slice(-10);
-      const status    = action === 'taken' ? 'taken' : 'skipped';
-      await api.logDose({ regimen_id: regimenId, date, status }).catch(console.error);
-      if (date === today) setTodayLogs(p => ({ ...p, [regimenId]: status }));
-    };
+    const handler = (event) => { if (event.data?.type === 'DOSE_LOGGED') loadTodayLogs(); };
     navigator.serviceWorker.addEventListener('message', handler);
     return () => navigator.serviceWorker.removeEventListener('message', handler);
-  }, [today]);
+  }, [today]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function downloadPDF() {
     const doc = new jsPDF();
@@ -447,7 +434,7 @@ export default function SessionPane({ session, supplements, prefs, notifStatus }
                 </div>
               )}
 
-              {/* Expanded: notes + phase editor + reminders + adherence */}
+              {/* Expanded: notes + phase editor + adherence */}
               {isExpanded && (
                 <div className="mt-4 space-y-4">
                   <div>
@@ -474,19 +461,6 @@ export default function SessionPane({ session, supplements, prefs, notifStatus }
                     sessionTotalDays={sessionTotalDays}
                     unit={r.unit || 'capsules'}
                   />
-                  {notifStatus === 'granted' && (
-                    <div className="flex items-center gap-3 pt-1">
-                      <label className="text-xs text-gray-500 shrink-0">Reminder</label>
-                      <input type="time" value={reminderTimes[r.id] || ''}
-                        onChange={e => setReminderTime(r.id, e.target.value)}
-                        className="rounded bg-gray-800 border border-gray-700 px-3 py-1.5 text-sm text-gray-200 focus:outline-none focus:border-violet-500"
-                      />
-                      {reminderTimes[r.id] && (
-                        <button onClick={() => setReminderTime(r.id, '')}
-                          className="text-xs text-gray-600 hover:text-gray-400">clear</button>
-                      )}
-                    </div>
-                  )}
                   <div className="border-t border-gray-700 pt-3">
                     <p className="text-xs text-gray-500 font-medium uppercase tracking-wider mb-2">Adherence</p>
                     <AdherenceCalendar
