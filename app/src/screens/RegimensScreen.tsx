@@ -1,4 +1,3 @@
-// @atlas-entrypoint: App — substantial file
 import React, { useCallback, useState } from 'react';
 import {
   ActivityIndicator,

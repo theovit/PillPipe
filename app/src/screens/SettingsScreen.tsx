@@ -1,4 +1,3 @@
-// @atlas-entrypoint: App — substantial file
 import React, { useEffect, useState } from 'react';
 import { Alert, Platform, Pressable, ScrollView, Text, View } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';

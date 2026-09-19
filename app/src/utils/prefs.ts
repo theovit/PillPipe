@@ -1,4 +1,3 @@
-// @atlas-entrypoint: App — high export count
 /**
  * Shared preferences — synchronous reads via module-level cache,
  * async persistence via AsyncStorage.

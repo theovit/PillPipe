@@ -1,4 +1,3 @@
-// @atlas-entrypoint: App — root component
 import './global.css';
 import React, { useEffect, useState } from 'react';
 import * as Notifications from 'expo-notifications';
