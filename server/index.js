@@ -7,6 +7,7 @@ const pool = require('./db');
 const { calculate } = require('./calculator');
 const { version } = require('./package.json');
 const auth = require('./auth');
+const { validatePhaseBody } = require('./dosing');
 
 // ── Google OAuth2 setup ───────────────────────────────────────────────────────
 const oauth2Client = new google.auth.OAuth2(
@@ -298,20 +299,28 @@ app.get('/regimens/:regimenId/phases', w(async (req, res) => {
 }));
 
 app.post('/regimens/:regimenId/phases', w(async (req, res) => {
-  const { dosage, duration_days, days_of_week, sequence_order, indefinite } = req.body;
+  const v = validatePhaseBody(req.body);
+  if (!v.ok) return res.status(400).json({ error: v.error });
+  const p = v.value;
+  // sequence_order is assigned here (client-side length+1 collided with UNIQUE(regimen_id, sequence_order)
+  // after a middle phase was deleted).
   const { rows } = await pool.query(
-    `INSERT INTO phases (regimen_id, dosage, duration_days, days_of_week, sequence_order, indefinite)
-     VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
-    [req.params.regimenId, dosage, indefinite ? 9999 : duration_days, days_of_week || null, sequence_order, !!indefinite]
+    `INSERT INTO phases (regimen_id, dose_morning, dose_lunch, dose_dinner, custom_slots, duration_days, days_of_week, indefinite, sequence_order)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,(SELECT COALESCE(MAX(sequence_order), 0) + 1 FROM phases WHERE regimen_id = $1))
+     RETURNING *`,
+    [req.params.regimenId, p.dose_morning, p.dose_lunch, p.dose_dinner, JSON.stringify(p.custom_slots), p.duration_days, p.days_of_week, p.indefinite]
   );
   res.status(201).json(rows[0]);
 }));
 
 app.put('/phases/:id', w(async (req, res) => {
-  const { dosage, duration_days, days_of_week, sequence_order, indefinite } = req.body;
+  const v = validatePhaseBody(req.body);
+  if (!v.ok) return res.status(400).json({ error: v.error });
+  const p = v.value;
   const { rows } = await pool.query(
-    `UPDATE phases SET dosage=$1, duration_days=$2, days_of_week=$3, sequence_order=$4, indefinite=$5 WHERE id=$6 RETURNING *`,
-    [dosage, indefinite ? 9999 : duration_days, days_of_week || null, sequence_order, !!indefinite, req.params.id]
+    `UPDATE phases SET dose_morning=$1, dose_lunch=$2, dose_dinner=$3, custom_slots=$4, duration_days=$5, days_of_week=$6, indefinite=$7
+     WHERE id=$8 RETURNING *`,
+    [p.dose_morning, p.dose_lunch, p.dose_dinner, JSON.stringify(p.custom_slots), p.duration_days, p.days_of_week, p.indefinite, req.params.id]
   );
   if (!rows.length) return res.status(404).json({ error: 'Not found' });
   res.json(rows[0]);
@@ -688,39 +697,42 @@ app.use((err, req, res, next) => {
 });
 
 // ── Startup migrations ────────────────────────────────────────────────────────
-pool.query('ALTER TABLE sessions ADD COLUMN IF NOT EXISTS notes TEXT').catch(console.error);
-pool.query('ALTER TABLE phases ADD COLUMN IF NOT EXISTS indefinite BOOLEAN DEFAULT FALSE').catch(console.error);
-pool.query('ALTER TABLE regimens ADD COLUMN IF NOT EXISTS notes TEXT').catch(console.error);
-pool.query("ALTER TABLE supplements ADD COLUMN IF NOT EXISTS unit VARCHAR(10) DEFAULT 'capsules'").catch(console.error);
-pool.query('ALTER TABLE supplements ADD COLUMN IF NOT EXISTS drops_per_ml NUMERIC DEFAULT 20').catch(console.error);
-pool.query('ALTER TABLE supplements ADD COLUMN IF NOT EXISTS reorder_threshold NUMERIC').catch(console.error);
-pool.query("ALTER TABLE supplements ADD COLUMN IF NOT EXISTS reorder_threshold_mode VARCHAR(10) DEFAULT 'units'").catch(console.error);
-pool.query('ALTER TABLE supplements ALTER COLUMN pills_per_bottle TYPE NUMERIC').catch(console.error);
-pool.query('ALTER TABLE supplements ALTER COLUMN current_inventory TYPE NUMERIC').catch(console.error);
-pool.query('ALTER TABLE phases ALTER COLUMN dosage TYPE NUMERIC').catch(console.error);
-pool.query('ALTER TABLE regimens ADD COLUMN IF NOT EXISTS reminder_time TIME').catch(console.error);
-pool.query(`
-  CREATE TABLE IF NOT EXISTS push_subscriptions (
-    id        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    endpoint  TEXT UNIQUE NOT NULL,
-    p256dh    TEXT NOT NULL,
-    auth      TEXT NOT NULL,
-    created_at TIMESTAMPTZ DEFAULT NOW()
-  )
-`).catch(console.error);
-pool.query(`
-  CREATE TABLE IF NOT EXISTS dose_log (
-    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    regimen_id  UUID NOT NULL REFERENCES regimens(id) ON DELETE CASCADE,
-    date        DATE NOT NULL,
-    status      TEXT NOT NULL CHECK (status IN ('taken','skipped')),
-    logged_at   TIMESTAMPTZ DEFAULT NOW(),
-    UNIQUE (regimen_id, date)
-  )
-`).catch(console.error);
-// Template tables must be created in order (FK chain: templates → template_regimens → template_phases)
-(async () => {
-  await pool.query(`
+// One sequential, awaited migration: statements depend on each other (template tables before their
+// ALTERs, new columns before the dosage copy) and the server must not listen until it succeeds.
+async function migrate() {
+  const q = sql => pool.query(sql);
+  await q('ALTER TABLE sessions ADD COLUMN IF NOT EXISTS notes TEXT');
+  await q('ALTER TABLE phases ADD COLUMN IF NOT EXISTS indefinite BOOLEAN DEFAULT FALSE');
+  await q('ALTER TABLE regimens ADD COLUMN IF NOT EXISTS notes TEXT');
+  await q("ALTER TABLE supplements ADD COLUMN IF NOT EXISTS unit VARCHAR(10) DEFAULT 'capsules'");
+  await q('ALTER TABLE supplements ADD COLUMN IF NOT EXISTS drops_per_ml NUMERIC DEFAULT 20');
+  await q('ALTER TABLE supplements ADD COLUMN IF NOT EXISTS reorder_threshold NUMERIC');
+  await q("ALTER TABLE supplements ADD COLUMN IF NOT EXISTS reorder_threshold_mode VARCHAR(10) DEFAULT 'units'");
+  await q('ALTER TABLE supplements ALTER COLUMN pills_per_bottle TYPE NUMERIC');
+  await q('ALTER TABLE supplements ALTER COLUMN current_inventory TYPE NUMERIC');
+  await q('ALTER TABLE phases ALTER COLUMN dosage TYPE NUMERIC');
+  await q('ALTER TABLE regimens ADD COLUMN IF NOT EXISTS reminder_time TIME'); // legacy: unused since meal-time dosing
+  await q(`
+    CREATE TABLE IF NOT EXISTS push_subscriptions (
+      id        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      endpoint  TEXT UNIQUE NOT NULL,
+      p256dh    TEXT NOT NULL,
+      auth      TEXT NOT NULL,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await q(`
+    CREATE TABLE IF NOT EXISTS dose_log (
+      id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      regimen_id  UUID NOT NULL REFERENCES regimens(id) ON DELETE CASCADE,
+      date        DATE NOT NULL,
+      status      TEXT NOT NULL CHECK (status IN ('taken','skipped')),
+      logged_at   TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE (regimen_id, date)
+    )
+  `);
+  // Template tables must be created in order (FK chain: templates -> template_regimens -> template_phases)
+  await q(`
     CREATE TABLE IF NOT EXISTS templates (
       id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       name       TEXT NOT NULL,
@@ -728,7 +740,7 @@ pool.query(`
       created_at TIMESTAMPTZ DEFAULT NOW()
     )
   `);
-  await pool.query(`
+  await q(`
     CREATE TABLE IF NOT EXISTS template_regimens (
       id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       template_id   UUID NOT NULL REFERENCES templates(id) ON DELETE CASCADE,
@@ -736,7 +748,7 @@ pool.query(`
       created_at    TIMESTAMPTZ DEFAULT NOW()
     )
   `);
-  await pool.query(`
+  await q(`
     CREATE TABLE IF NOT EXISTS template_phases (
       id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       template_regimen_id  UUID NOT NULL REFERENCES template_regimens(id) ON DELETE CASCADE,
@@ -748,7 +760,56 @@ pool.query(`
       created_at           TIMESTAMPTZ DEFAULT NOW()
     )
   `);
-})().catch(console.error);
+
+  // Meal-time dosing (docs/DECISIONS.md): daily dose = dose_morning + dose_lunch + dose_dinner +
+  // sum(custom_slots[].amount). There is deliberately no dose_custom column (derived, not stored twice).
+  await q('ALTER TABLE phases ADD COLUMN IF NOT EXISTS dose_morning NUMERIC NOT NULL DEFAULT 0');
+  await q('ALTER TABLE phases ADD COLUMN IF NOT EXISTS dose_lunch NUMERIC NOT NULL DEFAULT 0');
+  await q('ALTER TABLE phases ADD COLUMN IF NOT EXISTS dose_dinner NUMERIC NOT NULL DEFAULT 0');
+  await q("ALTER TABLE phases ADD COLUMN IF NOT EXISTS custom_slots JSONB NOT NULL DEFAULT '[]'::jsonb");
+  await q('ALTER TABLE phases ALTER COLUMN dosage SET DEFAULT 0');
+  // Self-disabling copy of the legacy flat dose into breakfast; harmless on every boot.
+  await q("UPDATE phases SET dose_morning = dosage, dosage = 0 WHERE dosage > 0 AND dose_morning = 0 AND dose_lunch = 0 AND dose_dinner = 0 AND custom_slots = '[]'::jsonb");
+  await q('ALTER TABLE template_phases ADD COLUMN IF NOT EXISTS dose_morning NUMERIC NOT NULL DEFAULT 0');
+  await q('ALTER TABLE template_phases ADD COLUMN IF NOT EXISTS dose_lunch NUMERIC NOT NULL DEFAULT 0');
+  await q('ALTER TABLE template_phases ADD COLUMN IF NOT EXISTS dose_dinner NUMERIC NOT NULL DEFAULT 0');
+  await q("ALTER TABLE template_phases ADD COLUMN IF NOT EXISTS custom_slots JSONB NOT NULL DEFAULT '[]'::jsonb");
+  await q('ALTER TABLE template_phases ALTER COLUMN dosage SET DEFAULT 0');
+  // Self-disabling copy of the legacy flat dose into breakfast; harmless on every boot.
+  await q("UPDATE template_phases SET dose_morning = dosage, dosage = 0 WHERE dosage > 0 AND dose_morning = 0 AND dose_lunch = 0 AND dose_dinner = 0 AND custom_slots = '[]'::jsonb");
+  await q('ALTER TABLE supplements ADD COLUMN IF NOT EXISTS take_with_food BOOLEAN NOT NULL DEFAULT FALSE');
+  await q('ALTER TABLE regimens ADD COLUMN IF NOT EXISTS as_needed BOOLEAN NOT NULL DEFAULT FALSE');
+  await q('ALTER TABLE template_regimens ADD COLUMN IF NOT EXISTS as_needed BOOLEAN NOT NULL DEFAULT FALSE');
+
+  // Google Drive + prefs tables
+  await q(`
+    CREATE TABLE IF NOT EXISTS google_tokens (
+      id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      access_token  TEXT NOT NULL,
+      refresh_token TEXT NOT NULL,
+      expiry_date   BIGINT,
+      email         TEXT,
+      created_at    TIMESTAMPTZ DEFAULT NOW(),
+      updated_at    TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await q(`
+    CREATE TABLE IF NOT EXISTS google_drive_settings (
+      singleton            BOOLEAN PRIMARY KEY DEFAULT TRUE CHECK (singleton),
+      frequency            TEXT NOT NULL DEFAULT 'manual',
+      last_backup_at       TIMESTAMPTZ,
+      last_backup_file_id  TEXT,
+      updated_at           TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await q(`
+    CREATE TABLE IF NOT EXISTS user_settings (
+      singleton   BOOLEAN PRIMARY KEY DEFAULT TRUE CHECK (singleton),
+      prefs       JSONB NOT NULL DEFAULT '{}',
+      updated_at  TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+}
 
 // ── Google Drive helpers ──────────────────────────────────────────────────────
 async function getDriveClient() {
@@ -897,37 +958,6 @@ async function checkLowStock() {
   }
 }
 
-// ── Google Drive table migrations ─────────────────────────────────────────────
-(async () => {
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS google_tokens (
-      id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-      access_token  TEXT NOT NULL,
-      refresh_token TEXT NOT NULL,
-      expiry_date   BIGINT,
-      email         TEXT,
-      created_at    TIMESTAMPTZ DEFAULT NOW(),
-      updated_at    TIMESTAMPTZ DEFAULT NOW()
-    )
-  `);
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS google_drive_settings (
-      singleton            BOOLEAN PRIMARY KEY DEFAULT TRUE CHECK (singleton),
-      frequency            TEXT NOT NULL DEFAULT 'manual',
-      last_backup_at       TIMESTAMPTZ,
-      last_backup_file_id  TEXT,
-      updated_at           TIMESTAMPTZ DEFAULT NOW()
-    )
-  `);
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS user_settings (
-      singleton   BOOLEAN PRIMARY KEY DEFAULT TRUE CHECK (singleton),
-      prefs       JSONB NOT NULL DEFAULT '{}',
-      updated_at  TIMESTAMPTZ DEFAULT NOW()
-    )
-  `);
-})().catch(console.error);
-
 // ── Daily Google Drive backup cron (runs at 2am) ──────────────────────────────
 cron.schedule('0 2 * * *', () => triggerDriveBackup('daily').catch(e => console.error('Drive daily backup error:', e.message)));
 
@@ -987,5 +1017,6 @@ cron.schedule('0 3 * * *', () => auth.purgeExpired().catch(e => console.error('S
 const PORT = process.env.PORT || 3000;
 // Do not listen until the auth schema exists and the password hash is valid (fail closed).
 auth.init()
+  .then(migrate)
   .then(() => app.listen(PORT, () => console.log(`PillPipe API v${version} running on port ${PORT}`)))
   .catch(e => { console.error(e.message); process.exit(1); });

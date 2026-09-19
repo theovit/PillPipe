@@ -2,6 +2,7 @@
 
 ## [Unreleased]
 ### Added
+- Web (server): meal-time dosing foundation — each phase now takes Breakfast / Lunch / Dinner amounts plus up to 12 custom time+amount doses, stored as `dose_morning/lunch/dinner` and a `custom_slots` JSON list; the shortfall calculator sums them, fractional amounts work for every unit, and existing single doses migrate to Breakfast automatically. The editor, notifications and other flows follow in later commits
 - Web: password login (server side) — every API route now requires a session except `/health`, `/auth/login` and `/auth/me`. scrypt password hash in `APP_PASSWORD_HASH` (the backend refuses to start without it; generate with `node scripts/hash-password.js`), DB-backed sessions in an HttpOnly cookie, CSRF header check, login/API rate limiting, and a `state` check on the Google Drive connect flow. `POST /restore` now rejects empty/malformed backups instead of wiping the database, and accepts backups up to 25 MB
 - Web: sign-in screen and a Session card in Settings (Log out / Log out everywhere); an expired or revoked session drops back to the sign-in screen, and a server outage shows a Retry state instead of a misleading login form
 - Android app: time-of-day dosing — each phase takes Morning / Lunch / Dinner amounts plus any number of custom time+amount slots; the shortfall calculator sums them
@@ -16,6 +17,8 @@
 - Android app: CSV export and JSON backup/restore use `expo-file-system/next`
 - Android app: font sizes are rem-based so the font size preference scales all text
 ### Fixed
+- Adding a phase after deleting one in the middle no longer fails (the server now assigns the phase order)
+- Shortfall math no longer misjudges coverage on decimal doses (e.g. 0.1 three times a day against 0.3)
 - Web: the add/edit supplement form now accepts whole numbers (e.g. 30 capsules per bottle). It previously demanded values like 29.001 because the field's `min` and `step` didn't line up
 - Removed stray `// @atlas-entrypoint` comment lines from source files; one in `client/package-lock.json` broke `npm audit`
 - Android app: headers and modals respect safe areas on Android 15 edge-to-edge; Add Regimen button clears the system nav bar
