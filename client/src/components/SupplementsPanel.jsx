@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { api } from '../utils/api';
 
-const EMPTY = { name: '', brand: '', pills_per_bottle: '', price: '', type: 'maintenance', current_inventory: '', unit: 'capsules', drops_per_ml: 20, reorder_threshold: '', reorder_threshold_mode: 'units' };
+const EMPTY = { name: '', brand: '', pills_per_bottle: '', price: '', type: 'maintenance', current_inventory: '', unit: 'capsules', drops_per_ml: 20, reorder_threshold: '', reorder_threshold_mode: 'units', take_with_food: false };
 const inputCls = 'rounded bg-gray-800 border border-gray-700 px-3 py-2.5 sm:py-1.5 text-base sm:text-sm text-gray-200 focus:outline-none focus:border-violet-500';
 
 // ── Unit helpers ──────────────────────────────────────────────────────────────
@@ -80,6 +80,7 @@ export default function SupplementsPanel({ supplements, onUpdate }) {
       drops_per_ml: s.drops_per_ml ?? 20,
       reorder_threshold: s.reorder_threshold ?? '',
       reorder_threshold_mode: s.reorder_threshold_mode || 'units',
+      take_with_food: !!s.take_with_food,
     });
   }
 
@@ -201,6 +202,12 @@ export default function SupplementsPanel({ supplements, onUpdate }) {
           <p className="text-xs text-gray-600 mt-1">≈ {(Number(f.current_inventory) / Number(f.drops_per_ml)).toFixed(1)} ml</p>
         )}
       </div>
+      <label className="col-span-2 flex items-center gap-2 text-sm text-gray-400 cursor-pointer select-none">
+        <input type="checkbox" checked={!!f.take_with_food}
+          onChange={e => setF(p => ({ ...p, take_with_food: e.target.checked }))}
+          className="accent-violet-500 w-4 h-4" />
+        Take with food <span className="text-gray-600 text-xs">— shown on the regimen card and in reminders</span>
+      </label>
       <div className="col-span-2">
         <label className="block text-xs text-gray-500 mb-1">
           Reorder alert <span className="text-gray-600">— optional</span>
@@ -301,6 +308,9 @@ export default function SupplementsPanel({ supplements, onUpdate }) {
                       <span className={`px-1.5 py-0.5 rounded text-xs font-medium tracking-wide ${s.type === 'maintenance' ? 'bg-blue-900/40 text-blue-400' : 'bg-amber-900/40 text-amber-400'}`}>
                         {s.type}
                       </span>
+                      {s.take_with_food && (
+                        <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-amber-900/40 text-amber-400">with food</span>
+                      )}
                     </div>
                   </div>
                 </div>

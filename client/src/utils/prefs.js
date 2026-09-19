@@ -7,7 +7,19 @@ const DEFAULTS = {
   colorScheme: 'system', // 'dark' | 'light' | 'system'
   dateFormat: 'locale',
   defaultDuration: 0,
+  morningTime: '08:00', // breakfast/lunch/dinner dose times (keys match the Android app)
+  lunchTime: '12:00',
+  dinnerTime: '18:00',
+  timezone: null,       // IANA name; auto-detected on first load, decides what "today" and reminder times mean
 };
+
+export function detectTimezone() {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone || null;
+  } catch {
+    return null;
+  }
+}
 
 // Preset palette — hardcoded hex so swatch buttons always show their true color
 // regardless of which theme is active (swatches use inline style, not Tailwind classes).

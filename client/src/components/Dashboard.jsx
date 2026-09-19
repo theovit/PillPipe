@@ -1,20 +1,23 @@
 import { useEffect, useState } from 'react';
 import { api } from '../utils/api';
-import { applyAccentColor, applyColorScheme, applyPrefs, defaultTargetDate, formatDate, loadPrefs, PRESET_COLORS, savePrefs } from '../utils/prefs';
+import { applyAccentColor, applyColorScheme, applyPrefs, defaultTargetDate, detectTimezone, formatDate, loadPrefs, PRESET_COLORS, savePrefs } from '../utils/prefs';
+import { SLOTS, formatTime12, resolveMealTimes, todayInTz } from '../utils/dosing';
 import SessionPane from './SessionPane';
 import SupplementsPanel from './SupplementsPanel';
 
-const today = new Date().toISOString().slice(0, 10);
+// "Today" in the owner's timezone (was UTC, which is tomorrow for the Americas every evening).
+const todayLocal = () => todayInTz(loadPrefs().timezone);
+const withTimezone = p => (p.timezone ? p : { ...p, timezone: detectTimezone() });
 const inputCls = 'w-full rounded bg-gray-800 border border-gray-700 px-3 py-2.5 sm:py-1.5 text-base sm:text-sm text-gray-200 focus:outline-none focus:border-violet-500';
 
 export default function Dashboard() {
   const [supplements, setSupplements] = useState([]);
   const [sessions, setSessions] = useState([]);
   const [openSessionIds, setOpenSessionIds] = useState([]);
-  const [sessionForm, setSessionForm] = useState({ start_date: today, target_date: '', notes: '', template_id: '' });
+  const [sessionForm, setSessionForm] = useState(() => ({ start_date: todayLocal(), target_date: '', notes: '', template_id: '' }));
   const [editingSession, setEditingSession] = useState(null);
   const [copyingSession, setCopyingSession] = useState(null);
-  const [copyForm, setCopyForm] = useState({ start_date: today, target_date: '' });
+  const [copyForm, setCopyForm] = useState(() => ({ start_date: todayLocal(), target_date: '' }));
   const [view, setView] = useState('regimens');
   const [addingSession, setAddingSession] = useState(false);
   const [openSections, setOpenSections] = useState({});
@@ -60,14 +63,19 @@ export default function Dashboard() {
     // Load prefs from server on startup; server is source of truth, localStorage is the fallback
     api.getPrefs().then(serverPrefs => {
       if (serverPrefs && Object.keys(serverPrefs).length > 0) {
-        const merged = { ...loadPrefs(), ...serverPrefs };
+        const merged = withTimezone({ ...loadPrefs(), ...serverPrefs });
         savePrefs(merged);
         setPrefs(merged);
         applyPrefs(merged);
+        // Servers/backups from before this feature have no timezone: persist the detected one for reminders.
+        if (merged.timezone !== serverPrefs.timezone) api.savePrefs(merged).catch(() => {});
       } else {
-        applyPrefs(prefs);
+        const seeded = withTimezone(prefs);
+        savePrefs(seeded);
+        setPrefs(seeded);
+        applyPrefs(seeded);
         // Seed the server with whatever is in localStorage
-        api.savePrefs(prefs).catch(() => {});
+        api.savePrefs(seeded).catch(() => {});
       }
     }).catch(() => { applyPrefs(prefs); });
     loadSupplements();
@@ -219,7 +227,7 @@ export default function Dashboard() {
       return;
     }
     const s = await api.createSession(sessionForm);
-    setSessionForm({ start_date: today, target_date: defaultTargetDate(prefs.defaultDuration), notes: '', template_id: '' });
+    setSessionForm({ start_date: todayLocal(), target_date: defaultTargetDate(prefs.defaultDuration), notes: '', template_id: '' });
     setSessions(prev => [s, ...prev]);
     setOpenSessionIds(prev => [s.id, ...prev]);
     setAddingSession(false);
@@ -295,9 +303,12 @@ export default function Dashboard() {
     await api.restore(parsed);
     // Restore client-side prefs if present in the backup
     if (parsed.prefs) {
-      savePrefs(parsed.prefs);
-      setPrefs(parsed.prefs);
-      applyPrefs(parsed.prefs);
+      // Older backups lack newer keys (meal times, timezone): merge over the current prefs, don't replace them.
+      const merged = withTimezone({ ...loadPrefs(), ...parsed.prefs });
+      savePrefs(merged);
+      setPrefs(merged);
+      applyPrefs(merged);
+      api.savePrefs(merged).catch(() => {});
     }
     setView('regimens');
     await loadSupplements();
@@ -314,6 +325,10 @@ export default function Dashboard() {
     setSessions([]);
     await loadSupplements();
   }
+
+  const mealTimes = resolveMealTimes(prefs);
+  const zoneList = typeof Intl.supportedValuesOf === 'function' ? Intl.supportedValuesOf('timeZone') : [];
+  const zones = prefs.timezone && !zoneList.includes(prefs.timezone) ? [prefs.timezone, ...zoneList] : zoneList;
 
   return (
     <div className="min-h-screen bg-gray-950 text-gray-200 p-3 sm:p-6 max-w-4xl mx-auto">
@@ -653,6 +668,48 @@ export default function Dashboard() {
             )}
           </div>
 
+          {/* Meal times */}
+          <div className="rounded-xl bg-gray-900 border border-gray-800 overflow-hidden">
+            <button onClick={() => toggleSection('mealTimes')}
+              className="w-full flex items-center justify-between px-5 py-4 text-left">
+              <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Meal Times</h2>
+              <span className="text-gray-600 text-xs">{openSections.mealTimes ? '▲' : '▼'}</span>
+            </button>
+            {openSections.mealTimes && (
+              <div className="px-5 pb-5 space-y-5 border-t border-gray-800 pt-4">
+                <div>
+                  <p className="text-sm text-gray-200 font-medium mb-1">Dose times</p>
+                  <p className="text-xs text-gray-500 mb-3">
+                    Breakfast, lunch and dinner doses (and their reminders) use these times. Custom doses keep their own time.
+                  </p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {SLOTS.map(s => (
+                      <div key={s.prefKey}>
+                        <label className="block text-xs text-gray-500 mb-1">{s.label}</label>
+                        <input type="time" value={mealTimes[s.prefKey]}
+                          onChange={e => { if (e.target.value) updatePref(s.prefKey, e.target.value); }}
+                          className={inputCls} />
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-xs text-gray-600 mt-2 font-mono">
+                    {SLOTS.map(s => `${s.letter} ${formatTime12(mealTimes[s.prefKey])}`).join(' · ')}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-sm text-gray-200 font-medium mb-1">Timezone</p>
+                  <p className="text-xs text-gray-500 mb-3">
+                    Decides what &quot;today&quot; and the reminder times mean. Detected automatically from this device.
+                  </p>
+                  <select value={prefs.timezone || ''} onChange={e => updatePref('timezone', e.target.value)} className={inputCls}>
+                    {zones.length === 0 && <option value={prefs.timezone || ''}>{prefs.timezone || 'Unknown'}</option>}
+                    {zones.map(z => <option key={z} value={z}>{z}</option>)}
+                  </select>
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* Notifications */}
           <div className="rounded-xl bg-gray-900 border border-gray-800 overflow-hidden">
             <button onClick={() => toggleSection('notifications')}
@@ -927,7 +984,7 @@ export default function Dashboard() {
                             <button type="submit" className="px-3 py-2.5 sm:py-1 rounded bg-violet-600 hover:bg-violet-500 text-white text-sm">Save</button>
                             <button type="button" onClick={() => setEditingSession(null)} className="px-3 py-2.5 sm:py-1 rounded bg-gray-700 hover:bg-gray-600 text-gray-300 text-sm">Cancel</button>
                             <button type="button" className="sm:hidden px-3 py-2.5 rounded text-gray-400 hover:text-gray-200 text-sm"
-                              onClick={() => { setEditingSession(null); setCopyingSession(s.id); setCopyForm({ start_date: today, target_date: '' }); }}>Copy</button>
+                              onClick={() => { setEditingSession(null); setCopyingSession(s.id); setCopyForm({ start_date: todayLocal(), target_date: '' }); }}>Copy</button>
                             <button type="button" className="sm:hidden px-3 py-2.5 rounded text-red-400 hover:text-red-300 text-sm ml-auto"
                               onClick={() => { setEditingSession(null); deleteSession(s.id); }}>Delete</button>
                           </div>
@@ -945,7 +1002,7 @@ export default function Dashboard() {
                               <div className="text-xs text-gray-600 mt-0.5 font-mono">from {formatDate(s.start_date, prefs.dateFormat)}</div>
                               {s.notes && <div className="text-xs text-gray-500 mt-0.5 line-clamp-1">{s.notes}</div>}
                             </div>
-                            <button onClick={e => { e.stopPropagation(); setCopyingSession(s.id); setCopyForm({ start_date: today, target_date: '' }); }}
+                            <button onClick={e => { e.stopPropagation(); setCopyingSession(s.id); setCopyForm({ start_date: todayLocal(), target_date: '' }); }}
                               className="hidden sm:block text-gray-500 hover:text-gray-300 p-1.5 shrink-0" title="Copy to new session">⧉</button>
                             <button onClick={e => { e.stopPropagation(); setSavingTemplate(s.id); setTemplateNameInput(''); }}
                               className="hidden sm:block text-gray-500 hover:text-gray-300 p-1.5 shrink-0" title="Save as template">☆</button>

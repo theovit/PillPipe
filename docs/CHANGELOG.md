@@ -2,6 +2,11 @@
 
 ## [Unreleased]
 ### Added
+- Web: meal-time dosing in the phase editor — Breakfast / Lunch / Dinner amounts plus up to 12 custom-time doses per phase, fractional amounts for every unit (half a tablet, 2.5 ml), a live daily total, and inline error messages
+- Web: regimen cards show a compact schedule for the phase active today, e.g. `B1 L1 D2 +1@2:30 PM · 5 caps/day`
+- Web: Meal Times section in Settings — your Breakfast / Lunch / Dinner times and your timezone (detected automatically)
+- Web: Take With Food checkbox on supplements (badge on the supplement and on its regimen card) and an As Needed toggle on regimens (label only: no phases, logging or shortfall math)
+- Web: CSV and PDF shortfall exports gain a Schedule column
 - Web (server): a Take With Food flag on supplements and an As Needed flag on regimens (excluded from shortfall and days-remaining math); both are kept by copy, templates and backups
 - Web (server): meal-time dosing foundation — each phase now takes Breakfast / Lunch / Dinner amounts plus up to 12 custom time+amount doses, stored as `dose_morning/lunch/dinner` and a `custom_slots` JSON list; the shortfall calculator sums them, fractional amounts work for every unit, and existing single doses migrate to Breakfast automatically. The editor, notifications and other flows follow in later commits
 - Web: password login (server side) — every API route now requires a session except `/health`, `/auth/login` and `/auth/me`. scrypt password hash in `APP_PASSWORD_HASH` (the backend refuses to start without it; generate with `node scripts/hash-password.js`), DB-backed sessions in an HttpOnly cookie, CSRF header check, login/API rate limiting, and a `state` check on the Google Drive connect flow. `POST /restore` now rejects empty/malformed backups instead of wiping the database, and accepts backups up to 25 MB
@@ -20,6 +25,7 @@
 - Android app: CSV export and JSON backup/restore use `expo-file-system/next`
 - Android app: font sizes are rem-based so the font size preference scales all text
 ### Fixed
+- Web: "today" now follows your timezone (it was UTC, so evenings showed tomorrow's date for new sessions, dose logs and the adherence calendar)
 - Copying a session no longer drops the indefinite flag on its phases
 - Changing a regimen's As Needed flag (or notes) no longer wipes the other field
 - The login concurrency cap now still holds while the failed-login slowdown is active

@@ -6,8 +6,8 @@ import PhaseEditor from './PhaseEditor';
 import ShortfallAlert from './ShortfallAlert';
 import AdherenceCalendar from './AdherenceCalendar';
 import { formatDate } from '../utils/prefs';
+import { activePhase, phaseNotation, todayInTz, totalLabel } from '../utils/dosing';
 
-const today = new Date().toISOString().slice(0, 10);
 const inputCls = 'w-full rounded bg-gray-800 border border-gray-700 px-3 py-2.5 sm:py-1.5 text-base sm:text-sm text-gray-200 focus:outline-none focus:border-violet-500';
 
 export default function SessionPane({ session, supplements, prefs, notifStatus }) {
@@ -23,6 +23,7 @@ export default function SessionPane({ session, supplements, prefs, notifStatus }
   const [calcError, setCalcError] = useState('');
   const [showShoppingList, setShowShoppingList] = useState(false);
   const [copied, setCopied] = useState(false);
+  const today = todayInTz(prefs.timezone);
 
   async function loadRegimens() {
     const data = await api.getRegimens(session.id);
@@ -66,7 +67,7 @@ export default function SessionPane({ session, supplements, prefs, notifStatus }
   }
 
   async function runCalculate() {
-    const missing = regimens.filter(r => !phases[r.id]?.length);
+    const missing = regimens.filter(r => !r.as_needed && !phases[r.id]?.length);
     if (missing.length) {
       setCalcError(`Add at least one phase to: ${missing.map(r => r.supplement_name).join(', ')}`);
       return;
@@ -84,10 +85,11 @@ export default function SessionPane({ session, supplements, prefs, notifStatus }
   }
 
   async function logAllToday(status) {
+    const scheduled = regimens.filter(r => !r.as_needed);
     const updated = {};
-    for (const r of regimens) updated[r.id] = status;
+    for (const r of scheduled) updated[r.id] = status;
     setTodayLogs(p => ({ ...p, ...updated }));
-    await Promise.all(regimens.map(r =>
+    await Promise.all(scheduled.map(r =>
       api.logDose({ regimen_id: r.id, date: today, status }).catch(console.error)
     ));
   }
@@ -100,6 +102,28 @@ export default function SessionPane({ session, supplements, prefs, notifStatus }
   async function setReminderTime(regimenId, time) {
     setReminderTimesMap(p => ({ ...p, [regimenId]: time }));
     await api.setReminderTime(regimenId, time || null);
+  }
+
+  async function setAsNeeded(id, value) {
+    const updated = await api.updateRegimen(id, { as_needed: value });
+    setRegimens(prev => prev.map(r => (r.id === id ? { ...r, as_needed: updated.as_needed } : r)));
+    // As-needed regimens are excluded from the shortfall math, so drop any stale result for this one.
+    setCalcResults(prev => Object.fromEntries(Object.entries(prev).filter(([k]) => k !== id)));
+  }
+
+  // The regimen's schedule for today: the active phase (or the first one when nothing is active).
+  function scheduleInfo(r) {
+    const ps = phases[r.id];
+    if (!ps?.length) return null;
+    const active = activePhase(ps, session.start_date.slice(0, 10), today, sessionTotalDays);
+    const phase = active ? active.phase : [...ps].sort((a, b) => a.sequence_order - b.sequence_order)[0];
+    const unit = r.unit || 'capsules';
+    return { notation: phaseNotation(phase), total: totalLabel(phase, unit), active: !!active };
+  }
+
+  function scheduleText(r) {
+    const s = scheduleInfo(r);
+    return s ? `${s.notation} · ${s.total}` : '';
   }
 
   function phaseSummary(ps) {
@@ -118,7 +142,7 @@ export default function SessionPane({ session, supplements, prefs, notifStatus }
       `${esc('Session')},${esc(`${sessionStart} → ${sessionTarget} (${sessionTotalDays} days)`)}`,
       `${esc('Generated')},${esc(formatDate(today, prefs.dateFormat))}`,
       '',
-      'Supplement,Brand,Unit,"On Hand","Total Needed",Shortfall,"Bottles to Buy","Est. Cost","Days Short",Status',
+      'Supplement,Brand,Unit,Schedule,"On Hand","Total Needed",Shortfall,"Bottles to Buy","Est. Cost","Days Short",Status',
     ];
     for (const r of regimens) {
       const res = calcResults[r.id];
@@ -126,7 +150,7 @@ export default function SessionPane({ session, supplements, prefs, notifStatus }
       const u = r.unit || 'capsules';
       const unitLabel = u === 'ml' ? 'ml' : u === 'drops' ? 'drops' : u === 'tablets' ? 'tabs' : 'caps';
       lines.push([
-        esc(r.supplement_name), esc(r.brand || ''), unitLabel,
+        esc(r.supplement_name), esc(r.brand || ''), unitLabel, esc(scheduleText(r)),
         Number(res.currentOnHand), Number(res.pillsNeeded), Number(res.shortfall),
         Number(res.bottlesNeeded), `$${(res.estimatedCost || 0).toFixed(2)}`,
         Number(res.daysShort), res.status,
@@ -134,7 +158,7 @@ export default function SessionPane({ session, supplements, prefs, notifStatus }
     }
     const tc = Object.values(calcResults).reduce((s, r) => s + (r.estimatedCost || 0), 0);
     lines.push('');
-    lines.push(`,,,,,,,$${tc.toFixed(2)},,Total Est. Cost`);
+    lines.push(`,,,,,,,,$${tc.toFixed(2)},,Total Est. Cost`);
     const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement('a');
@@ -165,7 +189,7 @@ export default function SessionPane({ session, supplements, prefs, notifStatus }
     };
     navigator.serviceWorker.addEventListener('message', handler);
     return () => navigator.serviceWorker.removeEventListener('message', handler);
-  }, []);
+  }, [today]);
 
   function downloadPDF() {
     const doc = new jsPDF();
@@ -190,6 +214,7 @@ export default function SessionPane({ session, supplements, prefs, notifStatus }
       return [
         r.supplement_name,
         r.brand || '—',
+        scheduleText(r) || '—',
         `${Number(res.currentOnHand)} ${ul}`,
         `${Number(res.pillsNeeded)} ${ul}`,
         res.shortfall > 0 ? `${Number(res.shortfall)} ${ul}` : '—',
@@ -203,9 +228,9 @@ export default function SessionPane({ session, supplements, prefs, notifStatus }
 
     autoTable(doc, {
       startY: 42,
-      head: [['Supplement', 'Brand', 'On Hand', 'Needed', 'Shortfall', 'Bottles', 'Est. Cost', 'Status']],
+      head: [['Supplement', 'Brand', 'Schedule', 'On Hand', 'Needed', 'Shortfall', 'Bottles', 'Est. Cost', 'Status']],
       body: rows,
-      foot: [['', '', '', '', '', '', `$${tc.toFixed(2)}`, 'Total']],
+      foot: [['', '', '', '', '', '', '', `$${tc.toFixed(2)}`, 'Total']],
       styles: { fontSize: 8, cellPadding: 2 },
       headStyles: { fillColor: [109, 40, 217], textColor: 255 },
       footStyles: { fillColor: [243, 244, 246], textColor: [50, 50, 50], fontStyle: 'bold' },
@@ -324,7 +349,7 @@ export default function SessionPane({ session, supplements, prefs, notifStatus }
       )}
 
       {/* Bulk log bar */}
-      {regimens.length > 0 && (
+      {regimens.some(r => !r.as_needed) && (
         <div className="flex items-center gap-2 mt-3">
           <span className="text-xs text-gray-600 shrink-0">Today:</span>
           <button onClick={() => logAllToday('taken')}
@@ -347,7 +372,11 @@ export default function SessionPane({ session, supplements, prefs, notifStatus }
               <div className="cursor-pointer"
                 onClick={() => setExpandedRegimen(isExpanded ? null : r.id)}>
                 <div className="flex items-center justify-between gap-3">
-                  <h3 className="font-semibold text-white">{r.supplement_name}</h3>
+                  <h3 className="font-semibold text-white">
+                    {r.supplement_name}
+                    {r.take_with_food && <span className="ml-2 px-1.5 py-0.5 rounded text-[10px] font-medium align-middle bg-amber-900/40 text-amber-400">with food</span>}
+                    {r.as_needed && <span className="ml-2 px-1.5 py-0.5 rounded text-[10px] font-medium align-middle bg-blue-900/40 text-blue-400">As needed</span>}
+                  </h3>
                   <div className="flex items-center gap-1 shrink-0">
                     <span className="text-sm text-gray-400 whitespace-nowrap mr-1">
                       <span className="font-mono">{(() => {
@@ -376,9 +405,22 @@ export default function SessionPane({ session, supplements, prefs, notifStatus }
               {/* Collapsed: phase summary + notes preview + quick log */}
               {!isExpanded && (
                 <div className="mt-2 space-y-1.5">
-                  <p className="text-xs text-gray-600">{phaseSummary(phases[r.id])}</p>
+                  {r.as_needed ? (
+                    <p className="text-xs text-gray-500">As needed — no schedule, reminders or shortfall tracking</p>
+                  ) : (
+                    <div className="text-xs space-y-0.5">
+                      {scheduleInfo(r) && (
+                        <p className="text-gray-300">
+                          <span className="font-mono">{scheduleInfo(r).notation}</span>
+                          <span className="text-gray-500"> · {scheduleInfo(r).total}</span>
+                          {!scheduleInfo(r).active && <span className="text-gray-600"> · not active today</span>}
+                        </p>
+                      )}
+                      <p className="text-gray-600">{phaseSummary(phases[r.id])}</p>
+                    </div>
+                  )}
                   {r.notes && <p className="text-xs text-gray-500 italic line-clamp-1">{r.notes}</p>}
-                  <div className="flex items-center gap-2 pt-0.5" onClick={e => e.stopPropagation()}>
+                  {!r.as_needed && <div className="flex items-center gap-2 pt-0.5" onClick={e => e.stopPropagation()}>
                     {!todayLogs[r.id] ? (
                       <>
                         <button onClick={() => logTodayDose(r.id, 'taken')}
@@ -401,7 +443,7 @@ export default function SessionPane({ session, supplements, prefs, notifStatus }
                         </button>
                       </>
                     )}
-                  </div>
+                  </div>}
                 </div>
               )}
 
@@ -419,6 +461,12 @@ export default function SessionPane({ session, supplements, prefs, notifStatus }
                       placeholder="e.g. take with food, avoid at night…"
                     />
                   </div>
+                  <label className="flex items-start gap-2 text-sm text-gray-400 cursor-pointer select-none">
+                    <input type="checkbox" checked={!!r.as_needed} onChange={e => setAsNeeded(r.id, e.target.checked)}
+                      className="accent-violet-500 w-4 h-4 mt-0.5" />
+                    <span>As needed <span className="text-gray-600 text-xs">— no schedule, reminders or shortfall math; manage its inventory by hand</span></span>
+                  </label>
+                  {!r.as_needed && (<>
                   <PhaseEditor
                     regimenId={r.id}
                     phases={phases[r.id] || []}
@@ -448,6 +496,7 @@ export default function SessionPane({ session, supplements, prefs, notifStatus }
                       onLogToday={(status) => logTodayDose(r.id, status)}
                     />
                   </div>
+                  </>)}
                   <div className="sm:hidden flex gap-2 pt-2 border-t border-gray-700/50">
                     <button onClick={() => setExpandedRegimen(null)}
                       className="flex-1 py-2.5 rounded bg-gray-700 hover:bg-gray-600 text-gray-200 text-sm font-medium">Done</button>

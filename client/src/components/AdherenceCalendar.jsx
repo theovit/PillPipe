@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react';
 import { api } from '../utils/api';
+import { loadPrefs } from '../utils/prefs';
+import { todayInTz } from '../utils/dosing';
 
 function isoDate(d) { return d.toISOString().slice(0, 10); }
 
@@ -9,7 +11,7 @@ export default function AdherenceCalendar({ regimenId, sessionStartDate, todaySt
   const [log, setLog] = useState({});   // date → 'taken' | 'skipped'  (historical + self-managed today)
   const [logging, setLogging] = useState(null);
 
-  const today        = isoDate(new Date());
+  const today        = todayInTz(loadPrefs().timezone);
   const thirtyAgo    = isoDate(new Date(Date.now() - 29 * 86400000));
   const since        = sessionStartDate && sessionStartDate > thirtyAgo ? sessionStartDate : thirtyAgo;
 

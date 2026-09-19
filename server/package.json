@@ -7,7 +7,7 @@
     "start": "node index.js",
     "dev": "nodemon index.js",
     "test": "node --test --test-concurrency=1",
-    "test:unit": "node --test test/dosing.test.js test/calculator.test.js test/tz.test.js"
+    "test:unit": "node --test test/dosing.test.js test/calculator.test.js test/tz.test.js test/dosing-twin.test.js"
   },
   "keywords": [],
   "author": "",
