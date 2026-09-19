@@ -77,3 +77,8 @@ the backend trusts one proxy hop and rate-limits per IP.
 backend instead of `http://backend:3000`. The backend's `APP_ORIGIN` must equal the browser origin exactly
 (here `http://127.0.0.1:5199`) or every POST/PUT/DELETE gets a 403 from the CSRF check. The test compose file
 reads `TEST_APP_ORIGIN`, `TEST_IDLE_TTL`, `TEST_ABS_TTL` for this.
+
+## Current data is fake test data — no migrations needed to preserve it
+The owner confirmed (2026-09-19) that everything in the dev database is throwaway test data. Schema changes
+(e.g. multi-user ownership columns) do not need data-preserving migrations; wiping and reseeding is fine.
+Revisit this the moment real data goes in (i.e. before the app is used for real over the internet).
