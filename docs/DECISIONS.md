@@ -56,19 +56,19 @@
 **Alternatives considered:** Treating as a zero-dose phase — rejected as confusing. Separate dosing mode with its own math — rejected as over-engineering for a display-only concern.
 **Consequences:** "As Needed" pills are visible in the regimen view but invisible to the calculator. Inventory for these pills must be managed manually.
 
-## Meal-time dosing: no DB migration needed
+## Meal-time dosing: no DB migration needed (web) — superseded on Android
 **Date:** 2026-03-17
-**Decision:** The `daily_dose` → `dosing_slots` schema change requires no migration.
-**Why:** The app is not in production and there is no existing user data to preserve.
+**Decision:** The web `daily_dose` → per-slot schema change requires no migration.
+**Why:** The web app is not in production and there is no existing user data to preserve.
 **Alternatives considered:** Writing a migration — unnecessary overhead given no live data.
-**Consequences:** This assumption must be revisited before any public release.
+**Consequences:** This assumption must be revisited before any public release. The Android app did ship a first-run migration (2026-03-24): when the new `dose_*` columns are first created, existing `dosage` values are copied into `dose_morning`.
 
-## Meal-time dosing: dosing_slots as separate table vs JSON column
-**Date:** 2026-03-17
-**Decision:** To be evaluated at implementation time. Separate `dosing_slots` table if querying by slot type across regimens is needed; JSON column on phases otherwise.
-**Why:** The query requirements aren't fully known until the notification batching logic is written.
-**Alternatives considered:** JSON column (simpler, no joins) vs relational table (queryable, indexable).
-**Consequences:** Implementation choice locks in the query pattern for the cron and calculator.
+## Meal-time dosing: fixed columns + JSON instead of a `dosing_slots` table
+**Date:** 2026-03-24 (resolves the open question from 2026-03-17)
+**Decision:** Android phases store `dose_morning`, `dose_lunch`, `dose_dinner`, `dose_custom` as columns, and arbitrary custom time+amount pairs as a JSON array in `phases.custom_slots`. Reminders live in a separate `regimen_notifications` table (type = morning/lunch/dinner/custom).
+**Why:** The calculator only ever needs the sum of slot amounts, so no query needs to filter slots across regimens. Columns keep the sum trivial and avoid joins in SQLite.
+**Alternatives considered:** Separate `dosing_slots` table (queryable, but joins for no benefit today).
+**Consequences:** Slot-type queries across regimens need JSON parsing. `custom_time` (single) is legacy; `custom_slots` is authoritative. The web port should choose deliberately — the batched-push design may want the relational form.
 
 ## Android app: offline-first with local SQLite
 **Date:** 2024-01-01

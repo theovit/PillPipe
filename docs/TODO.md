@@ -1,18 +1,17 @@
 # TODO
 
 ## WIP
-- [ ] Android app — React Native / Expo; offline-first SQLite; parity pass with web features ongoing
+- [ ] Android app — React Native / Expo; offline-first SQLite; parity pass with web features ongoing (granular status in `app/TODO.md`)
 
 ## High
-- [ ] Meal-Time Dosing Schedules — replace flat `daily_dose` with per-meal slot system (B/L/D + custom times)
-  - [ ] 1. Data model — `dosing_slots` table replaces `daily_dose` on phases
-  - [ ] 2. Settings — global meal time pickers (Breakfast/Lunch/Dinner defaults)
-  - [ ] 3. Phase editor UI — slot checkboxes + custom slot builder
-  - [ ] 4. Notification overhaul — batched per-time-slot push notifications
-  - [ ] 5. Regimen card display — compact slot breakdown notation (B1 D2 etc.)
-  - [ ] 6. Calculator & export updates — sum slots instead of reading daily_dose
-  - [ ] 7. "Take With Food" flag on supplement record
-  - [ ] 8. "As Needed" dosing — UI-only flag on regimen; no slots, no notifications, no inventory math; shows "As Needed" label on card
+- [ ] Dependency vulnerabilities (`npm audit --omit=dev`, 2026-09-19): server 6 (2 high; `qs`, `uuid` via `node-cron`), app 35 (2 critical, 18 high — mostly Expo/RN tooling, `ws`, `yaml`), client 3 (1 critical: `jspdf` ≤4.2.0 object/HTML injection; plus `dompurify`, `fflate`). `npm audit fix` is available for the client, `qs`, `ws` and `yaml`. Client installs need `--legacy-peer-deps` (vite 8 vs `@tailwindcss/vite` peer range; same flag as `client/Dockerfile`).
+- [ ] Find what writes `// @atlas-entrypoint: …` first-line comments into source files (removed 2026-09-19; source unconfirmed) — if it re-adds them, disable it.
+- [ ] Meal-time dosing — **Android done, web/server not started.** Android shipped a simpler design than the planned `dosing_slots` table (see DECISIONS): fixed `dose_morning/lunch/dinner/custom` columns + `custom_slots` JSON on phases, Morning/Lunch/Dinner time prefs, per-regimen multi-slot local notifications. Remaining:
+  - [ ] Web/server port — schema (`phases` still has flat `dosage`), Settings meal-time pickers, phase editor, calculator, backup/templates
+  - [ ] Web notification overhaul — batched per-time-slot push; replaces per-regimen `reminder_time`
+  - [ ] Compact slot notation on regimen cards (B1 L1 D2). Android currently shows "1 morning · 2 dinner" text
+  - [ ] "Take With Food" flag on supplement record
+  - [ ] "As Needed" dosing — UI-only flag on regimen; no slots, no notifications, no inventory math; shows "As Needed" label on card
 
 ## Long-term
 - [ ] Authentication — JWT-based login for multi-user or public hosting; blocked on decision to open app to public internet

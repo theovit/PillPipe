@@ -41,7 +41,7 @@ React Navigation detects the provider automatically and applies the correct top 
 
 **Root cause:** Modal components in `RegimensScreen.tsx` and `SettingsScreen.tsx` do not set `onRequestClose`. On Android, pressing the hardware back button while a modal is open fires `onRequestClose`; without it, the modal ignores the back press.
 
-**Fix:** Add `onRequestClose` to every `<Modal>` in both screens. The handler should call the same function that the Cancel / close button calls.
+**Fix:** Add `onRequestClose` to every `<Modal>` in `RegimensScreen.tsx` (there are six). The handler should call the same function that the Cancel / close button calls.
 
 Example pattern:
 ```tsx
@@ -54,26 +54,40 @@ Example pattern:
 
 For modals that have more complex cancel logic (e.g. resetting form state), `onRequestClose` should call the full cancel handler, not just hide the modal.
 
-**Files affected:** `app/src/screens/RegimensScreen.tsx`, `app/src/screens/SettingsScreen.tsx`
+Note: `SettingsScreen.tsx` uses `Alert.alert()` only — it has no `<Modal>` components and does not need changes for this bug.
 
-**Validation:** Open each modal. Press the hardware back button. The modal must dismiss and all related state must reset (same result as tapping Cancel).
+**Files affected:** `app/src/screens/RegimensScreen.tsx`
+
+**Validation:** Open each modal in the Regimens tab. Press the hardware back button. The modal must dismiss and all related state must reset (same result as tapping Cancel).
 
 ---
 
 ## Bug 4 — Date format preference not applied to New Regimen start date
 
-**Root cause:** The start date field in the new regimen flow displays the raw ISO string (`YYYY-MM-DD`) rather than formatting it through the user's `dateFormat` preference using the existing `formatDate` helper.
+**Root cause:** The shared `DateField` component (`app/src/components/DateField.tsx`, line 53) renders its `value` prop directly as a raw ISO string (`{value || placeholder}`) without applying the user's date format preference.
 
-**Fix:** Ensure `prefs` is loaded in `RegimensScreen.tsx` (it is already used elsewhere in the file). Wherever the selected start date is rendered as a text label in the new regimen modal, wrap it in `formatDate(startDate, prefs.dateFormat)` instead of displaying the raw value.
+**Fix:** In `DateField.tsx`, import `formatDate` from `@/utils/dates` and wrap the displayed value:
 
-`formatDate` signature (already exists in `app/src/utils/dates.ts`):
-```ts
-formatDate(isoString: string, format: AppPrefs['dateFormat']): string
+```tsx
+import { formatDate } from '@/utils/dates';
+
+// In JSX, replace:
+{value || placeholder}
+
+// With:
+{value ? formatDate(value) : placeholder}
 ```
 
-**Files affected:** `app/src/screens/RegimensScreen.tsx`
+`formatDate` signature (exists in `app/src/utils/dates.ts`):
+```ts
+formatDate(dateStr: string | null | undefined): string
+```
 
-**Validation:** Set date format to DD/MM/YYYY in Settings. Open the new regimen modal. Confirm the start date label shows in the selected format.
+It reads `dateFormat` from prefs internally — no second argument needed.
+
+**Files affected:** `app/src/components/DateField.tsx`
+
+**Validation:** Set date format to DD/MM/YYYY in Settings. Open the new regimen modal. Confirm the start date label shows in the selected format (e.g. `23/03/2026` not `2026-03-23`).
 
 ---
 
@@ -82,8 +96,8 @@ formatDate(isoString: string, format: AppPrefs['dateFormat']): string
 | File | Change |
 |---|---|
 | `app/App.tsx` | Wrap `NavigationContainer` in `SafeAreaProvider` |
-| `app/src/screens/RegimensScreen.tsx` | Add `onRequestClose` to all modals; apply `formatDate` to start date display |
-| `app/src/screens/SettingsScreen.tsx` | Add `onRequestClose` to all modals |
+| `app/src/screens/RegimensScreen.tsx` | Add `onRequestClose` to all six modals |
+| `app/src/components/DateField.tsx` | Apply `formatDate` to displayed value |
 
 ---
 

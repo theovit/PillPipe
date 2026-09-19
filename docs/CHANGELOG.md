@@ -2,8 +2,24 @@
 
 ## [Unreleased]
 ### Added
+- Android app: time-of-day dosing — each phase takes Morning / Lunch / Dinner amounts plus any number of custom time+amount slots; the shortfall calculator sums them
+- Android app: Reminder Times in Settings (Morning / Lunch / Dinner defaults); per-regimen multi-slot reminders replace the single reminder picker; all reminders are rescheduled on launch
+- Android app: session templates — save a session as a template, apply it when creating a new session, manage in Settings
+- Android app: collapsible Settings sections, font size preference, default session duration (pre-fills new session target date)
+- Android app: phase labels show time-of-day doses; the active phase shows a days-left badge
 ### Changed
+- Android app: preferences now stored in AsyncStorage with a synchronous cache
+- Android app: CSV export and JSON backup/restore use `expo-file-system/next`
+- Android app: font sizes are rem-based so the font size preference scales all text
 ### Fixed
+- Web: the add/edit supplement form now accepts whole numbers (e.g. 30 capsules per bottle). It previously demanded values like 29.001 because the field's `min` and `step` didn't line up
+- Removed stray `// @atlas-entrypoint` comment lines from source files; one in `client/package-lock.json` broke `npm audit`
+- Android app: headers and modals respect safe areas on Android 15 edge-to-edge; Add Regimen button clears the system nav bar
+- Android app: hardware back button closes modals
+- Android app: date format preference applies to date fields
+- Android app: adherence calendar no longer drifts a day in non-UTC timezones
+- Android app: tapping a dose notification logs the dose; notification handler registered at startup
+- Android app: backup restore runs in a single transaction so a failed restore can't leave partial data
 ### Removed
 
 ## [2.0.0-app] — 2025-03-17

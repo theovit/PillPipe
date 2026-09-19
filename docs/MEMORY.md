@@ -29,6 +29,25 @@ The backup/restore payload includes both database content and client-side prefer
 date format, default duration, etc.). When adding new preference fields, ensure they are included
 in the backup serialization in both the export and restore paths.
 
+## HTML number inputs: `step` is anchored to `min`
+A `<input type="number" min="0.001" step="1">` only accepts 0.001, 1.001, 2.001… — so "30" is rejected
+with "enter a valid value". Whenever `min` is not a multiple of `step`, whole numbers fail. Keep `min`
+equal to (or a multiple of) `step`. This was the "won't accept 30 when adding a pill" bug in
+`SupplementsPanel.jsx` (see `docs/TODO.md`).
+
+## Local `client/node_modules` can be stale
+`npm run build` locally fails with "failed to resolve import jspdf" because `jspdf` /
+`jspdf-autotable` are declared in `client/package.json` but were never installed on the host (the
+Docker container installs its own). Run `npm install --legacy-peer-deps` in `client/` before a local
+build (plain `npm install` fails with ERESOLVE: vite 8 vs `@tailwindcss/vite`'s peer range; the
+Dockerfile uses the same flag). Lint works without it.
+
+## A junk first-line comment in `package-lock.json` breaks npm
+Stray `// @atlas-entrypoint: …` lines were being written at the top of source files (and, in the
+working tree, `client/package-lock.json`); removed 2026-09-19, source of the writer unconfirmed. JSON
+can't have comments, so `npm audit` failed with ENOLOCK and `npm ci` would too. If `npm` complains
+about the lockfile, check line 1 — the writer may be back.
+
 ## Service worker handles dose-tap notifications
 When a user taps a dose reminder push notification, the service worker intercepts the tap and
 posts a message to `SessionPane`. `SessionPane` listens for this message and calls the dose-log

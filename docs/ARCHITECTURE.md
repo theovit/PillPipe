@@ -37,12 +37,13 @@ local state in `Dashboard.jsx`.
 
 | File | Role |
 |---|---|
-| `client/src/Dashboard.jsx` | Top-level orchestrator. Manages sessions list, `openSessionIds[]`, Settings UI, supplements panel, and navigation shell. Renders one `<SessionPane>` per open session. |
-| `client/src/SessionPane.jsx` | Self-contained per-session component. Owns all regimen-level state: regimens, phases, calc results, today's dose logs, reminder times, adherence. Handles its own data loading and SW push-notification dose-tap events. |
-| `client/src/PhaseEditor.jsx` | Add, edit, reorder, delete phases for a regimen. |
-| `client/src/ShortfallAlert.jsx` | Displays calculate results and export actions (CSV, PDF, shopping list). |
-| `client/src/AdherenceCalendar.jsx` | 30-day dot grid showing taken/skipped/missed per regimen. |
-| `client/src/SupplementsPanel.jsx` | Supplement inventory management view. |
+| `client/src/components/Dashboard.jsx` | Top-level orchestrator. Manages sessions list, `openSessionIds[]`, Settings UI, supplements panel, and navigation shell. Renders one `<SessionPane>` per open session. |
+| `client/src/components/SessionPane.jsx` | Self-contained per-session component. Owns all regimen-level state: regimens, phases, calc results, today's dose logs, reminder times, adherence. Handles its own data loading and SW push-notification dose-tap events. |
+| `client/src/components/PhaseEditor.jsx` | Add, edit, reorder, delete phases for a regimen. |
+| `client/src/components/ShortfallAlert.jsx` | Displays calculate results and export actions (CSV, PDF, shopping list). |
+| `client/src/components/AdherenceCalendar.jsx` | 30-day dot grid showing taken/skipped/missed per regimen. |
+| `client/src/components/SupplementsPanel.jsx` | Supplement inventory management view, including the add/edit supplement form. |
+| `client/src/utils/api.js`, `prefs.js` | API client; appearance/preference storage (localStorage + server-synced). |
 
 ## Backend Structure
 
@@ -59,48 +60,59 @@ without wiping data. `db/init.sql` only runs on the very first container start (
 
 ## Data Model
 
+Web (PostgreSQL). Columns marked † are added by boot-time `ALTER TABLE` in `server/index.js`, not `db/init.sql`.
+
 ```
 supplements
   id (UUID PK)
-  name, brand, form, unit, drops_per_ml, serving_size
-  on_hand, reorder_threshold
-  price_per_bottle, pills_per_bottle
+  name, brand, type (maintenance/protocol)
+  pills_per_bottle (NUMERIC†), price (NUMERIC(10,2)), current_inventory (NUMERIC†)
+  unit† (capsules/tablets/ml/drops), drops_per_ml† (default 20)
+  reorder_threshold†, reorder_threshold_mode† (units/days)
+  (for ml/drops, pills_per_bottle holds ml per bottle)
 
 sessions
   id (UUID PK)
-  name, start_date, target_date
+  start_date, target_date, notes†
 
 regimens
   id (UUID PK)
   session_id (FK → sessions, CASCADE DELETE)
-  supplement_id (FK → supplements)
-  notes, reminder_time
+  supplement_id (FK → supplements, CASCADE DELETE)
+  notes†, reminder_time† (TIME)
 
 phases
   id (UUID PK)
   regimen_id (FK → regimens, CASCADE DELETE)
-  duration_days, indefinite (bool)
-  pills_per_day, days_of_week (INTEGER[])
-  start_offset_days
+  dosage (NUMERIC†) — per dose; flat, not yet split by meal time on web
+  duration_days, indefinite (bool), days_of_week (INTEGER[], NULL = every day)
+  sequence_order (UNIQUE per regimen)
 
 dose_log
   id (UUID PK)
-  regimen_id (FK → regimens)
-  log_date, status (taken/skipped)
+  regimen_id (FK → regimens, CASCADE DELETE)
+  date, status (taken/skipped), logged_at — UNIQUE (regimen_id, date)
 
 push_subscriptions
   id (UUID PK)
-  endpoint, keys (JSON)
+  endpoint (UNIQUE), p256dh, auth
 
-session_templates
-  id (UUID PK)
-  name, data (JSON snapshot of session + regimens + phases)
+templates → template_regimens → template_phases
+  session templates as relational copies of regimens + phases (created at boot)
 
-settings
-  key, value (key-value store for server-synced prefs)
+google_tokens, google_drive_settings (singleton), user_settings (singleton, prefs JSONB)
+  Drive OAuth tokens, backup frequency/state, server-synced prefs
 ```
 
 Deleting a session cascades to its regimens and phases.
+
+### Android (SQLite, `app/src/db/database.ts`)
+
+Same shape with TEXT ids and REAL numbers, plus:
+- `phases.dose_morning / dose_lunch / dose_dinner / dose_custom` (REAL) and `custom_slots` (JSON `[{amount,time}]`); legacy `custom_time`. The calculator sums the four dose columns.
+- `regimen_notifications (regimen_id, type, custom_time)` — one row per reminder slot; scheduled locally via `expo-notifications`.
+- `session_templates (id, name, data JSON)` — single-table snapshot, unlike the web's three template tables.
+- Meal-time defaults, font size, date format, default duration live in AsyncStorage (`app/src/utils/prefs.ts`), not the DB.
 
 ## Shortfall Engine (`server/calculator.js`)
 

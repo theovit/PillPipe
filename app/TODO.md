@@ -26,8 +26,8 @@ App is currently in **alpha** — items marked [x] are scaffolded but may not be
 
 ## High
 
-- [ ] Include session_templates in backup export and clear-all-data (currently excluded)
-- [ ] Add onRequestClose to Modal in SupplementsScreen (missed in bug fix pass)
+- [ ] Include session_templates and regimen_notifications in backup export/restore and clear-all-data (currently excluded — `SettingsScreen.tsx` only exports supplements, sessions, regimens, phases, dose_log)
+- [x] Add onRequestClose to Modal in SupplementsScreen (done — `SupplementsScreen.tsx:221`)
 
 ---
 
