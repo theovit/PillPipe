@@ -17,7 +17,6 @@ Context (decided 2026-09-19): single user, reachable over the internet — not p
 - [ ] Automated tests for auth and the destructive routes before going live (DECISIONS "No automated tests" needs revisiting for these).
 
 ## High
-- [ ] Re-run `npm audit` on client and server once the npm advisory service is back (it returned 503 "maintenance" on 2026-09-19). Targeted upgrades were applied (see CHANGELOG) but a clean audit is not yet confirmed.
 - [ ] Meal-time dosing — web/server port. Android already has it (fixed `dose_morning/lunch/dinner/custom` columns + `custom_slots` JSON on phases, Morning/Lunch/Dinner time prefs, per-regimen multi-slot notifications; see DECISIONS) but web/server still use a flat `dosage`. Remaining:
   - [ ] Schema, Settings meal-time pickers, phase editor, calculator, backup/templates on web
   - [ ] Web notification overhaul — batched per-time-slot push; replaces per-regimen `reminder_time`
