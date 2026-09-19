@@ -7,6 +7,13 @@
 **Alternatives considered:** Staying Tailscale-only (still valid as defense in depth); an identity-aware proxy in front (Cloudflare Access / Tailscale Funnel) vs. built-in login — to be decided when auth is implemented.
 **Consequences:** Multi-user/public sign-up is still out of scope. Every route needs an auth check; the dev-server Docker setup can no longer be the deployed form.
 
+## Web authentication: built-in single-user login, exposed via Cloudflare Tunnel
+**Date:** 2026-09-19
+**Decision:** The app enforces its own login (one password, scrypt hash in env, DB-backed session cookie, SameSite=Lax) and is exposed through a Cloudflare Tunnel. No identity proxy is relied on for access control.
+**Why:** The app must be safe even if the proxy layer is misconfigured; a tunnel needs no open router ports and terminates HTTPS. Node's built-in scrypt avoids native dependencies; sessions live in the DB so logout and password changes revoke access. CSRF is handled with a required custom header (no CORS is enabled) rather than tokens.
+**Alternatives considered:** Identity proxy only (Cloudflare Access / Tailscale Funnel) — least code but leaves the app unauthenticated behind it; JWT — can't be revoked; SameSite=Strict — would drop the cookie on the Google Drive OAuth redirect.
+**Consequences:** `auth_sessions` intentionally has no foreign keys (restore truncates with CASCADE). Rate limits use `req.ip`, so the backend must only be reachable through the proxy. Cloudflare Access can still be added later as a second layer.
+
 ## No authentication layer (superseded 2026-09-19)
 **Date:** 2024-01-01
 **Decision:** No login, no user accounts. The app is kept off the public internet entirely.

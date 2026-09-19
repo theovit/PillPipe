@@ -7,6 +7,7 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const { execFileSync } = require('node:child_process');
 
 const BASE = process.env.TEST_BASE_URL || 'http://127.0.0.1:13000';
 const PASSWORD = process.env.TEST_PASSWORD;
@@ -21,12 +22,18 @@ if (!PASSWORD) throw new Error('Set TEST_PASSWORD to the password used for TEST_
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-async function call(method, url, { cookie, body, headers = {}, raw } = {}) {
+// The backend trusts one proxy hop, so a unique X-Forwarded-For per call gives every request its
+// own rate-limit bucket; tests that exercise the limiter pass a fixed `ip`.
+let ipCounter = 0;
+const nextIp = () => `10.20.${Math.floor(ipCounter / 250)}.${(ipCounter++ % 250) + 1}`;
+
+async function call(method, url, { cookie, body, headers = {}, raw, ip, noCsrf } = {}) {
   const res = await fetch(BASE + url, {
     method,
     redirect: 'manual',
     headers: {
-      'X-Requested-With': 'pillpipe',
+      ...(noCsrf ? {} : { 'X-Requested-With': 'pillpipe' }),
+      'X-Forwarded-For': ip || nextIp(),
       ...(body !== undefined && !raw ? { 'Content-Type': 'application/json' } : {}),
       ...(cookie ? { Cookie: cookie } : {}),
       ...headers,
@@ -36,13 +43,21 @@ async function call(method, url, { cookie, body, headers = {}, raw } = {}) {
   const text = await res.text();
   let json = null;
   try { json = JSON.parse(text); } catch { /* not JSON */ }
-  return { status: res.status, json, text, setCookie: res.headers.getSetCookie() };
+  return { status: res.status, json, text, setCookie: res.headers.getSetCookie(), headers: res.headers };
 }
 
-async function login(password = PASSWORD) {
-  const res = await call('POST', '/auth/login', { body: { password } });
+async function login(password = PASSWORD, opts = {}) {
+  const res = await call('POST', '/auth/login', { body: { password }, ...opts });
   const cookie = res.setCookie[0] ? res.setCookie[0].split(';')[0] : null;
   return { ...res, cookie };
+}
+
+// Query the throwaway test database (docker CLI; project/file must match docker-compose.test.yml).
+function psql(sql) {
+  return execFileSync('docker', [
+    'compose', '-p', 'pillpipe-test', '-f', path.join(__dirname, '..', '..', 'docker-compose.test.yml'),
+    'exec', '-T', 'db', 'psql', '-U', 'test', '-d', 'pillpipe_test', '-t', '-A', '-c', sql,
+  ], { encoding: 'utf8', env: { ...process.env, TEST_APP_PASSWORD_HASH: process.env.TEST_APP_PASSWORD_HASH || 'x' } }).trim();
 }
 
 test('health is public', async () => {
@@ -57,7 +72,7 @@ test('every other route is 401 without a session (including unknown paths)', asy
     ['GET', '/templates'], ['GET', '/backup'], ['POST', '/restore'], ['DELETE', '/data'],
     ['GET', '/settings/prefs'], ['PUT', '/settings/prefs'], ['GET', '/drive/status'],
     ['POST', '/drive/restore/abc'], ['GET', '/push/vapid-key'], ['POST', '/push/test'],
-    ['GET', '/dose-log'], ['POST', '/dose-log'], ['GET', '/auth/google'], ['GET', '/auth/google/callback'],
+    ['GET', '/dose-log'], ['POST', '/dose-log'], ['GET', '/auth/google'],
     ['DELETE', '/auth/google'], ['POST', '/auth/logout'], ['POST', '/auth/logout-all'],
     ['GET', '/health/'], ['GET', '/nonexistent-' + Date.now()],
   ];
@@ -169,4 +184,106 @@ test('active sessions still hit the absolute expiry', async () => {
   const elapsed = (Date.now() - start) / 1000;
   assert.equal(status, 401, 'session should have expired');
   assert.ok(elapsed >= ABS_TTL - 1, `expired too early (${elapsed}s)`);
+});
+
+// ── Request hardening ─────────────────────────────────────────────────────────────────────────
+function dc(...args) {
+  return execFileSync('docker', [
+    'compose', '-p', 'pillpipe-test', '-f', path.join(__dirname, '..', '..', 'docker-compose.test.yml'), ...args,
+  ], { encoding: 'utf8', env: { ...process.env, TEST_APP_PASSWORD_HASH: process.env.TEST_APP_PASSWORD_HASH || 'x' } });
+}
+const oauthFailureLogs = () => (dc('logs', 'backend', '--no-color').match(/Google OAuth callback failed/g) || []).length;
+
+test('state-changing requests need the CSRF header, a matching Origin and a same-origin fetch site', async () => {
+  const { cookie } = await login();
+  assert.equal((await call('POST', '/auth/login', { body: { password: PASSWORD }, noCsrf: true })).status, 403, 'login is protected too');
+  assert.equal((await call('POST', '/auth/logout-all', { cookie, body: {}, noCsrf: true })).status, 403);
+  assert.equal((await call('DELETE', '/data', { cookie, noCsrf: true })).status, 403);
+  assert.equal((await call('POST', '/auth/logout', { cookie, body: {}, headers: { Origin: 'https://evil.example' } })).status, 403);
+  assert.equal((await call('POST', '/auth/logout', { cookie, body: {}, headers: { 'Sec-Fetch-Site': 'cross-site' } })).status, 403);
+  assert.equal((await call('POST', '/auth/logout', { cookie, body: {}, headers: { 'Sec-Fetch-Site': 'same-site' } })).status, 403);
+  // Rejected attempts must not have touched the session, and GETs need no header.
+  assert.equal((await call('GET', '/supplements', { cookie, noCsrf: true })).status, 200);
+  const ok = await call('POST', '/auth/logout', { cookie, body: {}, headers: { Origin: BASE, 'Sec-Fetch-Site': 'same-origin' } });
+  assert.equal(ok.status, 200);
+});
+
+test('login is rate limited per IP; only failures count; other IPs are unaffected', async () => {
+  const ip = '203.0.113.50';
+  for (let i = 0; i < 5; i++) assert.equal((await login('wrong-password-' + i, { ip })).status, 401);
+  const blocked = await login(PASSWORD, { ip });
+  assert.equal(blocked.status, 429, 'even the correct password is refused once the limit is hit');
+  assert.equal(blocked.setCookie.length, 0);
+  assert.equal((await login(PASSWORD, { ip: '203.0.113.51' })).status, 200);
+});
+
+test('successful logins do not count toward the login limit', async () => {
+  const ip = '203.0.113.60';
+  for (let i = 0; i < 8; i++) assert.equal((await login(PASSWORD, { ip })).status, 200, `login ${i}`);
+});
+
+test('parallel login attempts beyond the scrypt concurrency cap get 429', async () => {
+  const statuses = (await Promise.all(Array.from({ length: 8 }, () => login()))).map(r => r.status);
+  assert.ok(statuses.includes(429), statuses.join());
+  assert.ok(statuses.includes(200), statuses.join());
+});
+
+test('/restore accepts a large body; other routes keep the small default limit', async () => {
+  const { cookie } = await login();
+  const backup = (await call('GET', '/backup', { cookie })).json;
+  const res = await call('POST', '/restore', { cookie, body: { ...backup, pad: 'x'.repeat(300000) } });
+  assert.equal(res.status, 200, res.text);
+  assert.equal((await call('PUT', '/settings/prefs', { cookie, body: { pad: 'x'.repeat(300000) } })).status, 413);
+});
+
+test('responses carry hardening headers and hide x-powered-by', async () => {
+  const res = await call('GET', '/health');
+  assert.equal(res.headers.get('x-content-type-options'), 'nosniff');
+  assert.equal(res.headers.get('cache-control'), 'no-store');
+  assert.equal(res.headers.get('x-powered-by'), null);
+});
+
+test('Google callback without a session redirects back to the app instead of returning JSON', async () => {
+  const res = await call('GET', '/auth/google/callback?code=x&state=y');
+  assert.equal(res.status, 302);
+  assert.equal(res.headers.get('location'), '/?drive=error');
+});
+
+test('Google OAuth state is stored hashed, single-use and required', async () => {
+  const { cookie } = await login();
+  const issue = async () => {
+    const start = await call('GET', '/auth/google', { cookie });
+    assert.equal(start.status, 302);
+    const url = new URL(start.headers.get('location'));
+    assert.equal(url.host, 'accounts.google.com');
+    const state = url.searchParams.get('state');
+    assert.ok(state && state.length >= 30, 'state param present');
+    return state;
+  };
+  const stored = state => Number(psql(`select count(*) from auth_sessions where oauth_state_hash = encode(digest('${state}','sha256'),'hex')`));
+  const cb = async qs => {
+    const res = await call('GET', `/auth/google/callback${qs}`, { cookie });
+    assert.equal(res.status, 302);
+    assert.equal(res.headers.get('location'), '/?drive=error');
+  };
+
+  let state = await issue();
+  assert.equal(stored(state), 1, 'sha256 of the state is stored');
+  assert.equal(Number(psql(`select count(*) from auth_sessions where oauth_state_hash = '${state}'`)), 0, 'raw state is not stored');
+
+  const before = oauthFailureLogs();
+  await cb('?code=abc&state=not-the-state');
+  assert.equal(oauthFailureLogs(), before, 'wrong state must be rejected before any token exchange');
+  assert.equal(stored(state), 0, 'a wrong attempt still burns the stored state');
+
+  state = await issue();
+  await cb('?code=abc');
+  assert.equal(oauthFailureLogs(), before, 'missing state must be rejected before any token exchange');
+
+  state = await issue();
+  await cb(`?code=abc&state=${state}`);
+  assert.equal(oauthFailureLogs(), before + 1, 'matching state proceeds to the (fake, failing) token exchange');
+  await cb(`?code=abc&state=${state}`);
+  assert.equal(oauthFailureLogs(), before + 1, 'replayed state is rejected');
+  assert.equal(Number(psql('select count(*) from google_tokens')), 0, 'nothing was stored');
 });

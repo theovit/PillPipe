@@ -42,10 +42,22 @@ if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
 
 const app = express();
 app.disable('x-powered-by');
-// Keep the gate FIRST: every route needs a session unless allowlisted in auth.js.
+// One trusted proxy hop (nginx in production). Never `true`: that trusts a client-supplied XFF.
+app.set('trust proxy', 1);
+app.use((req, res, next) => {
+  res.set('X-Content-Type-Options', 'nosniff');
+  res.set('Cache-Control', 'no-store');
+  next();
+});
+// Order matters: flood limit -> CSRF -> auth gate -> everything else. Keep the gate before any
+// body parsing or route so every route needs a session unless allowlisted in auth.js.
+app.use(auth.apiLimiter);
+app.use(auth.csrf);
 app.use(auth.gate);
 app.use(auth.router);
-app.use(express.json());
+// /restore has its own (larger) parser, mounted after auth on the route itself.
+const jsonBody = express.json();
+app.use((req, res, next) => (req.path === '/restore' ? next() : jsonBody(req, res, next)));
 
 const w = fn => (req, res, next) => fn(req, res, next).catch(next);
 
@@ -373,7 +385,7 @@ function isValidBackup(b) {
     && ['templates', 'template_regimens', 'template_phases'].every(k => b[k] === undefined || Array.isArray(b[k]));
 }
 
-app.post('/restore', w(async (req, res) => {
+app.post('/restore', express.json({ limit: '25mb' }), w(async (req, res) => {
   if (!isValidBackup(req.body)) return res.status(400).json({ error: 'Invalid backup file' });
   const { supplements = [], sessions = [], regimens = [], phases = [], templates = [], template_regimens = [], template_phases = [], prefs = null } = req.body;
   const client = await pool.connect();
@@ -454,9 +466,11 @@ app.put('/settings/prefs', w(async (req, res) => {
 }));
 
 // ── Google OAuth ──────────────────────────────────────────────────────────────
-app.get('/auth/google', (req, res) => {
+app.get('/auth/google', w(async (req, res) => {
   if (!process.env.GOOGLE_CLIENT_ID) return res.status(503).json({ error: 'Google not configured' });
   const url = oauth2Client.generateAuthUrl({
+    // `state` binds the callback to this session so a forged callback can't link someone else's Drive.
+    state: await auth.issueOAuthState(req.authSession.id),
     access_type: 'offline',
     scope: [
       'https://www.googleapis.com/auth/drive.file',
@@ -465,20 +479,28 @@ app.get('/auth/google', (req, res) => {
     prompt: 'consent', // always get refresh token
   });
   res.redirect(url);
-});
+}));
 
 app.get('/auth/google/callback', w(async (req, res) => {
-  const { code, error } = req.query;
-  if (error || !code) return res.redirect('/?drive=error');
-  const { tokens } = await oauth2Client.getToken(code);
-  oauth2Client.setCredentials(tokens);
-  const oauth2 = google.oauth2({ version: 'v2', auth: oauth2Client });
-  const { data: userInfo } = await oauth2.userinfo.get();
-  await pool.query('DELETE FROM google_tokens');
-  await pool.query(
-    'INSERT INTO google_tokens (access_token, refresh_token, expiry_date, email) VALUES ($1,$2,$3,$4)',
-    [tokens.access_token, tokens.refresh_token, tokens.expiry_date, userInfo.email]
-  );
+  const { code, error, state } = req.query;
+  // Consume the state first (single use) — any mismatch, error or missing code ends here.
+  if (!(await auth.consumeOAuthState(req.authSession.id, state)) || error || typeof code !== 'string' || !code) {
+    return res.redirect('/?drive=error');
+  }
+  try {
+    const { tokens } = await oauth2Client.getToken(code);
+    oauth2Client.setCredentials(tokens);
+    const oauth2 = google.oauth2({ version: 'v2', auth: oauth2Client });
+    const { data: userInfo } = await oauth2.userinfo.get();
+    await pool.query('DELETE FROM google_tokens');
+    await pool.query(
+      'INSERT INTO google_tokens (access_token, refresh_token, expiry_date, email) VALUES ($1,$2,$3,$4)',
+      [tokens.access_token, tokens.refresh_token, tokens.expiry_date, userInfo.email]
+    );
+  } catch (e) {
+    console.error('Google OAuth callback failed:', e.message);
+    return res.redirect('/?drive=error');
+  }
   res.redirect('/?drive=connected');
 }));
 

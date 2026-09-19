@@ -1,7 +1,6 @@
 .env
 .claude/
 server/node_modules/
-server/package-lock.json
 
 # Tooling
 .playwright-mcp/

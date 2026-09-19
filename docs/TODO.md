@@ -5,14 +5,14 @@
 
 ## Blockers before exposing the web app to the internet
 Context (decided 2026-09-19): single user, reachable over the internet — not public sign-up. Today there is **no authentication**, and one unauthenticated request can wipe the database (`DELETE /data`, `POST /restore`, `POST /drive/restore/:fileId`). Do not expose the app until at least auth, production serving and HTTPS are done.
-- [ ] **Authentication** — single-user login: password hash (argon2/bcrypt) from env; server-side session in an HttpOnly + Secure + SameSite=Strict cookie (or JWT); protect *every* route incl. `/auth/google`, `/drive/*`, `/push/*`, `/backup`, `/restore`, `/data`; CSRF protection for cookie sessions; login rate limiting + lockout. Decide built-in login vs an identity proxy in front (Cloudflare Access, Tailscale Funnel) and record it in DECISIONS.
+- [ ] **Authentication** — server side done on branch `auth` (M1: scrypt password, DB-backed sessions, allowlist gate, CSRF header + Origin/Sec-Fetch-Site check, login/API rate limits + scrypt concurrency cap, Google OAuth `state`, 21 tests on a throwaway stack). **Client login screen (M2) still to do** — until it lands the web UI can't reach the API. Decided: built-in login (+ Cloudflare Tunnel for exposure); see DECISIONS 2026-09-19.
 - [ ] **Production serving** — Docker currently runs the Vite dev server (`npm run dev -- --host`, `allowedHosts: true`) and nodemon with source bind-mounts. Build the client (`vite build`) and serve static files (Express or nginx/Caddy); run the backend with `node`; add a production compose file without bind mounts.
 - [ ] **HTTPS/TLS** — terminate at a reverse proxy (Caddy/nginx) or tunnel; HSTS; `trust proxy`; Secure cookies. Service workers and Web Push require HTTPS anyway.
-- [ ] Security headers + limits — `helmet` (CSP etc.), `express-rate-limit` (stricter on login/restore), body size limits (`/restore`), restrict Vite `allowedHosts` to known hosts in dev.
+- [ ] Security headers — server-side nosniff/no-store/`x-powered-by` off, rate limits and body limits are done (M1b). Remaining: nginx CSP and headers (M3), self-hosted fonts, restrict Vite `allowedHosts` in dev.
 - [ ] Input validation — none today. Validate/coerce every request body (e.g. zod), return 400s, and confirm the error handler doesn't leak stack traces or DB errors. (SQL is already parameterized — no string interpolation found in `server/index.js`.)
 - [ ] Protect destructive endpoints — require re-auth/confirmation for `DELETE /data`, `/restore`, `/drive/restore`; take an automatic backup before any restore.
 - [ ] Secrets — Google OAuth tokens sit in plaintext in `google_tokens`: encrypt at rest or document the risk. Use strong unique DB password/VAPID keys; keep them out of images and logs.
-- [ ] Reproducible, auditable installs — `server/package-lock.json` is gitignored, so server dependency versions aren't pinned or auditable from the repo. Track it, use `npm ci` in both Dockerfiles, and make `npm audit` part of every release.
+- [ ] Reproducible, auditable installs — `server/package-lock.json` is now tracked (M1b). Remaining: use `npm ci` in both Dockerfiles and make `npm audit` part of every release.
 - [ ] Network exposure — publish only the reverse proxy (443). Keep the backend (3000) and Postgres (5432) on the internal Docker network (true today); firewall the host.
 - [ ] Automated tests for auth and the destructive routes before going live (DECISIONS "No automated tests" needs revisiting for these).
 

@@ -13,6 +13,7 @@
   "license": "ISC",
   "dependencies": {
     "express": "^4.22.3",
+    "express-rate-limit": "^8.7.0",
     "googleapis": "^171.4.0",
     "node-cron": "^4.6.0",
     "pg": "^8.11.0",

@@ -2,7 +2,7 @@
 
 ## [Unreleased]
 ### Added
-- Web: password login (server side) — every API route now requires a session except `/health`, `/auth/login` and `/auth/me`; scrypt password hash in `APP_PASSWORD_HASH`, DB-backed sessions in an HttpOnly cookie; `POST /restore` now rejects empty/malformed backups instead of wiping the database. The login screen and the remaining hardening land next, so the web UI cannot reach the API until then
+- Web: password login (server side) — every API route now requires a session except `/health`, `/auth/login` and `/auth/me`. scrypt password hash in `APP_PASSWORD_HASH` (the backend refuses to start without it; generate with `node scripts/hash-password.js`), DB-backed sessions in an HttpOnly cookie, CSRF header check, login/API rate limiting, and a `state` check on the Google Drive connect flow. `POST /restore` now rejects empty/malformed backups instead of wiping the database, and accepts backups up to 25 MB. The login screen lands next, so the web UI cannot reach the API until then
 - Android app: time-of-day dosing — each phase takes Morning / Lunch / Dinner amounts plus any number of custom time+amount slots; the shortfall calculator sums them
 - Android app: Reminder Times in Settings (Morning / Lunch / Dinner defaults); per-regimen multi-slot reminders replace the single reminder picker; all reminders are rescheduled on launch
 - Android app: session templates — save a session as a template, apply it when creating a new session, manage in Settings
@@ -28,7 +28,6 @@
 
 ## [2.0.0-app] — 2025-03-17
 ### Added
-- Web: password login (server side) — every API route now requires a session except `/health`, `/auth/login` and `/auth/me`; scrypt password hash in `APP_PASSWORD_HASH`, DB-backed sessions in an HttpOnly cookie; `POST /restore` now rejects empty/malformed backups instead of wiping the database. The login screen and the remaining hardening land next, so the web UI cannot reach the API until then
 - Android / Expo app: parity pass — supplements fields, phase coverage, backup/restore
 - Android / Expo app: cross-platform DateField; native date picker on mobile, text input on web
 - Android / Expo app: edit session, inventory ±, reminders, CSV export, settings overhaul
@@ -40,7 +39,6 @@
 
 ## [1.8.0] — 2025-01-01
 ### Added
-- Web: password login (server side) — every API route now requires a session except `/health`, `/auth/login` and `/auth/me`; scrypt password hash in `APP_PASSWORD_HASH`, DB-backed sessions in an HttpOnly cookie; `POST /restore` now rejects empty/malformed backups instead of wiping the database. The login screen and the remaining hardening land next, so the web UI cannot reach the API until then
 - Session Templates — save any session as a named template; apply on new session creation; manage in Settings; included in backup/restore
 - Google Drive Backup — OAuth2 connect; manual, daily, or on-change backup modes; timestamped JSON uploads; restore any previous backup from Settings
 - Appearance Settings — theme color picker (6 presets + custom HSL); font size (small/medium/large); CSS variable swap; persisted to localStorage and server-synced
@@ -50,27 +48,23 @@
 
 ## [1.7.0] — 2025-01-01
 ### Added
-- Web: password login (server side) — every API route now requires a session except `/health`, `/auth/login` and `/auth/me`; scrypt password hash in `APP_PASSWORD_HASH`, DB-backed sessions in an HttpOnly cookie; `POST /restore` now rejects empty/malformed backups instead of wiping the database. The login screen and the remaining hardening land next, so the web UI cannot reach the API until then
 - Dark / Light / System mode toggle — CSS variable swap; system mode follows `prefers-color-scheme`
 - PDF Export — jsPDF + jspdf-autotable; session header, results table, grand total; client-side only
 - Support section in Settings (hidden pending Ko-fi / GitHub Sponsors setup)
 
 ## [1.6.0] — 2025-01-01
 ### Added
-- Web: password login (server side) — every API route now requires a session except `/health`, `/auth/login` and `/auth/me`; scrypt password hash in `APP_PASSWORD_HASH`, DB-backed sessions in an HttpOnly cookie; `POST /restore` now rejects empty/malformed backups instead of wiping the database. The login screen and the remaining hardening land next, so the web UI cannot reach the API until then
 - Running Low alerts — per-supplement reorder threshold; ⚠ badge on supplement row; daily 8am push notification
 - Adherence Tracking — 30-day dot grid per regimen; adherence %; taken/skip log buttons with undo; bulk "mark all" bar; SW notification tap logging
 - CSV Export — post-calculate download of session results; no new dependencies
 
 ## [1.5.0] — 2025-01-01
 ### Added
-- Web: password login (server side) — every API route now requires a session except `/health`, `/auth/login` and `/auth/me`; scrypt password hash in `APP_PASSWORD_HASH`, DB-backed sessions in an HttpOnly cookie; `POST /restore` now rejects empty/malformed backups instead of wiping the database. The login screen and the remaining hardening land next, so the web UI cannot reach the API until then
 - Dose Reminders — Web Push (VAPID); per-regimen reminder time picker; subscribe/unsubscribe in Settings; server-side cron (every minute); test notification button
 - Liquid & Drops support — ml/drops unit type; drops_per_ml override; decimal inventory; ml↔drops conversion in calculator
 
 ## [1.4.0] — 2025-01-01
 ### Added
-- Web: password login (server side) — every API route now requires a session except `/health`, `/auth/login` and `/auth/me`; scrypt password hash in `APP_PASSWORD_HASH`, DB-backed sessions in an HttpOnly cookie; `POST /restore` now rejects empty/malformed backups instead of wiping the database. The login screen and the remaining hardening land next, so the web UI cannot reach the API until then
 - Data backup, restore, and clear — full DB + prefs exported as JSON; restore wipes and re-imports
 - Settings page — full-screen tab; collapsible sections; SVG cog icon in nav
 - About section — version, description, GitHub link, MIT license
@@ -78,14 +72,12 @@
 
 ## [1.3.0] — 2025-01-01
 ### Added
-- Web: password login (server side) — every API route now requires a session except `/health`, `/auth/login` and `/auth/me`; scrypt password hash in `APP_PASSWORD_HASH`, DB-backed sessions in an HttpOnly cookie; `POST /restore` now rejects empty/malformed backups instead of wiping the database. The login screen and the remaining hardening land next, so the web UI cannot reach the API until then
 - Quick inventory adjustment — +/− buttons on supplement rows
 - Grand total cost across all regimens in calculate results
 - Copy session — clone all regimens and phases to a new session
 
 ## [1.2.0] — 2025-01-01
 ### Added
-- Web: password login (server side) — every API route now requires a session except `/health`, `/auth/login` and `/auth/me`; scrypt password hash in `APP_PASSWORD_HASH`, DB-backed sessions in an HttpOnly cookie; `POST /restore` now rejects empty/malformed backups instead of wiping the database. The login screen and the remaining hardening land next, so the web UI cannot reach the API until then
 - Days-of-week dosing — schedule regimens on specific days only
 - Indefinite phase support — fills the rest of the session; stored as 9999 days with `indefinite = true`
 - Per-regimen notes with auto-save
@@ -93,7 +85,6 @@
 
 ## [1.1.0] — 2025-01-01
 ### Added
-- Web: password login (server side) — every API route now requires a session except `/health`, `/auth/login` and `/auth/me`; scrypt password hash in `APP_PASSWORD_HASH`, DB-backed sessions in an HttpOnly cookie; `POST /restore` now rejects empty/malformed backups instead of wiping the database. The login screen and the remaining hardening land next, so the web UI cannot reach the API until then
 - Mobile touch-friendly UI — tap to edit, hidden icons, responsive action buttons
 - Session date validation — target must be after start
 - Block calculate when a regimen has no phases
@@ -101,7 +92,6 @@
 
 ## [1.0.0] — 2025-01-01
 ### Added
-- Web: password login (server side) — every API route now requires a session except `/health`, `/auth/login` and `/auth/me`; scrypt password hash in `APP_PASSWORD_HASH`, DB-backed sessions in an HttpOnly cookie; `POST /restore` now rejects empty/malformed backups instead of wiping the database. The login screen and the remaining hardening land next, so the web UI cannot reach the API until then
 - Core shortfall calculator — pills consumed, real-time on-hand, shortfall, bottles, cost, days of coverage
 - Supplement inventory management
 - Session, regimen, and phase management

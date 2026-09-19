@@ -58,6 +58,18 @@ without wiping data. `db/init.sql` only runs on the very first container start (
 | `server/calculator.js` | Shortfall engine — the core business logic |
 | `server/db.js` | PostgreSQL connection pool |
 
+### Authentication and request pipeline (`server/auth.js`)
+
+Single-user password login; no accounts. Middleware order in `server/index.js` matters:
+`apiLimiter` (flood limit) → `csrf` → `gate` (session required unless allowlisted) → `auth.router` (`/auth/login|me|logout|logout-all`) → JSON body parser → Drive on-change hook → routes.
+
+- **Allowlist** (`OPEN` in `auth.js`): only `GET|HEAD /health`, `POST /auth/login`, `GET /auth/me`. Everything else, including unknown paths, is 401.
+- **Password**: `APP_PASSWORD_HASH` = `scrypt:N:r:p:salt:hash` (colon format because Compose mangles `$`); see `server/password.js`. Changing it invalidates all sessions.
+- **Sessions**: `auth_sessions` table (SHA-256 of a random 32-byte token; no foreign keys so a restore's `TRUNCATE ... CASCADE` can't touch it). Cookie `pp_session` (`__Host-pp_session` when `COOKIE_SECURE`), HttpOnly, SameSite=Lax (Strict would drop it on the Google OAuth redirect). Idle + absolute expiry.
+- **CSRF**: every non-GET needs `X-Requested-With: pillpipe`; `Sec-Fetch-Site` must be same-origin/none; `Origin` must equal `APP_ORIGIN` when set.
+- **Google OAuth**: `state` (hash stored on the session row, single use) is verified in the callback before any token exchange.
+- **Proxy**: `trust proxy` = 1 hop, so rate limits key on the real client IP only when the backend is reachable solely through the reverse proxy.
+
 ## Data Model
 
 Web (PostgreSQL). Columns marked † are added by boot-time `ALTER TABLE` in `server/index.js`, not `db/init.sql`.
@@ -134,6 +146,7 @@ treats them as "fill the remainder of the session." See `docs/DECISIONS.md`.
 | Dose reminder | Every minute | Checks `reminder_time` per regimen; sends Web Push if due |
 | Running low | Daily 8am | Checks `reorder_threshold` per supplement; sends push notification |
 | Google Drive backup | Configurable | Uploads JSON backup on schedule or on data change |
+| Session purge | Daily 3am | Deletes expired `auth_sessions` rows |
 
 ## Data Flow — Calculate
 

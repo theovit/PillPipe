@@ -59,3 +59,15 @@ about the lockfile, check line 1 — the writer may be back.
 When a user taps a dose reminder push notification, the service worker intercepts the tap and
 posts a message to `SessionPane`. `SessionPane` listens for this message and calls the dose-log
 API. If notification taps are not logging doses, check the SW message listener in `SessionPane.jsx`.
+
+## The backend won't start without `APP_PASSWORD_HASH`
+By design (fail closed). Generate one with `docker compose run --rm backend node scripts/hash-password.js`
+and put the printed line in `.env` (no quotes). The hash uses `:` separators because Compose interpolates
+`$` in `.env`/`environment:` values and would corrupt a `$`-style hash. Until it is set, `docker compose up`
+leaves the backend exiting with that message.
+
+## Auth tests are destructive — use the throwaway stack only
+`server/test/auth.test.js` fires `DELETE /data` and `POST /restore` on purpose and refuses non-localhost
+URLs. Run them against `docker-compose.test.yml` (project `pillpipe-test`, Postgres on tmpfs, port 13000);
+the setup commands are in that file's header. Tests give each request a unique `X-Forwarded-For` because
+the backend trusts one proxy hop and rate-limits per IP.
