@@ -31,6 +31,7 @@ Context (decided 2026-09-19): single user, reachable over the internet — not p
   - [ ] Dependency vulnerabilities not yet addressed: 35 in `npm audit --omit=dev` (2 critical, 18 high — Expo/RN tooling, `ws`, `yaml`)
 
 ## Long-term
+- [ ] Multi-user login — support several accounts instead of the single shared password: per-user credentials, per-user data ownership (supplements, sessions, regimens, dose logs, prefs, Drive tokens), per-user push subscriptions and backups, and account management. Builds on the single-user auth; needs a users table and a data-ownership migration (existing data would be assigned to the first user). Prerequisite for the Doctor Portal.
 - [ ] Flexible Ads — opt-in ad system (ad-free default); AdSense; four levels; deferred until larger public user base
 - [ ] Doctor Portal — multi-tenant support for healthcare providers; requires multi-user auth + user/role model (single-user auth is in Blockers above)
 - [ ] Activate Donate / Support section — remove `false &&` guard in Dashboard.jsx once Ko-fi / GitHub Sponsors pages are live
