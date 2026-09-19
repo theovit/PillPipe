@@ -24,7 +24,7 @@ cd server && npm run dev     # nodemon (auto-reload)
 cd server && npm start       # production
 ```
 
-There are no automated tests. Manual verification via the browser UI is the current practice.
+Tests: `cd server && npm run test:unit` (no database needed) and `npm test` (also runs the API/auth tests, which need the throwaway stack in `docker-compose.test.yml` — see `docs/MEMORY.md`). The client has no test runner; check UI changes in the browser (`npm run lint`, `npm run build`).
 
 ## Architecture
 
@@ -71,4 +71,4 @@ Copy `.env.example` to `.env` before first run. Key vars:
 
 The frontend proxies `/api/*` to `http://backend:3000` (Docker internal DNS). Direct backend port is not exposed to the host.
 
-Remote access is via **Tailscale** — no auth layer is implemented; the app is kept off the public internet.
+Remote access is via **Tailscale**. The web app has a single-user password login (`APP_PASSWORD_HASH` in `.env`; the backend won't start without it). Exposing the app to the internet is planned but not done — see `docs/TODO.md`.

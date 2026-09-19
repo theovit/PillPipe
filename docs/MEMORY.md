@@ -82,3 +82,13 @@ reads `TEST_APP_ORIGIN`, `TEST_IDLE_TTL`, `TEST_ABS_TTL` for this.
 The owner confirmed (2026-09-19) that everything in the dev database is throwaway test data. Schema changes
 (e.g. multi-user ownership columns) do not need data-preserving migrations; wiping and reseeding is fine.
 Revisit this the moment real data goes in (i.e. before the app is used for real over the internet).
+
+## node-pg: JSONB arrays must be stringified; NUMERIC and DATE arrive oddly
+`custom_slots` is JSONB. pg serializes a JS *array* parameter as a Postgres array literal (an error for JSONB), so always pass `JSON.stringify(slots)` (objects are fine). NUMERIC columns come back as strings (`Number()` them; round to 1e-6 before comparing). DATE columns come back as local-midnight `Date` objects — in SQL use `to_char(d, 'YYYY-MM-DD')` and do day math on strings with `Date.UTC` (`server/dosing.js`).
+
+## Running the tests
+`cd server && npm run test:unit` needs nothing. `npm test` also runs the API/auth tests, which need the throwaway stack:
+`export TEST_APP_PASSWORD_HASH=$(echo 'correct-horse-battery' | node server/scripts/hash-password.js | sed -n 's/^APP_PASSWORD_HASH=//p')`, then `docker compose -p pillpipe-test -f docker-compose.test.yml up -d --build --force-recreate --wait`, then `cd server && TEST_PASSWORD=correct-horse-battery npm test` (files run one at a time). Tear down with `down -v`. Never point them at a real instance — they refuse non-localhost URLs.
+
+## The service worker can't be exercised with a real push in tests
+`server/test/sw.test.js` loads `client/public/sw.js` into a Node `vm` sandbox and drives its `push` / `notificationclick` handlers with stubs. Real delivery (VAPID, the browser's push service, action buttons — unsupported on iOS Safari and desktop Firefox) still needs a manual check on a device.

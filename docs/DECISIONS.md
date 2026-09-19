@@ -49,7 +49,7 @@
 **Alternatives considered:** inotify — does not work on Windows Docker volumes.
 **Consequences:** Slightly higher CPU usage during development. Acceptable tradeoff.
 
-## No automated tests
+## No automated tests (superseded 2026-09-19 — see docs/ARCHITECTURE.md Testing)
 **Date:** 2024-01-01
 **Decision:** No test suite. Manual verification via browser UI is the current practice.
 **Why:** Project is early-stage and moving fast. Test infrastructure overhead is not justified yet.
@@ -90,6 +90,13 @@
 **Why:** The calculator only ever needs the sum of slot amounts, so no query needs to filter slots across regimens. Columns keep the sum trivial and avoid joins in SQLite.
 **Alternatives considered:** Separate `dosing_slots` table (queryable, but joins for no benefit today).
 **Consequences:** Slot-type queries across regimens need JSON parsing. `custom_time` (single) is legacy; `custom_slots` is authoritative. The web port should choose deliberately — the batched-push design may want the relational form.
+
+## Web meal-time dosing: Android's columns, derived total, timezone-aware batched reminders
+**Date:** 2026-09-19
+**Decision:** Web phases store `dose_morning/dose_lunch/dose_dinner` (NUMERIC) and `custom_slots` (JSONB), the same names as Android. The daily total is always derived (`dailyDose`), never stored — there is no `dose_custom`. The web UI calls the first slot Breakfast (notation B L D) while storage and pref keys stay `morning*`. **As Needed** is a regimen-level, label-only flag (no phases, reminders, logging or shortfall/supply math). Reminders are batched per minute in the owner's timezone (`prefs.timezone`, auto-detected) from each regimen's active phase. Backups are version 2 (version 1 still restores; other versions are refused).
+**Why:** Same shape keeps the two platforms easy to reconcile; deriving the total avoids the Android drift bug (`dose_custom` duplicating `custom_slots`). Containers run in UTC, so "8:00 AM" needs an explicit timezone. Refusing unknown backup versions stops a newer file from silently zeroing every dose on an older server.
+**Alternatives considered:** A `dosing_slots`/`phase_doses` table (cleaner to query, more joins, diverges from Android); relying on the server `TZ` env only; per-regimen reminders (the old model).
+**Consequences:** `dose_log` is one row per regimen per day, so a notification tap can only log regimens with a single dose that day (per-slot logging is a follow-up). Android does not yet have the two flags, and Android and web backups are still not interchangeable.
 
 ## Android app: offline-first with local SQLite
 **Date:** 2024-01-01

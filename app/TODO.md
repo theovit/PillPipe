@@ -94,3 +94,13 @@ App is currently in **alpha** — items marked [x] are scaffolded but may not be
 - [x] Push notification permission request + status
 - [ ] Google Drive backup (web-only — N/A for offline app)
 - [x] App version display
+
+## Found while porting meal-time dosing to the web app (2026-09-19)
+
+- [ ] Parity: `take_with_food` on supplements and `as_needed` on regimens (web has both; label-only semantics — see `docs/DECISIONS.md`)
+- [ ] Parity: reminders derived from phase dose times (web sends one batched push per time); Android reminders are independent of phases and fire every day regardless of phase, days-of-week or session
+- [ ] Backup format: web backups are now version 2 and Android's are not interchangeable with them (different column shapes)
+- [ ] Bug: bottle math for **drops** never converts the ml bottle size to drops, so bottles/waste are ~20x off (web converts in the route)
+- [ ] Bug: deleting a session (or restore / clear-all) leaves its scheduled OS reminders firing
+- [ ] Bug: "Copy session" leaves the target date blank, so the new session shows NaN days until edited
+- [ ] Cleanup: `dose_custom` duplicates `custom_slots` (web derives the total instead); `dosage` and `custom_time` are dead columns still copied into templates and backups

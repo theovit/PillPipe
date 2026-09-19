@@ -49,6 +49,17 @@ node -e "console.log(require('crypto').randomBytes(18).toString('base64').replac
 
 Use the Edit tool to replace the `changeme` value in `.env` with the generated password. Tell the user what it was set to.
 
+### Step 3b — Set the sign-in password
+
+The web app requires a login and the backend will not start without `APP_PASSWORD_HASH`. Pick a password of at least 12 characters (or generate one) and hash it — this needs only Node.js, no `npm install`:
+
+```bash
+node server/scripts/hash-password.js                       # interactive: asks twice, prints APP_PASSWORD_HASH=...
+printf '%s\n' "<password>" | node server/scripts/hash-password.js   # non-interactive
+```
+
+Add the printed `APP_PASSWORD_HASH=...` line to `.env` (no quotes). Tell the user the password — it cannot be recovered from the hash.
+
 ### Step 4 — Generate and inject VAPID keys
 
 Check whether `VAPID_PUBLIC_KEY` in `.env` still holds the placeholder value `generate_with_web-push_library`.
@@ -157,6 +168,12 @@ DB_NAME=pillpipe
 ```
 
 Internal only — these are never exposed outside Docker.
+
+#### Sign-in password
+
+```env
+APP_PASSWORD_HASH=scrypt:...   # from: node server/scripts/hash-password.js (required)
+```
 
 #### VAPID keys (push notifications)
 

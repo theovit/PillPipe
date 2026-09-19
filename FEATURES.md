@@ -8,7 +8,9 @@
 
 ---
 
-#### Meal-Time Dosing Schedules — ⬜ Not Started
+#### Meal-Time Dosing Schedules — ✅ Implemented (web, beta) — original design below
+
+> **Implementation notes (2026-09-19):** built with `dose_morning/dose_lunch/dose_dinner` columns + a `custom_slots` JSONB list instead of a `dosing_slots` table (see `docs/DECISIONS.md`); amounts may be fractional; the web UI labels the slots Breakfast/Lunch/Dinner; reminders are batched per minute in the owner's timezone (a new `timezone` pref); **As Needed** shipped as a regimen-level label-only flag. Current status lives in `docs/FEATURES.md`; the text below is the original spec.
 
 Replace the flat single daily dose on each phase with a structured per-meal dosing schedule. Each phase will define its dose through one or more named time slots (Breakfast, Lunch, Dinner, or Custom). The sum of all slot amounts still drives inventory math and low-stock alerts exactly as `daily_dose` did before — the calculator does not need a fundamental rewrite, just needs to pull its number from the slot sum instead of a flat field.
 

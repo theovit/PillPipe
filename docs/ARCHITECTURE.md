@@ -44,6 +44,7 @@ local state in `Dashboard.jsx`.
 | `client/src/components/ShortfallAlert.jsx` | Displays calculate results and export actions (CSV, PDF, shopping list). |
 | `client/src/components/AdherenceCalendar.jsx` | 30-day dot grid showing taken/skipped/missed per regimen. |
 | `client/src/components/SupplementsPanel.jsx` | Supplement inventory management view, including the add/edit supplement form. |
+| `client/src/utils/dosing.js` | Shared dose helpers: `dailyDose`, `phaseNotation` (`B1 L1 D2 +1@2:30 PM`), `activePhase`, `todayInTz` |
 | `client/src/utils/api.js`, `prefs.js` | API client; appearance/preference storage (localStorage + server-synced). |
 
 ## Backend Structure
@@ -58,6 +59,11 @@ without wiping data. `db/init.sql` only runs on the very first container start (
 | `server/index.js` | All Express routes + startup migrations + cron jobs |
 | `server/calculator.js` | Shortfall engine — the core business logic |
 | `server/db.js` | PostgreSQL connection pool |
+| `server/dosing.js` | Dose math (`dailyDose`), phase validation, `activePhase` (half-open session window), `supplementDaysRemaining` — client twin: `client/src/utils/dosing.js` |
+| `server/notifications.js` | Pure reminder logic: `dueNotifications`, `buildPayload` (4 KB guard), `sendBatch`, minute deduper |
+| `server/backup.js` | Backup export/restore shared by `/backup`, `/restore` and Google Drive. Version 2; version 1 (flat `dosage`) still restores; other versions are refused |
+| `server/tz.js` | `nowInTz` — the wall clock in `prefs.timezone` (containers run UTC) |
+| `server/auth.js`, `password.js` | Single-user login (see below) |
 
 ### Authentication and request pipeline (`server/auth.js`)
 
@@ -81,7 +87,7 @@ supplements
   name, brand, type (maintenance/protocol)
   pills_per_bottle (NUMERIC†), price (NUMERIC(10,2)), current_inventory (NUMERIC†)
   unit† (capsules/tablets/ml/drops), drops_per_ml† (default 20)
-  reorder_threshold†, reorder_threshold_mode† (units/days)
+  reorder_threshold†, reorder_threshold_mode† (units/days), take_with_food† (BOOLEAN)
   (for ml/drops, pills_per_bottle holds ml per bottle)
 
 sessions
@@ -92,12 +98,13 @@ regimens
   id (UUID PK)
   session_id (FK → sessions, CASCADE DELETE)
   supplement_id (FK → supplements, CASCADE DELETE)
-  notes†, reminder_time† (TIME)
+  notes†, as_needed† (BOOLEAN — label only: no phases/reminders/logging/shortfall math), reminder_time† (legacy, unused)
 
 phases
   id (UUID PK)
   regimen_id (FK → regimens, CASCADE DELETE)
-  dosage (NUMERIC†) — per dose; flat, not yet split by meal time on web
+  dose_morning / dose_lunch / dose_dinner (NUMERIC†) and custom_slots (JSONB† [{amount, time "HH:MM"}]) —
+    the daily dose is their SUM, always derived (no stored total); dosage† is legacy (0 after the boot migration)
   duration_days, indefinite (bool), days_of_week (INTEGER[], NULL = every day)
   sequence_order (UNIQUE per regimen)
 
@@ -111,7 +118,7 @@ push_subscriptions
   endpoint (UNIQUE), p256dh, auth
 
 templates → template_regimens → template_phases
-  session templates as relational copies of regimens + phases (created at boot)
+  session templates as relational copies of regimens + phases (same dosing columns, as_needed) (created at boot)
 
 google_tokens, google_drive_settings (singleton), user_settings (singleton, prefs JSONB)
   Drive OAuth tokens, backup frequency/state, server-synced prefs
@@ -144,7 +151,7 @@ treats them as "fill the remainder of the session." See `docs/DECISIONS.md`.
 
 | Job | Schedule | Purpose |
 |---|---|---|
-| Dose reminder | Every minute | Checks `reminder_time` per regimen; sends Web Push if due |
+| Dose reminders | Every minute | Batched per time slot: regimens whose active phase has a dose at this minute (in the owner's timezone) → ONE Web Push listing them. Also re-checks the previous minute; a minute deduper prevents repeats |
 | Running low | Daily 8am | Checks `reorder_threshold` per supplement; sends push notification |
 | Google Drive backup | Configurable | Uploads JSON backup on schedule or on data change |
 | Session purge | Daily 3am | Deletes expired `auth_sessions` rows |
@@ -165,12 +172,12 @@ User clicks Calculate
 
 ```
 Server cron (every minute)
-  → checks regimens with reminder_time = now
-  → fetches push_subscriptions
-  → sends Web Push via VAPID
-  → Service Worker receives notification
-  → User taps → SW posts message to client
-  → SessionPane logs dose via POST /dose-log
+  → owner's timezone from prefs (falls back to server TZ / UTC) → local date + HH:MM
+  → for each regimen: active phase today? dosing day? a dose at this minute (meal times from prefs, or a custom slot)?
+  → dueNotifications() merges everything due into ONE batch (as-needed regimens are never included)
+  → sendBatch(): one Web Push per subscription; 404/410 subscriptions are removed
+  → Service Worker shows it; Taken/Skip buttons only if some listed regimen has a single dose today
+  → tap → the SW POSTs /api/dose-log itself (session cookie + CSRF header), then tells open panes to refresh
 ```
 
 ## Key Design Patterns
@@ -195,3 +202,9 @@ boundary. See `vite.config.js` and `server/nodemon.json`. See also `docs/MEMORY.
 | Google Drive (OAuth2) | Optional cloud backup |
 | Web Push / VAPID | Dose reminders and low-stock alerts |
 | Tailscale | Current private remote access. **Planned:** internet exposure with authentication + hardening — see `docs/DECISIONS.md` (2026-09-19) and Blockers in `docs/TODO.md`. The app has no auth today. |
+
+## Testing
+
+- `cd server && npm run test:unit` — 58 pure tests, no database: dose math, calculator, timezones, reminders, the service worker (loaded into a Node `vm` sandbox) and a client/server "twin" check.
+- `npm test` — everything including the API/auth black-box tests. Those need the throwaway stack (`docker-compose.test.yml`, see `docs/MEMORY.md`) because they wipe data on purpose.
+- The client has no test runner; UI changes are verified in a browser (`npm run lint` + `npm run build` for static checks).

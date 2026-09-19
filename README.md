@@ -26,6 +26,7 @@ PillPipe answers both questions.
 - **Shortfall Engine** — calculates exactly how many pills you need, how many bottles to grab, and the total cost. Tracks current on-hand count as days pass.
 - **Grand total cost** — see the total spend across all regimens after calculating.
 - **Quick inventory adjustment** — +/− buttons on supplement rows for fast on-hand count updates without leaving the panel.
+- **Meal-time dosing** — set amounts for Breakfast, Lunch and Dinner plus custom times per phase (e.g. `B1 L1 D2 +1@2:30 PM`); fractions like ½ tablet or 2.5 ml work for every unit; **Take with food** on a supplement; **As needed** regimens are label-only (no schedule, reminders or shortfall math).
 - **Copy session** — clone a session's regimens and phases to a new session at your next appointment.
 - **Session templates** — save any session as a named template; apply it when creating a new session to pre-populate all regimens and phases. Manage and delete templates in Settings → Templates.
 - **Per-regimen notes** — attach notes directly to a regimen with auto-save (doctor instructions, timing reminders, etc.).
@@ -33,7 +34,7 @@ PillPipe answers both questions.
 - **Collapse/expand** — regimen cards and the sessions sidebar can be collapsed to reduce visual clutter.
 - **Supplements panel** — manage your supplement catalog with inventory, pricing, and type (maintenance vs. protocol).
 - **Liquid & drops support** — dose and track supplements by ml or drops (with configurable drops-per-ml conversion). Labels and shortfall calculations adapt automatically.
-- **Dose reminders & Web Push notifications** — per-regimen reminder times; respects days-of-week schedules; server-driven cron delivery; subscribe/unsubscribe in Settings; test notification button.
+- **Dose reminders & Web Push notifications** — one notification per dose time listing everything due (Breakfast/Lunch/Dinner/custom times from Settings → Meal Times, in your timezone); only regimens active that day; Taken/Skip on the notification; subscribe/unsubscribe in Settings; test notification button.
 - **Running Low alerts** — set a reorder threshold per supplement; a warning badge appears on the row and a push notification fires daily when stock is low.
 - **Adherence tracking** — 30-day dot grid (green=taken, red=skipped, gray=missed), adherence % stat, quick-log buttons on regimen cards, bulk "Mark all taken / Skip all" bar, and undo support.
 - **Shortfall Export (CSV)** — download calculation results as a CSV after running Calculate; includes per-regimen rows and grand total.
@@ -132,6 +133,16 @@ Claude Code will read `INSTALL.md` and run through every step, only stopping to 
 | Web UI | http://localhost:5173 |
 
 ---
+
+## Signing in
+
+The web app is protected by a single-user password. Before the first start, create the password hash and put it in `.env`:
+
+```bash
+node server/scripts/hash-password.js     # asks twice (12+ characters), prints APP_PASSWORD_HASH=...
+```
+
+Add the printed `APP_PASSWORD_HASH=...` line to `.env` (no quotes). The backend refuses to start without it. Log out from Settings → Session. Changing the hash signs everyone out.
 
 ## Remote Access via Tailscale
 
@@ -269,6 +280,7 @@ Open PillPipe → **Settings → Data → Google Drive Backup → Connect**. Sig
 | drops_per_ml | Numeric | Default 20; overridable per supplement |
 | reorder_threshold | Numeric | Optional low-stock alert level (raw units) |
 | reorder_threshold_mode | Varchar | `units` (default) |
+| take_with_food | Boolean | Shown on the supplement, its regimen card and in reminders |
 
 **sessions** — a treatment window
 
@@ -287,7 +299,7 @@ Open PillPipe → **Settings → Data → Google Drive Backup → Connect**. Sig
 | session_id | UUID | FK → sessions |
 | supplement_id | UUID | FK → supplements |
 | notes | Text | Optional per-regimen notes |
-| reminder_time | Time | Daily push notification time for this regimen |
+| as_needed | Boolean | Label-only flag: no phases, reminders or shortfall math |
 
 **phases** — ordered dosage steps within a regimen
 
@@ -295,7 +307,8 @@ Open PillPipe → **Settings → Data → Google Drive Backup → Connect**. Sig
 |---|---|---|
 | id | UUID | Primary key |
 | regimen_id | UUID | FK → regimens |
-| dosage | Numeric | Amount per dose (supports decimals for ml/drops) |
+| dose_morning, dose_lunch, dose_dinner | Numeric | Amount at each meal (decimals allowed); the daily dose is the sum of these and `custom_slots` |
+| custom_slots | JSONB | `[{ "amount": 1, "time": "14:30" }]` — up to 12 extra dose times |
 | duration_days | Integer | Length of this phase |
 | days_of_week | Integer[] | Null = every day; 0=Sun … 6=Sat |
 | indefinite | Boolean | Fills remaining session days automatically |
@@ -321,10 +334,10 @@ PillPipe is fully self-hosted. Your data never leaves your own machine unless yo
 
 ### In Progress
 - **Android app** — offline-first with local SQLite; shortfall engine runs entirely on-device; see `app/` and `docs/TODO.md`
-- **Meal-time dosing** — replace flat daily dose with per-meal slot system (Breakfast/Lunch/Dinner + custom times)
+- **Meal-time dosing** — ✅ shipped on the web app (Android has its own version)
 
 ### Later
-- [ ] **JWT authentication** — multi-user or public hosting support
+- [ ] **Multi-user login** — the app has a single-user password login; multiple accounts are planned
 - [ ] **Doctor portal** — multi-tenant support for providers to push sessions to patients
 - [ ] **Flexible Ads** — opt-in ad levels (0–3); ad-free is always the default and always free
 

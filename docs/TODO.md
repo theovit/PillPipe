@@ -17,12 +17,15 @@
 - [ ] Automated tests for auth and the destructive routes before going live (DECISIONS "No automated tests" needs revisiting for these).
 
 ## High
-- [ ] Meal-time dosing — web/server port. Android already has it (fixed `dose_morning/lunch/dinner/custom` columns + `custom_slots` JSON on phases, Morning/Lunch/Dinner time prefs, per-regimen multi-slot notifications; see DECISIONS) but web/server still use a flat `dosage`. Remaining:
-  - [ ] Schema, Settings meal-time pickers, phase editor, calculator, backup/templates on web
-  - [ ] Web notification overhaul — batched per-time-slot push; replaces per-regimen `reminder_time`
-  - [ ] Compact slot notation on regimen cards (B1 L1 D2)
-  - [ ] "Take With Food" flag on supplement record
-  - [ ] "As Needed" dosing — UI-only flag on regimen; no slots, no notifications, no inventory math; shows "As Needed" label on card
+- [ ] **Verify batched push on a real device.** Web Push can't run in the test stack (no VAPID keys or real push service), so the reminder logic is covered by unit tests only (`dueNotifications`, payload, the service worker in a sandbox). Manually: enable notifications, set a dose time to now+2 min, confirm ONE notification listing everything due; tap Taken with the app closed and check `dose_log`; confirm low-stock and test pushes have no buttons.
+- [ ] Follow-ups from the meal-time port:
+  - [ ] Per-slot dose logging — `dose_log` is one row per regimen per day, so a notification tap only logs regimens with a single dose that day
+  - [ ] Low-stock cron (`0 8 * * *`) runs in server time (UTC); should use the owner's timezone. Also delete push subscriptions on 404, not only 410, in that sender
+  - [ ] `/pill-icon.png` (notification icon) doesn't exist in `client/public`
+  - [ ] `server/calculator.js` still computes days elapsed from the server's local "today"
+  - [ ] Web backup omits `dose_log` (a restore wipes adherence history)
+  - [ ] Session copy still drops regimen notes; docs claiming it "clones regimens and phases" are only now accurate for phases
+  - [ ] Root `README.md` / `INSTALL.md` / `FEATURES.md` still describe an older design in places — reconcile with `docs/`
 - [ ] Find what writes `// @atlas-entrypoint: …` first-line comments into source files (removed 2026-09-19; source unconfirmed) — if it re-adds them, disable it.
 - [ ] Remove the obsolete `version:` key from `docker-compose.yml` (Compose warns on every command).
 
