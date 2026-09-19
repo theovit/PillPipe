@@ -17,6 +17,10 @@ function inventoryLabel(unit) {
   if (unit === 'tablets') return 'On hand (tabs)';
   return 'On hand (caps)';
 }
+// min must equal step: browsers anchor valid values to min, so min="0.001" + step="1" rejects 30.
+function bottleStep(unit) {
+  return (unit === 'ml' || unit === 'drops') ? '0.1' : '1';
+}
 function parsePpb(val, unit) {
   return (unit === 'ml' || unit === 'drops') ? parseFloat(val) || 0 : parseInt(val) || 0;
 }
@@ -175,7 +179,7 @@ export default function SupplementsPanel({ supplements, onUpdate }) {
       )}
       <div>
         <label className="block text-xs text-gray-500 mb-1">{bottleLabel(f.unit)}</label>
-        <input type="number" min="0.001" step={f.unit === 'ml' || f.unit === 'drops' ? '0.1' : '1'}
+        <input type="number" min={bottleStep(f.unit)} step={bottleStep(f.unit)}
           required value={f.pills_per_bottle}
           onChange={e => setF(p => ({ ...p, pills_per_bottle: e.target.value }))}
           className={`w-full ${inputCls}`} />
