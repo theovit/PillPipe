@@ -11,9 +11,9 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "express": "^4.17.1",
+    "express": "^4.22.3",
     "googleapis": "^171.4.0",
-    "node-cron": "^3.0.3",
+    "node-cron": "^4.6.0",
     "pg": "^8.11.0",
     "web-push": "^3.6.7"
   },
