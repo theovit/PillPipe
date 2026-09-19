@@ -29,10 +29,11 @@ services:
       DATABASE_URL: postgres://test:test@db:5432/pillpipe_test
       APP_PASSWORD_HASH: ${TEST_APP_PASSWORD_HASH:?set TEST_APP_PASSWORD_HASH}
       COOKIE_SECURE: "false"
-      SESSION_IDLE_TTL: "4"
-      SESSION_ABS_TTL: "9"
+      # Defaults suit the node:test suite; the browser E2E run overrides them (see docs/MEMORY.md).
+      SESSION_IDLE_TTL: ${TEST_IDLE_TTL:-4}
+      SESSION_ABS_TTL: ${TEST_ABS_TTL:-9}
       LOGIN_MAX_FAILS: "5"
-      APP_ORIGIN: http://127.0.0.1:13000
+      APP_ORIGIN: ${TEST_APP_ORIGIN:-http://127.0.0.1:13000}
       # Fake Google credentials: enough for generateAuthUrl(); the token exchange always fails.
       GOOGLE_CLIENT_ID: test-client-id
       GOOGLE_CLIENT_SECRET: test-client-secret

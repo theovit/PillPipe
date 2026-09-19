@@ -1,3 +1,4 @@
+/* global process */
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
@@ -13,7 +14,8 @@ export default defineConfig({
     },
     proxy: {
       '/api': {
-        target: 'http://backend:3000',
+        // Override to run the dev server on the host against another backend (e.g. the test stack).
+        target: process.env.API_TARGET || 'http://backend:3000',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, ''),
       },

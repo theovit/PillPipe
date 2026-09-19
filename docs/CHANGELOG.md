@@ -2,7 +2,8 @@
 
 ## [Unreleased]
 ### Added
-- Web: password login (server side) — every API route now requires a session except `/health`, `/auth/login` and `/auth/me`. scrypt password hash in `APP_PASSWORD_HASH` (the backend refuses to start without it; generate with `node scripts/hash-password.js`), DB-backed sessions in an HttpOnly cookie, CSRF header check, login/API rate limiting, and a `state` check on the Google Drive connect flow. `POST /restore` now rejects empty/malformed backups instead of wiping the database, and accepts backups up to 25 MB. The login screen lands next, so the web UI cannot reach the API until then
+- Web: password login (server side) — every API route now requires a session except `/health`, `/auth/login` and `/auth/me`. scrypt password hash in `APP_PASSWORD_HASH` (the backend refuses to start without it; generate with `node scripts/hash-password.js`), DB-backed sessions in an HttpOnly cookie, CSRF header check, login/API rate limiting, and a `state` check on the Google Drive connect flow. `POST /restore` now rejects empty/malformed backups instead of wiping the database, and accepts backups up to 25 MB
+- Web: sign-in screen and a Session card in Settings (Log out / Log out everywhere); an expired or revoked session drops back to the sign-in screen, and a server outage shows a Retry state instead of a misleading login form
 - Android app: time-of-day dosing — each phase takes Morning / Lunch / Dinner amounts plus any number of custom time+amount slots; the shortfall calculator sums them
 - Android app: Reminder Times in Settings (Morning / Lunch / Dinner defaults); per-regimen multi-slot reminders replace the single reminder picker; all reminders are rescheduled on launch
 - Android app: session templates — save a session as a template, apply it when creating a new session, manage in Settings

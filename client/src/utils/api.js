@@ -1,18 +1,42 @@
 const BASE = '/api';
 
-async function request(path, options = {}) {
+export class ApiError extends Error {
+  constructor(message, status) {
+    super(message);
+    this.status = status;
+  }
+}
+
+// AuthGate subscribes here: any request answered 401 (session expired/revoked) flips the app
+// to the login screen. Calls that expect a 401 (login, "who am I") opt out via skipUnauthorized.
+const unauthorizedListeners = new Set();
+export function onUnauthorized(fn) {
+  unauthorizedListeners.add(fn);
+  return () => unauthorizedListeners.delete(fn);
+}
+
+async function request(path, { headers, body, skipUnauthorized, ...options } = {}) {
   const res = await fetch(`${BASE}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
     ...options,
-    body: options.body ? JSON.stringify(options.body) : undefined,
+    // The server rejects state-changing requests without this header (CSRF defense).
+    headers: { 'Content-Type': 'application/json', 'X-Requested-With': 'pillpipe', ...headers },
+    body: body ? JSON.stringify(body) : undefined,
   });
+  if (res.status === 401 && !skipUnauthorized) unauthorizedListeners.forEach(fn => fn());
   if (res.status === 204) return null;
-  const data = await res.json();
-  if (!res.ok) throw new Error(data.error || 'Request failed');
+  let data = null;
+  try { data = await res.json(); } catch { /* non-JSON body, e.g. a proxy error page */ }
+  if (!res.ok) throw new ApiError(data?.error || `Request failed (${res.status})`, res.status);
   return data;
 }
 
 export const api = {
+  // Auth
+  me: () => request('/auth/me', { skipUnauthorized: true }),
+  login: (password) => request('/auth/login', { method: 'POST', body: { password }, skipUnauthorized: true }),
+  logout: () => request('/auth/logout', { method: 'POST', body: {} }),
+  logoutAll: () => request('/auth/logout-all', { method: 'POST', body: {} }),
+
   // Supplements
   getSupplements: () => request('/supplements'),
   createSupplement: (body) => request('/supplements', { method: 'POST', body }),

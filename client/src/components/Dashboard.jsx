@@ -267,6 +267,11 @@ export default function Dashboard() {
     );
   }
 
+  async function logout(everywhere) {
+    try { await (everywhere ? api.logoutAll() : api.logout()); } catch { /* already signed out */ }
+    window.location.reload(); // clears in-memory data; AuthGate then shows the login screen
+  }
+
   async function downloadBackup() {
     const data = await api.getBackup();
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
@@ -772,6 +777,24 @@ export default function Dashboard() {
             )}
           </div>
           )}
+
+          {/* Session */}
+          <div className="rounded-xl bg-gray-900 border border-gray-800 px-5 py-4 flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">Session</h2>
+              <p className="text-xs text-gray-500 mt-1">You are signed in on this device.</p>
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => logout(false)}
+                className="px-3 py-1.5 rounded text-sm font-medium bg-gray-800 hover:bg-gray-700 text-gray-200 border border-gray-700 transition-colors">
+                Log out
+              </button>
+              <button onClick={() => logout(true)}
+                className="px-3 py-1.5 rounded text-sm font-medium bg-gray-800 hover:bg-gray-700 text-gray-200 border border-gray-700 transition-colors">
+                Log out everywhere
+              </button>
+            </div>
+          </div>
 
           {/* About */}
           <div className="rounded-xl bg-gray-900 border border-gray-800 overflow-hidden">

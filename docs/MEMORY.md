@@ -71,3 +71,9 @@ leaves the backend exiting with that message.
 URLs. Run them against `docker-compose.test.yml` (project `pillpipe-test`, Postgres on tmpfs, port 13000);
 the setup commands are in that file's header. Tests give each request a unique `X-Forwarded-For` because
 the backend trusts one proxy hop and rate-limits per IP.
+
+## Running the Vite dev server on the host against another backend
+`API_TARGET=http://127.0.0.1:13000 npx vite --port 5199 --host 127.0.0.1` in `client/` proxies `/api` to that
+backend instead of `http://backend:3000`. The backend's `APP_ORIGIN` must equal the browser origin exactly
+(here `http://127.0.0.1:5199`) or every POST/PUT/DELETE gets a 403 from the CSRF check. The test compose file
+reads `TEST_APP_ORIGIN`, `TEST_IDLE_TTL`, `TEST_ABS_TTL` for this.

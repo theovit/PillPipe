@@ -37,6 +37,7 @@ local state in `Dashboard.jsx`.
 
 | File | Role |
 |---|---|
+| `client/src/components/AuthGate.jsx`, `Login.jsx` | Wraps `<Dashboard>` in `App.jsx`. Checks `GET /auth/me`, shows the sign-in form, and flips back to it when any API call returns 401 (`onUnauthorized` in `api.js`). A network/server error shows Retry rather than the login form. |
 | `client/src/components/Dashboard.jsx` | Top-level orchestrator. Manages sessions list, `openSessionIds[]`, Settings UI, supplements panel, and navigation shell. Renders one `<SessionPane>` per open session. |
 | `client/src/components/SessionPane.jsx` | Self-contained per-session component. Owns all regimen-level state: regimens, phases, calc results, today's dose logs, reminder times, adherence. Handles its own data loading and SW push-notification dose-tap events. |
 | `client/src/components/PhaseEditor.jsx` | Add, edit, reorder, delete phases for a regimen. |
