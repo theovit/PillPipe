@@ -7,6 +7,13 @@
 **Alternatives considered:** Staying Tailscale-only (still valid as defense in depth); an identity-aware proxy in front (Cloudflare Access / Tailscale Funnel) vs. built-in login — to be decided when auth is implemented.
 **Consequences:** Multi-user/public sign-up is still out of scope. Every route needs an auth check; the dev-server Docker setup can no longer be the deployed form.
 
+## Internet exposure deferred; Tailscale stays; existing nginx proxy replaces the Cloudflare Tunnel plan
+**Date:** 2026-09-19
+**Decision:** Do not expose the web app to the internet until it has been tested. Remote access stays on Tailscale. When exposure happens, front it with the nginx proxy that already runs on the Unraid server (proxy 10.0.0.4, host 10.0.0.25) rather than a Cloudflare Tunnel.
+**Why:** The app is still being tested with fake data, so hardening work beyond the login is not urgent; the owner already runs a reverse proxy and would rather reuse it than add a tunnel and a domain on Cloudflare.
+**Alternatives considered:** Cloudflare Tunnel (previous plan, see the 2026-09-19 authentication entry).
+**Consequences:** Production serving, TLS/headers and the destructive-endpoint safeguards (M3/M4 in `docs/TODO.md`) stay open but paused. Rate limiting keys on `req.ip`, so the proxy must overwrite `X-Forwarded-For` and the backend must be reachable only through it. The login itself stays useful behind Tailscale.
+
 ## Web authentication: built-in single-user login, exposed via Cloudflare Tunnel
 **Date:** 2026-09-19
 **Decision:** The app enforces its own login (one password, scrypt hash in env, DB-backed session cookie, SameSite=Lax) and is exposed through a Cloudflare Tunnel. No identity proxy is relied on for access control.
