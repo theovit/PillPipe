@@ -153,7 +153,7 @@ test('POST /restore with an empty or malformed body is 400 and deletes nothing',
   const { cookie } = await login();
   const before = (await call('GET', '/supplements', { cookie })).json.length;
   assert.ok(before > 0, 'expected seed supplements from db/init.sql');
-  for (const body of [{}, { supplements: 'nope' }, { version: 3, supplements: [], sessions: [], regimens: [], phases: [] }, []]) {
+  for (const body of [{}, { supplements: 'nope' }, { version: 4, supplements: [], sessions: [], regimens: [], phases: [] }, []]) {
     const res = await call('POST', '/restore', { cookie, body });
     assert.equal(res.status, 400, JSON.stringify(body));
   }

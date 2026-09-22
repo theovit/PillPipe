@@ -1,19 +1,21 @@
 // Backup export / restore, shared by GET /backup, POST /restore, the Google Drive backup and
-// POST /drive/restore. Version 2 adds the meal-time dosing fields (dose_morning/lunch/dinner,
-// custom_slots), take_with_food and as_needed. Version 1 files (flat `dosage`) and files without a
-// version still restore: their dose is mapped into dose_morning. Any other version is rejected — a
-// newer file restored by an older server would otherwise silently zero every dose.
+// POST /drive/restore. Version 3 adds dose_log (adherence history). Version 2 adds the meal-time
+// dosing fields (dose_morning/lunch/dinner, custom_slots), take_with_food and as_needed. Version 1
+// files (flat `dosage`) and files without a version still restore: their dose is mapped into
+// dose_morning; files older than v3 simply have no dose_log to restore. Any other version is
+// rejected — a newer file restored by an older server would otherwise silently zero every dose.
 const pool = require('./db');
 const { normalizePhaseRow } = require('./dosing');
 
-const BACKUP_VERSION = 2;
+const BACKUP_VERSION = 3;
 
 async function buildBackup() {
-  const [supp, sess, reg, ph, tmpl, tr, tp, settings] = await Promise.all([
+  const [supp, sess, reg, ph, dl, tmpl, tr, tp, settings] = await Promise.all([
     pool.query('SELECT * FROM supplements'),
     pool.query('SELECT * FROM sessions'),
     pool.query('SELECT * FROM regimens'),
     pool.query('SELECT * FROM phases'),
+    pool.query('SELECT * FROM dose_log'),
     pool.query('SELECT * FROM templates'),
     pool.query('SELECT * FROM template_regimens'),
     pool.query('SELECT * FROM template_phases'),
@@ -26,6 +28,7 @@ async function buildBackup() {
     sessions: sess.rows,
     regimens: reg.rows,
     phases: ph.rows,
+    dose_log: dl.rows,
     templates: tmpl.rows,
     template_regimens: tr.rows,
     template_phases: tp.rows,
@@ -37,15 +40,15 @@ async function buildBackup() {
 // (otherwise `{}` would wipe the database).
 function isValidBackup(b) {
   return !!b && typeof b === 'object'
-    && (b.version === undefined || b.version === 1 || b.version === 2)
+    && (b.version === undefined || b.version === 1 || b.version === 2 || b.version === 3)
     && ['supplements', 'sessions', 'regimens', 'phases'].every(k => Array.isArray(b[k]))
-    && ['templates', 'template_regimens', 'template_phases'].every(k => b[k] === undefined || Array.isArray(b[k]));
+    && ['dose_log', 'templates', 'template_regimens', 'template_phases'].every(k => b[k] === undefined || Array.isArray(b[k]));
 }
 
 // Replaces all data in one transaction; returns the restored prefs (or null).
 async function restoreBackup(backup) {
   const {
-    supplements = [], sessions = [], regimens = [], phases = [],
+    supplements = [], sessions = [], regimens = [], phases = [], dose_log = [],
     templates = [], template_regimens = [], template_phases = [], prefs = null,
   } = backup;
   const client = await pool.connect();
@@ -80,6 +83,12 @@ async function restoreBackup(backup) {
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
         [p.id, p.regimen_id, d.dose_morning, d.dose_lunch, d.dose_dinner, JSON.stringify(d.custom_slots),
           p.duration_days, p.days_of_week ?? null, !!p.indefinite, p.sequence_order]
+      );
+    }
+    for (const d of dose_log) {
+      await client.query(
+        'INSERT INTO dose_log (id,regimen_id,date,status,logged_at) VALUES ($1,$2,$3,$4,$5)',
+        [d.id, d.regimen_id, d.date, d.status, d.logged_at ?? null]
       );
     }
     for (const t of templates) {

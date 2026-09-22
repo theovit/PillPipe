@@ -207,14 +207,17 @@ test('copy session and templates carry every dosing field, including indefinite 
   assert.deepEqual(await phasesOf(cookie, tmplRegs.find(r => !r.as_needed)), original, 'template round trip is lossless');
 });
 
-test('backup v2 round-trips every dosing field through restore', async () => {
+test('backup v3 round-trips every dosing field and dose_log through restore', async () => {
   const cookie = await login();
   const { supp, reg, prn } = await buildSchedule(cookie);
+  await call('POST', '/dose-log', { cookie, body: { regimen_id: reg.id, date: isoDay(0), status: 'taken' } });
   const before = await phasesOf(cookie, reg);
+  const doseLogBefore = (await call('GET', `/dose-log?regimen_id=${reg.id}`, { cookie })).json;
   const backup = (await call('GET', '/backup', { cookie })).json;
-  assert.equal(backup.version, 2);
+  assert.equal(backup.version, 3);
   assert.ok(backup.phases.every(p => p.dose_morning !== undefined && Array.isArray(p.custom_slots)));
   assert.ok(backup.supplements.find(s => s.id === supp.id).take_with_food);
+  assert.ok(backup.dose_log.some(d => d.regimen_id === reg.id && d.status === 'taken'), 'backup includes dose_log');
 
   const res = await call('POST', '/restore', { cookie, body: backup });
   assert.equal(res.status, 200, res.text);
@@ -224,6 +227,8 @@ test('backup v2 round-trips every dosing field through restore', async () => {
   const regs = (await call('GET', `/sessions/${backup.regimens.find(r => r.id === prn.id).session_id}/regimens`, { cookie })).json;
   assert.equal(regs.find(r => r.id === prn.id).as_needed, true);
   assert.ok((await call('GET', '/templates', { cookie })).json.length >= 0);
+  const doseLogAfter = (await call('GET', `/dose-log?regimen_id=${reg.id}`, { cookie })).json;
+  assert.deepEqual(doseLogAfter, doseLogBefore, 'restore keeps dose_log (adherence history survives a restore)');
 });
 
 test('a version-1 (flat dosage) backup restores into dose_morning; unknown versions are refused untouched', async () => {
@@ -243,7 +248,7 @@ test('a version-1 (flat dosage) backup restores into dose_morning; unknown versi
 
   const counts = async () => (await call('GET', '/supplements', { cookie })).json.length;
   const n = await counts();
-  for (const bad of [{ ...backup, version: 3 }, { ...backup, version: 0 }, { version: 2 }]) {
+  for (const bad of [{ ...backup, version: 4 }, { ...backup, version: 0 }, { version: 2 }]) {
     assert.equal((await call('POST', '/restore', { cookie, body: bad })).status, 400, JSON.stringify(bad).slice(0, 40));
   }
   assert.equal(await counts(), n, 'refused restores must not delete anything');
