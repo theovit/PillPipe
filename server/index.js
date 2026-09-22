@@ -835,7 +835,7 @@ async function checkLowStock() {
         { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
         payload
       ).catch(async (err) => {
-        if (err.statusCode === 410) await pool.query('DELETE FROM push_subscriptions WHERE endpoint=$1', [sub.endpoint]);
+        if (err.statusCode === 404 || err.statusCode === 410) await pool.query('DELETE FROM push_subscriptions WHERE endpoint=$1', [sub.endpoint]);
       })
     ));
   }
