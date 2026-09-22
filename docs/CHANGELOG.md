@@ -27,6 +27,9 @@
 - Android app: CSV export and JSON backup/restore use `expo-file-system/next`
 - Android app: font sizes are rem-based so the font size preference scales all text
 ### Fixed
+- Web: backup/restore (v3) now includes `dose_log`, so a restore no longer wipes adherence history
+- Web: session copy now carries the regimen's notes field, not just its phases
+- Web: the low-stock push sender now drops a subscription on a 404 as well as a 410, matching the other two senders
 - Web: reminders no longer fire at the server's UTC hour instead of yours
 - Web: "today" now follows your timezone (it was UTC, so evenings showed tomorrow's date for new sessions, dose logs and the adherence calendar)
 - Copying a session no longer drops the indefinite flag on its phases
