@@ -51,9 +51,22 @@ dependency versions (this hid the express/node-cron upgrade until checked). Afte
 
 ## A junk first-line comment in `package-lock.json` breaks npm
 Stray `// @atlas-entrypoint: …` lines were being written at the top of source files (and, in the
-working tree, `client/package-lock.json`); removed 2026-09-19, source of the writer unconfirmed. JSON
-can't have comments, so `npm audit` failed with ENOLOCK and `npm ci` would too. If `npm` complains
-about the lockfile, check line 1 — the writer may be back.
+working tree, `client/package-lock.json`); removed 2026-09-19. JSON can't have comments, so
+`npm audit` failed with ENOLOCK and `npm ci` would too. If `npm` complains about the lockfile,
+check line 1 — the writer may be back.
+
+**Investigated 2026-09-22, still not fully explained.** All 5 removed comments trace (via
+`git log -p --follow`) to ordinary feature commits on 2026-03-23/24 co-authored by Claude Sonnet
+4.6, e.g. `2a69bb1` (`SettingsScreen.tsx`) — the comment lands as the first added line in a diff
+that's otherwise unrelated feature work, always tagged `// @atlas-entrypoint: App — substantial
+file` or similar. No hook, script, or setting in this repo's `.claude/`, the global
+`~/.claude/settings.json`, or the current plugin cache mentions "atlas" (the only string hits are
+`atlan`/`atlassian` substring matches — false positives). So it wasn't this repo's config and isn't
+a currently-installed plugin. Best guess: a plugin or tool active in whatever session made those
+March edits (name suggests an auto-tagging/context tool, maybe a predecessor to `vexp`) that has
+since been uninstalled or renamed, leaving no trace to grep for. Can't confirm further without that
+session's own logs. If the comments come back, note the exact session/commit and check active
+plugins at that time.
 
 ## Service worker handles dose-tap notifications
 When a user taps a dose reminder push notification, the service worker intercepts the tap and

@@ -26,8 +26,7 @@
   - [ ] Web backup omits `dose_log` (a restore wipes adherence history)
   - [ ] Session copy still drops regimen notes; docs claiming it "clones regimens and phases" are only now accurate for phases
   - [ ] Root `README.md` / `INSTALL.md` / `FEATURES.md` still describe an older design in places — reconcile with `docs/`
-- [ ] Find what writes `// @atlas-entrypoint: …` first-line comments into source files (removed 2026-09-19; source unconfirmed) — if it re-adds them, disable it.
-- [ ] Remove the obsolete `version:` key from `docker-compose.yml` (Compose warns on every command).
+- [ ] Find what writes `// @atlas-entrypoint: …` first-line comments into source files (removed 2026-09-19). Investigated 2026-09-22: traced to ordinary Claude-Sonnet-4.6-co-authored commits on 2026-03-23/24, but no current hook/plugin/setting references "atlas" — likely a now-uninstalled tool. See `docs/MEMORY.md`. Watch for recurrence; can't fully close without more evidence.
 
 ## On hold (until the web app is clean and hardened)
 - [ ] Android app — React Native / Expo; offline-first SQLite; parity pass paused 2026-09-19. Granular status in `app/TODO.md`.

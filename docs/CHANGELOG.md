@@ -36,6 +36,7 @@
 - Shortfall math no longer misjudges coverage on decimal doses (e.g. 0.1 three times a day against 0.3)
 - Web: the add/edit supplement form now accepts whole numbers (e.g. 30 capsules per bottle). It previously demanded values like 29.001 because the field's `min` and `step` didn't line up
 - Removed stray `// @atlas-entrypoint` comment lines from source files; one in `client/package-lock.json` broke `npm audit`
+- Removed the obsolete `version:` key from `docker-compose.yml` (Compose warned on every command)
 - Android app: headers and modals respect safe areas on Android 15 edge-to-edge; Add Regimen button clears the system nav bar
 - Android app: hardware back button closes modals
 - Android app: date format preference applies to date fields
