@@ -234,8 +234,8 @@ app.post('/sessions/:id/copy', w(async (req, res) => {
   );
   for (const r of srcRegimens) {
     const { rows: [newRegimen] } = await pool.query(
-      'INSERT INTO regimens (session_id, supplement_id, as_needed) VALUES ($1,$2,$3) RETURNING *',
-      [newSession.id, r.supplement_id, !!r.as_needed]
+      'INSERT INTO regimens (session_id, supplement_id, as_needed, notes) VALUES ($1,$2,$3,$4) RETURNING *',
+      [newSession.id, r.supplement_id, !!r.as_needed, r.notes || null]
     );
     const { rows: srcPhases } = await pool.query(
       'SELECT * FROM phases WHERE regimen_id=$1 ORDER BY sequence_order', [r.id]

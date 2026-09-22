@@ -187,6 +187,7 @@ const phasesOf = async (cookie, reg) => (await call('GET', `/regimens/${reg.id}/
 test('copy session and templates carry every dosing field, including indefinite and as_needed', async () => {
   const cookie = await login();
   const { sess, reg } = await buildSchedule(cookie);
+  await call('PATCH', `/regimens/${reg.id}`, { cookie, body: { notes: 'take with a full glass of water' } });
   const original = await phasesOf(cookie, reg);
   assert.equal(original.length, 2);
   assert.equal(original[1].indefinite, true);
@@ -196,6 +197,7 @@ test('copy session and templates carry every dosing field, including indefinite 
   assert.equal(copiedRegs.length, 2);
   assert.deepEqual(copiedRegs.map(r => r.as_needed).sort(), [false, true]);
   const copiedScheduled = copiedRegs.find(r => !r.as_needed);
+  assert.equal(copiedScheduled.notes, 'take with a full glass of water', 'copy keeps regimen notes');
   assert.deepEqual(await phasesOf(cookie, copiedScheduled), original, 'copy keeps doses, slots, days and the indefinite flag');
 
   const tmpl = (await call('POST', `/sessions/${sess.id}/save-as-template`, { cookie, body: { name: 'T ' + Date.now() } })).json;
