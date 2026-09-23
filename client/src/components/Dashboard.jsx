@@ -159,6 +159,14 @@ export default function Dashboard() {
     setNotifStatus('idle');
   }
 
+  // Re-auth for destructive actions (restore, wipe): the server requires the current app password
+  // in an X-Confirm-Password header. A plain prompt() matches this app's existing confirm()-dialog
+  // level of polish for these guard rails — a nicer modal can replace it later.
+  function promptConfirmPassword() {
+    const password = window.prompt('Enter your password to confirm this action:');
+    return password?.trim() || null;
+  }
+
   function urlBase64ToUint8Array(base64String) {
     const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
     const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
@@ -194,9 +202,11 @@ export default function Dashboard() {
 
   async function driveRestoreFile(fileId, filename) {
     if (!confirm(`Restore from "${filename}"? This will replace all current data.`)) return;
+    const confirmPassword = promptConfirmPassword();
+    if (!confirmPassword) return;
     setDriveWorking(true); setDriveMsg('');
     try {
-      const result = await api.restoreFromDrive(fileId);
+      const result = await api.restoreFromDrive(fileId, confirmPassword);
       // Apply client-side prefs from the backup before reloading
       if (result?.prefs) {
         savePrefs(result.prefs);
@@ -306,9 +316,17 @@ export default function Dashboard() {
       e.target.value = '';
       return;
     }
+    const confirmPassword = promptConfirmPassword();
+    if (!confirmPassword) { e.target.value = ''; return; }
     const text = await file.text();
     const parsed = JSON.parse(text);
-    await api.restore(parsed);
+    try {
+      await api.restore(parsed, confirmPassword);
+    } catch (err) {
+      alert(`Restore failed: ${err.message}`);
+      e.target.value = '';
+      return;
+    }
     // Restore client-side prefs if present in the backup
     if (parsed.prefs) {
       // Older backups lack newer keys (meal times, timezone): merge over the current prefs, don't replace them.
@@ -327,7 +345,14 @@ export default function Dashboard() {
   async function clearAllData() {
     if (!window.confirm('This will permanently delete ALL sessions, regimens, and supplements. This cannot be undone.')) return;
     if (!window.confirm('Are you absolutely sure? All data will be gone.')) return;
-    await api.clearData();
+    const confirmPassword = promptConfirmPassword();
+    if (!confirmPassword) return;
+    try {
+      await api.clearData(confirmPassword);
+    } catch (err) {
+      alert(`Delete failed: ${err.message}`);
+      return;
+    }
     setView('regimens');
     setOpenSessionIds([]);
     setSessions([]);

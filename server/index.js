@@ -8,7 +8,7 @@ const { calculate } = require('./calculator');
 const { version } = require('./package.json');
 const auth = require('./auth');
 const { validatePhaseBody, normalizePhaseRow, supplementDaysRemaining, activePhase, dayIndex } = require('./dosing');
-const { buildBackup, isValidBackup, restoreBackup } = require('./backup');
+const { buildBackup, isValidBackup, restoreBackup, snapshotBeforeWipe } = require('./backup');
 const { nowInTz } = require('./tz');
 const { encryptToken, decryptToken } = require('./tokenCrypto');
 const { normalizeSchedulePrefs, dueNotifications, sendBatch, createDeduper } = require('./notifications');
@@ -417,13 +417,14 @@ app.get('/backup', w(async (req, res) => {
   res.json(await buildBackup());
 }));
 
-app.post('/restore', express.json({ limit: '25mb' }), w(async (req, res) => {
+app.post('/restore', express.json({ limit: '25mb' }), auth.requireCurrentPassword, w(async (req, res) => {
   if (!isValidBackup(req.body)) return res.status(400).json({ error: 'Invalid backup file' });
   const prefs = await restoreBackup(req.body);
   res.json({ ok: true, prefs });
 }));
 
-app.delete('/data', w(async (req, res) => {
+app.delete('/data', auth.requireCurrentPassword, w(async (req, res) => {
+  await snapshotBeforeWipe();
   await pool.query('TRUNCATE supplements, sessions CASCADE');
   res.json({ ok: true });
 }));
@@ -536,7 +537,7 @@ app.get('/drive/backups', w(async (req, res) => {
   res.json({ files: filesRes.data.files });
 }));
 
-app.post('/drive/restore/:fileId', w(async (req, res) => {
+app.post('/drive/restore/:fileId', auth.requireCurrentPassword, w(async (req, res) => {
   const drive = await getDriveClient();
   if (!drive) return res.status(400).json({ error: 'Not connected to Google Drive' });
   const response = await drive.files.get(
@@ -729,6 +730,15 @@ async function migrate() {
       singleton   BOOLEAN PRIMARY KEY DEFAULT TRUE CHECK (singleton),
       prefs       JSONB NOT NULL DEFAULT '{}',
       updated_at  TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  // No FKs on purpose: a restore's or DELETE /data's TRUNCATE ... CASCADE must never reach this —
+  // it's the safety net for those, see backup.js's snapshotBeforeWipe().
+  await q(`
+    CREATE TABLE IF NOT EXISTS pre_restore_snapshots (
+      id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      payload    JSONB NOT NULL,
+      created_at TIMESTAMPTZ DEFAULT NOW()
     )
   `);
 }

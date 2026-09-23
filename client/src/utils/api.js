@@ -71,8 +71,8 @@ export const api = {
 
   // Backup / Restore / Clear
   getBackup: () => request('/backup'),
-  restore: (body) => request('/restore', { method: 'POST', body }),
-  clearData: () => request('/data', { method: 'DELETE' }),
+  restore: (body, confirmPassword) => request('/restore', { method: 'POST', body, headers: { 'X-Confirm-Password': confirmPassword } }),
+  clearData: (confirmPassword) => request('/data', { method: 'DELETE', headers: { 'X-Confirm-Password': confirmPassword } }),
 
   // Push Notifications
   getVapidKey: () => request('/push/vapid-key'),
@@ -99,6 +99,6 @@ export const api = {
   setDriveFrequency: (frequency) => request('/drive/settings', { method: 'PATCH', body: { frequency } }),
   driveBackupNow: () => request('/drive/backup', { method: 'POST' }),
   getDriveBackups: () => request('/drive/backups'),
-  restoreFromDrive: (fileId) => request(`/drive/restore/${fileId}`, { method: 'POST' }),
+  restoreFromDrive: (fileId, confirmPassword) => request(`/drive/restore/${fileId}`, { method: 'POST', headers: { 'X-Confirm-Password': confirmPassword } }),
   disconnectGoogle: () => request('/auth/google', { method: 'DELETE' }),
 };

@@ -45,8 +45,27 @@ function isValidBackup(b) {
     && ['dose_log', 'templates', 'template_regimens', 'template_phases'].every(k => b[k] === undefined || Array.isArray(b[k]));
 }
 
+const SNAPSHOT_KEEP = 5;
+
+// Safety net for the two destructive actions (a restore's TRUNCATE, and DELETE /data's own
+// TRUNCATE): save a full export to pre_restore_snapshots first. That table has no foreign keys
+// to anything a restore or DELETE /data truncates, so it survives either — and this insert is its
+// own statement, not part of the caller's transaction, so the snapshot exists even if what follows
+// fails partway. Keeps only the most recent SNAPSHOT_KEEP rows; recovery today is a manual query,
+// there's no restore-from-snapshot endpoint yet.
+async function snapshotBeforeWipe() {
+  const snapshot = await buildBackup();
+  await pool.query('INSERT INTO pre_restore_snapshots (payload) VALUES ($1)', [snapshot]);
+  await pool.query(
+    `DELETE FROM pre_restore_snapshots
+     WHERE id NOT IN (SELECT id FROM pre_restore_snapshots ORDER BY created_at DESC LIMIT $1)`,
+    [SNAPSHOT_KEEP]
+  );
+}
+
 // Replaces all data in one transaction; returns the restored prefs (or null).
 async function restoreBackup(backup) {
+  await snapshotBeforeWipe();
   const {
     supplements = [], sessions = [], regimens = [], phases = [], dose_log = [],
     templates = [], template_regimens = [], template_phases = [], prefs = null,
@@ -130,4 +149,4 @@ async function restoreBackup(backup) {
   }
 }
 
-module.exports = { BACKUP_VERSION, buildBackup, isValidBackup, restoreBackup };
+module.exports = { BACKUP_VERSION, buildBackup, isValidBackup, restoreBackup, snapshotBeforeWipe };

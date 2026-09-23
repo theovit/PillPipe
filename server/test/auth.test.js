@@ -153,8 +153,9 @@ test('POST /restore with an empty or malformed body is 400 and deletes nothing',
   const { cookie } = await login();
   const before = (await call('GET', '/supplements', { cookie })).json.length;
   assert.ok(before > 0, 'expected seed supplements from db/init.sql');
+  const headers = { 'X-Confirm-Password': PASSWORD };
   for (const body of [{}, { supplements: 'nope' }, { version: 4, supplements: [], sessions: [], regimens: [], phases: [] }, []]) {
-    const res = await call('POST', '/restore', { cookie, body });
+    const res = await call('POST', '/restore', { cookie, body, headers });
     assert.equal(res.status, 400, JSON.stringify(body));
   }
   assert.equal((await call('GET', '/supplements', { cookie })).json.length, before);
@@ -164,9 +165,44 @@ test('a real restore works and does not log the owner out (auth_sessions survive
   const { cookie } = await login();
   const backup = await call('GET', '/backup', { cookie });
   assert.equal(backup.status, 200);
-  const res = await call('POST', '/restore', { cookie, body: backup.json });
+  const res = await call('POST', '/restore', { cookie, body: backup.json, headers: { 'X-Confirm-Password': PASSWORD } });
   assert.equal(res.status, 200, res.text);
   assert.equal((await call('GET', '/supplements', { cookie })).status, 200, 'session should survive the restore');
+});
+
+test('destructive routes require X-Confirm-Password: missing/wrong is rejected, correct works, wrong deletes nothing', async () => {
+  const { cookie } = await login();
+  const before = (await call('GET', '/supplements', { cookie })).json.length;
+  const backup = (await call('GET', '/backup', { cookie })).json;
+
+  // DELETE /data
+  assert.equal((await call('DELETE', '/data', { cookie })).status, 400, 'missing header');
+  assert.equal((await call('DELETE', '/data', { cookie, headers: { 'X-Confirm-Password': 'wrong-password' } })).status, 403, 'wrong password');
+  assert.equal((await call('GET', '/supplements', { cookie })).json.length, before, 'nothing deleted by a rejected attempt');
+
+  // POST /restore
+  assert.equal((await call('POST', '/restore', { cookie, body: backup })).status, 400, 'missing header');
+  assert.equal((await call('POST', '/restore', { cookie, body: backup, headers: { 'X-Confirm-Password': 'wrong-password' } })).status, 403, 'wrong password');
+  assert.equal((await call('GET', '/supplements', { cookie })).json.length, before, 'nothing changed by a rejected attempt');
+
+  // The correct password actually works (proves the gate isn't just always-reject)
+  assert.equal((await call('DELETE', '/data', { cookie, headers: { 'X-Confirm-Password': PASSWORD } })).status, 200);
+  assert.equal((await call('GET', '/supplements', { cookie })).json.length, 0, 'the correct password did delete');
+});
+
+test('DELETE /data leaves a pre-restore snapshot behind, capped so it never grows unbounded', async () => {
+  const { cookie } = await login();
+  const snapshotCount = () => Number(dc(
+    'exec', 'db', 'psql', '-U', 'test', '-d', 'pillpipe_test', '-tAc', 'SELECT count(*) FROM pre_restore_snapshots'
+  ).trim());
+  const before = snapshotCount();
+  await call('DELETE', '/data', { cookie, headers: { 'X-Confirm-Password': PASSWORD } });
+  const after = snapshotCount();
+  // Other tests in this run also trigger snapshots, so don't assume a clean slate — just that this
+  // wipe added one (up to the cap) and pruning keeps it bounded (SNAPSHOT_KEEP in backup.js).
+  assert.ok(after >= 1, 'at least one snapshot exists after a wipe');
+  assert.ok(after <= 5, 'old snapshots are pruned, never unbounded');
+  assert.ok(after === Math.min(before + 1, 5), 'grows by one until the cap, then holds steady');
 });
 
 test('idle sessions expire', async () => {
@@ -234,7 +270,7 @@ test('parallel login attempts beyond the scrypt concurrency cap get 429', async 
 test('/restore accepts a large body; other routes keep the small default limit', async () => {
   const { cookie } = await login();
   const backup = (await call('GET', '/backup', { cookie })).json;
-  const res = await call('POST', '/restore', { cookie, body: { ...backup, pad: 'x'.repeat(300000) } });
+  const res = await call('POST', '/restore', { cookie, body: { ...backup, pad: 'x'.repeat(300000) }, headers: { 'X-Confirm-Password': PASSWORD } });
   assert.equal(res.status, 200, res.text);
   assert.equal((await call('PUT', '/settings/prefs', { cookie, body: { pad: 'x'.repeat(300000) } })).status, 413);
 });

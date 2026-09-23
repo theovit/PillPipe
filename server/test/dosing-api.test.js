@@ -15,7 +15,7 @@ if (!PASSWORD) throw new Error('Set TEST_PASSWORD to the password used for TEST_
 let ipCounter = 0;
 const nextIp = () => `10.30.${Math.floor(ipCounter / 250)}.${(ipCounter++ % 250) + 1}`;
 
-async function call(method, url, { cookie, body } = {}) {
+async function call(method, url, { cookie, body, headers = {} } = {}) {
   const res = await fetch(BASE + url, {
     method,
     headers: {
@@ -23,6 +23,7 @@ async function call(method, url, { cookie, body } = {}) {
       'X-Forwarded-For': nextIp(),
       ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
       ...(cookie ? { Cookie: cookie } : {}),
+      ...headers,
     },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
@@ -219,7 +220,7 @@ test('backup v3 round-trips every dosing field and dose_log through restore', as
   assert.ok(backup.supplements.find(s => s.id === supp.id).take_with_food);
   assert.ok(backup.dose_log.some(d => d.regimen_id === reg.id && d.status === 'taken'), 'backup includes dose_log');
 
-  const res = await call('POST', '/restore', { cookie, body: backup });
+  const res = await call('POST', '/restore', { cookie, body: backup, headers: { 'X-Confirm-Password': PASSWORD } });
   assert.equal(res.status, 200, res.text);
   assert.deepEqual(await phasesOf(cookie, reg), before);
   const restored = (await call('GET', '/supplements', { cookie })).json.find(s => s.id === supp.id);
@@ -240,7 +241,8 @@ test('a version-1 (flat dosage) backup restores into dose_morning; unknown versi
     phases: backup.phases.map(p => ({ id: p.id, regimen_id: p.regimen_id, dosage: '3', duration_days: p.duration_days, days_of_week: p.days_of_week, indefinite: p.indefinite, sequence_order: p.sequence_order })),
     template_phases: [],
   };
-  const res = await call('POST', '/restore', { cookie, body: v1 });
+  const confirmHeaders = { 'X-Confirm-Password': PASSWORD };
+  const res = await call('POST', '/restore', { cookie, body: v1, headers: confirmHeaders });
   assert.equal(res.status, 200, res.text);
   const migrated = await phasesOf(cookie, reg);
   assert.ok(migrated.length > 0);
@@ -249,13 +251,13 @@ test('a version-1 (flat dosage) backup restores into dose_morning; unknown versi
   const counts = async () => (await call('GET', '/supplements', { cookie })).json.length;
   const n = await counts();
   for (const bad of [{ ...backup, version: 4 }, { ...backup, version: 0 }, { version: 2 }]) {
-    assert.equal((await call('POST', '/restore', { cookie, body: bad })).status, 400, JSON.stringify(bad).slice(0, 40));
+    assert.equal((await call('POST', '/restore', { cookie, body: bad, headers: confirmHeaders })).status, 400, JSON.stringify(bad).slice(0, 40));
   }
   assert.equal(await counts(), n, 'refused restores must not delete anything');
 
   const noVersion = { ...v1 };
   delete noVersion.version;
-  assert.equal((await call('POST', '/restore', { cookie, body: noVersion })).status, 200, 'files without a version still restore');
+  assert.equal((await call('POST', '/restore', { cookie, body: noVersion, headers: confirmHeaders })).status, 200, 'files without a version still restore');
 });
 
 test('the old per-regimen reminder route is gone and the test push works without subscriptions', async () => {

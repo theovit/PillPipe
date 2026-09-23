@@ -254,8 +254,30 @@ router.post('/auth/logout-all', w(async (req, res) => {
   res.json({ authenticated: false });
 }));
 
+// Re-auth gate for destructive routes (DELETE /data, POST /restore, POST /drive/restore/:fileId):
+// require the current password in an X-Confirm-Password header (a header, not the body, so it
+// never has to share a shape with /restore's body — that's the backup file itself). Shares the
+// login flow's concurrency cap (scrypt is expensive) but skips the global failed-login slowdown —
+// a signed-in owner mistyping isn't the public-guessing-attack surface /auth/login is.
+async function requireCurrentPassword(req, res, next) {
+  const password = req.get('x-confirm-password');
+  if (typeof password !== 'string' || !password || password.length > 256) {
+    return res.status(400).json({ error: 'X-Confirm-Password header is required for this action' });
+  }
+  if (activeVerifications >= MAX_CONCURRENT_VERIFY) return tooMany(req, res);
+  activeVerifications++;
+  let ok;
+  try {
+    ok = await verifyPassword(password, PARSED_HASH);
+  } finally {
+    activeVerifications--;
+  }
+  if (!ok) return res.status(403).json({ error: 'Incorrect password' });
+  next();
+}
+
 module.exports = {
-  apiLimiter, csrf, gate, router,
+  apiLimiter, csrf, gate, router, requireCurrentPassword,
   init, purgeExpired, issueOAuthState, consumeOAuthState,
   OPEN, COOKIE_NAME,
 };
