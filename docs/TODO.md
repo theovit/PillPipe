@@ -4,17 +4,30 @@
 - [ ] Web app cleanup and hardening — get the web app clean, correct and safe to reach from the internet, *then* resume the Android port
 
 ## Blockers before exposing the web app to the internet
-**Paused until the app has been tested (decided 2026-09-19).** Remote access stays on Tailscale for now; nothing here is urgent while the app is not internet-facing. Login, CSRF, rate limits and the OAuth `state` check are built on branch `auth` (see Authentication below). If/when the app is exposed, the plan is to put it behind the existing nginx proxy on the Unraid server (proxy 10.0.0.4, Unraid host 10.0.0.25) instead of a Cloudflare Tunnel, so the production-serving/HTTPS items below get adapted to that proxy. Do not expose the app until production serving, HTTPS and the snapshot-before-wipe safeguard are done.
-- [ ] **Authentication** — built on branch `auth` (server + sign-in screen; 21 API tests + a 19-step Edge browser run pass) but **not merged or deployed**. Before running the dev stack you must add `APP_PASSWORD_HASH` to `.env` (see `docs/MEMORY.md`). Exposure to the internet still needs the production stack + HTTPS below.
+**Deadline: Tuesday 2026-09-29** (set 2026-09-23). Deployment target: behind the existing nginx
+proxy on the Unraid server (proxy 10.0.0.4, Unraid host 10.0.0.25), not a Cloudflare Tunnel, so
+the production-serving/HTTPS items below get adapted to that proxy. Single-user auth only for
+this milestone — multi-user login is separately scoped under Long-term. Do not expose the app
+until production serving, HTTPS and the snapshot-before-wipe safeguard are done.
+
+**Corrected 2026-09-23** — this list had drifted from the actual code: Authentication was marked
+not-merged (false: it's `server/auth.js`, merged into `meal-time` at 8accd86, and live — confirmed
+by an actual login) and the "no automated tests" note for auth was stale (`server/test/auth.test.js`
+already covers it extensively). Both fixed below; re-verify against the code before trusting this
+list again next time, don't just take it at face value.
+
+- [x] **Authentication** — password login, DB-backed sessions, CSRF, rate limits, OAuth `state`
+  check, hardening headers. Merged into `meal-time`, live in the dev stack. `APP_PASSWORD_HASH`
+  must be in `.env` (see `docs/MEMORY.md`). `server/test/auth.test.js` covers it.
 - [ ] **Production serving** — Docker currently runs the Vite dev server (`npm run dev -- --host`, `allowedHosts: true`) and nodemon with source bind-mounts. Build the client (`vite build`) and serve static files (Express or nginx/Caddy); run the backend with `node`; add a production compose file without bind mounts.
-- [ ] **HTTPS/TLS** — terminate at a reverse proxy (Caddy/nginx) or tunnel; HSTS; `trust proxy`; Secure cookies. Service workers and Web Push require HTTPS anyway.
-- [ ] Security headers — server-side nosniff/no-store/`x-powered-by` off, rate limits and body limits are done (M1b). Remaining: nginx CSP and headers (M3), self-hosted fonts, restrict Vite `allowedHosts` in dev.
+- [ ] **HTTPS/TLS** — terminate at a reverse proxy (Caddy/nginx) or tunnel; HSTS; `trust proxy`; Secure cookies (`COOKIE_SECURE`). Service workers and Web Push require HTTPS anyway. Deployment-side (Unraid nginx) as much as app-side.
+- [ ] Security headers — server-side nosniff/no-store/`x-powered-by` off, rate limits and body limits are done. Remaining: CSP (nginx or in-app), self-hosted fonts (currently Google Fonts CDN in `client/index.html`), restrict Vite `allowedHosts` in dev.
 - [ ] Input validation — none today. Validate/coerce every request body (e.g. zod), return 400s, and confirm the error handler doesn't leak stack traces or DB errors. (SQL is already parameterized — no string interpolation found in `server/index.js`.)
-- [ ] Protect destructive endpoints — require re-auth/confirmation for `DELETE /data`, `/restore`, `/drive/restore`; take an automatic backup before any restore.
-- [ ] Secrets — Google OAuth tokens sit in plaintext in `google_tokens`: encrypt at rest or document the risk. Use strong unique DB password/VAPID keys; keep them out of images and logs.
-- [ ] Reproducible, auditable installs — `server/package-lock.json` is now tracked (M1b). Remaining: use `npm ci` in both Dockerfiles and make `npm audit` part of every release.
-- [ ] Network exposure — publish only the reverse proxy (443). Keep the backend (3000) and Postgres (5432) on the internal Docker network (true today); firewall the host.
-- [ ] Automated tests for auth and the destructive routes before going live (DECISIONS "No automated tests" needs revisiting for these).
+- [ ] Protect destructive endpoints — `DELETE /data`, `POST /restore`, `POST /drive/restore/:fileId` have no re-auth/confirmation step today; take an automatic backup before any restore.
+- [ ] Secrets — Google OAuth tokens sit in plaintext in `google_tokens`: encrypt at rest or document the risk. DB password and VAPID keys are now strong/unique in this dev `.env` (2026-09-23) — production deployment needs its own.
+- [ ] Reproducible, auditable installs — `server/package-lock.json` is tracked. Remaining: use `npm ci` in both Dockerfiles (currently `npm install`) and make `npm audit` part of every release.
+- [x] Network exposure — backend (3000) and Postgres (5432) already internal-only in `docker-compose.yml` (not published to the host). Publishing only the reverse proxy and firewalling the host is a deployment step on the Unraid side, not a code change.
+- [ ] Automated tests for the destructive-route protections above, once built (auth itself is already covered).
 
 ## High
 - [ ] **Verify batched push on a real device.** Web Push can't run in the test stack (no VAPID keys or real push service), so the reminder logic is covered by unit tests only (`dueNotifications`, payload, the service worker in a sandbox). Manually: enable notifications, set a dose time to now+2 min, confirm ONE notification listing everything due; tap Taken with the app closed and check `dose_log`; confirm low-stock and test pushes have no buttons.
