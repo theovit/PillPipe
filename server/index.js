@@ -12,6 +12,8 @@ const { buildBackup, isValidBackup, restoreBackup } = require('./backup');
 const { nowInTz } = require('./tz');
 const { encryptToken, decryptToken } = require('./tokenCrypto');
 const { normalizeSchedulePrefs, dueNotifications, sendBatch, createDeduper } = require('./notifications');
+const { validate, supplementBody, supplementInventoryPatchBody, sessionCreateBody, sessionUpdateBody,
+  templateNameBody, addRegimenBody, regimenPatchBody, doseLogBody, prefsBody } = require('./validation');
 
 // ── Google OAuth2 setup ───────────────────────────────────────────────────────
 const oauth2Client = new google.auth.OAuth2(
@@ -142,7 +144,7 @@ app.get('/supplements', w(async (req, res) => {
   res.json(rows.map(s => ({ ...s, days_remaining: supplementDaysRemaining(s.current_inventory, active.get(s.id) ?? []) })));
 }));
 
-app.post('/supplements', w(async (req, res) => {
+app.post('/supplements', validate(supplementBody), w(async (req, res) => {
   const { name, brand, pills_per_bottle, price, type, current_inventory, unit, drops_per_ml, reorder_threshold, reorder_threshold_mode, take_with_food } = req.body;
   const { rows } = await pool.query(
     `INSERT INTO supplements (name, brand, pills_per_bottle, price, type, current_inventory, unit, drops_per_ml, reorder_threshold, reorder_threshold_mode, take_with_food)
@@ -152,7 +154,7 @@ app.post('/supplements', w(async (req, res) => {
   res.status(201).json(rows[0]);
 }));
 
-app.put('/supplements/:id', w(async (req, res) => {
+app.put('/supplements/:id', validate(supplementBody), w(async (req, res) => {
   const { name, brand, pills_per_bottle, price, type, current_inventory, unit, drops_per_ml, reorder_threshold, reorder_threshold_mode, take_with_food } = req.body;
   // take_with_food is only changed when sent, so an older client's edit can't silently reset it.
   const { rows } = await pool.query(
@@ -166,7 +168,7 @@ app.put('/supplements/:id', w(async (req, res) => {
   res.json(rows[0]);
 }));
 
-app.patch('/supplements/:id', w(async (req, res) => {
+app.patch('/supplements/:id', validate(supplementInventoryPatchBody), w(async (req, res) => {
   const { current_inventory } = req.body;
   const { rows } = await pool.query(
     `UPDATE supplements SET current_inventory=$1 WHERE id=$2 RETURNING *`,
@@ -187,7 +189,7 @@ app.get('/sessions', w(async (req, res) => {
   res.json(rows);
 }));
 
-app.post('/sessions', w(async (req, res) => {
+app.post('/sessions', validate(sessionCreateBody), w(async (req, res) => {
   const { start_date, target_date, notes, template_id } = req.body;
   const { rows } = await pool.query(
     `INSERT INTO sessions (start_date, target_date, notes) VALUES ($1,$2,$3) RETURNING *`,
@@ -214,7 +216,7 @@ app.post('/sessions', w(async (req, res) => {
   res.status(201).json(session);
 }));
 
-app.put('/sessions/:id', w(async (req, res) => {
+app.put('/sessions/:id', validate(sessionUpdateBody), w(async (req, res) => {
   const { start_date, target_date, notes } = req.body;
   const { rows } = await pool.query(
     `UPDATE sessions SET start_date=$1, target_date=$2, notes=$3 WHERE id=$4 RETURNING *`,
@@ -224,7 +226,7 @@ app.put('/sessions/:id', w(async (req, res) => {
   res.json(rows[0]);
 }));
 
-app.post('/sessions/:id/copy', w(async (req, res) => {
+app.post('/sessions/:id/copy', validate(sessionUpdateBody), w(async (req, res) => {
   const { start_date, target_date, notes } = req.body;
   const { rows: [newSession] } = await pool.query(
     `INSERT INTO sessions (start_date, target_date, notes) VALUES ($1,$2,$3) RETURNING *`,
@@ -259,7 +261,7 @@ app.get('/templates', w(async (req, res) => {
   res.json(rows);
 }));
 
-app.post('/sessions/:id/save-as-template', w(async (req, res) => {
+app.post('/sessions/:id/save-as-template', validate(templateNameBody), w(async (req, res) => {
   const { name } = req.body;
   if (!name?.trim()) return res.status(400).json({ error: 'Name is required' });
   const { rows: [tmpl] } = await pool.query(
@@ -300,7 +302,7 @@ app.get('/sessions/:sessionId/regimens', w(async (req, res) => {
   res.json(rows);
 }));
 
-app.post('/sessions/:sessionId/regimens', w(async (req, res) => {
+app.post('/sessions/:sessionId/regimens', validate(addRegimenBody), w(async (req, res) => {
   const { supplement_id } = req.body;
   const { rows } = await pool.query(
     `INSERT INTO regimens (session_id, supplement_id) VALUES ($1,$2) RETURNING *`,
@@ -309,7 +311,7 @@ app.post('/sessions/:sessionId/regimens', w(async (req, res) => {
   res.status(201).json(rows[0]);
 }));
 
-app.patch('/regimens/:id', w(async (req, res) => {
+app.patch('/regimens/:id', validate(regimenPatchBody), w(async (req, res) => {
   // Partial update: only the fields present in the body change (notes used to be wiped by any PATCH).
   const { notes, as_needed } = req.body;
   const { rows } = await pool.query(
@@ -432,7 +434,7 @@ app.get('/settings/prefs', w(async (req, res) => {
   res.json(rows[0]?.prefs ?? {});
 }));
 
-app.put('/settings/prefs', w(async (req, res) => {
+app.put('/settings/prefs', validate(prefsBody), w(async (req, res) => {
   const prefs = req.body;
   await pool.query(`
     INSERT INTO user_settings (singleton, prefs, updated_at)
@@ -579,7 +581,7 @@ app.post('/push/test', w(async (req, res) => {
 
 // ── Reminder times ────────────────────────────────────────────────────────────
 // ── Dose Log ──────────────────────────────────────────────────────────────────
-app.post('/dose-log', w(async (req, res) => {
+app.post('/dose-log', validate(doseLogBody), w(async (req, res) => {
   const { regimen_id, date, status } = req.body; // status: 'taken' | 'skipped'
   const { rows } = await pool.query(
     `INSERT INTO dose_log (regimen_id, date, status)

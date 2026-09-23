@@ -39,6 +39,8 @@ services:
       GOOGLE_CLIENT_ID: test-client-id
       GOOGLE_CLIENT_SECRET: test-client-secret
       GOOGLE_REDIRECT_URI: http://127.0.0.1:13000/auth/google/callback
+      # Fixed (not secret — throwaway stack, tmpfs DB) so GOOGLE_CLIENT_ID's fail-closed check passes.
+      TOKEN_ENCRYPTION_KEY: -Q2wfXJrqmeA2MjTUIxlbc55umfFGl9sGm4MXHQ-r38
     ports:
       - "127.0.0.1:13000:3000"
     depends_on:
