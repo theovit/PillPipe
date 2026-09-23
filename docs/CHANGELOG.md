@@ -26,8 +26,12 @@
 - Android app: preferences now stored in AsyncStorage with a synchronous cache
 - Android app: CSV export and JSON backup/restore use `expo-file-system/next`
 - Android app: font sizes are rem-based so the font size preference scales all text
+### Added
+- Web: production serving — `Dockerfile.prod` + `docker-compose.prod.yml` build the client and serve it from the API (no more Vite dev server / bind mounts in production); adds a Content-Security-Policy on those responses
+
 ### Fixed
 - Web: push notifications now re-sync with the server on every load instead of trusting the browser's own memory of being subscribed — a DB restore/wipe used to leave Settings saying "Enabled" while delivery was silently broken
+- Web: fonts are self-hosted (`@fontsource`) instead of loaded from the Google Fonts CDN; Vite's dev server no longer accepts an arbitrary Host header
 - Web: `DELETE /data`, `POST /restore` and `POST /drive/restore/:fileId` now require re-entering your password (a wrong one deletes nothing) and take an automatic snapshot before wiping anything
 - Web: every request body that wasn't already validated (phases, backup/restore and push-subscribe already were) now gets a real check — bad input is a clean 400, not a raw DB error
 - Web: Google OAuth tokens are now encrypted at rest (previously plaintext in the database)
