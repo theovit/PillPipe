@@ -10,6 +10,7 @@ const auth = require('./auth');
 const { validatePhaseBody, normalizePhaseRow, supplementDaysRemaining, activePhase, dayIndex } = require('./dosing');
 const { buildBackup, isValidBackup, restoreBackup } = require('./backup');
 const { nowInTz } = require('./tz');
+const { encryptToken, decryptToken } = require('./tokenCrypto');
 const { normalizeSchedulePrefs, dueNotifications, sendBatch, createDeduper } = require('./notifications');
 
 // ── Google OAuth2 setup ───────────────────────────────────────────────────────
@@ -24,12 +25,12 @@ oauth2Client.on('tokens', async (tokens) => {
     if (tokens.refresh_token) {
       await pool.query(
         'UPDATE google_tokens SET access_token=$1, refresh_token=$2, expiry_date=$3, updated_at=NOW()',
-        [tokens.access_token, tokens.refresh_token, tokens.expiry_date]
+        [encryptToken(tokens.access_token), encryptToken(tokens.refresh_token), tokens.expiry_date]
       );
     } else {
       await pool.query(
         'UPDATE google_tokens SET access_token=$1, expiry_date=$2, updated_at=NOW()',
-        [tokens.access_token, tokens.expiry_date]
+        [encryptToken(tokens.access_token), tokens.expiry_date]
       );
     }
   } catch (e) { console.error('Token refresh persist error:', e.message); }
@@ -471,7 +472,7 @@ app.get('/auth/google/callback', w(async (req, res) => {
     await pool.query('DELETE FROM google_tokens');
     await pool.query(
       'INSERT INTO google_tokens (access_token, refresh_token, expiry_date, email) VALUES ($1,$2,$3,$4)',
-      [tokens.access_token, tokens.refresh_token, tokens.expiry_date, userInfo.email]
+      [encryptToken(tokens.access_token), encryptToken(tokens.refresh_token), tokens.expiry_date, userInfo.email]
     );
   } catch (e) {
     console.error('Google OAuth callback failed:', e.message);
@@ -736,8 +737,8 @@ async function getDriveClient() {
   if (!rows.length) return null;
   const tok = rows[0];
   oauth2Client.setCredentials({
-    access_token: tok.access_token,
-    refresh_token: tok.refresh_token,
+    access_token: decryptToken(tok.access_token),
+    refresh_token: decryptToken(tok.refresh_token),
     expiry_date: tok.expiry_date ? Number(tok.expiry_date) : null,
   });
   return google.drive({ version: 'v3', auth: oauth2Client });
@@ -914,9 +915,17 @@ cron.schedule('* * * * *', () => runDoseNotifications().catch(e => console.error
 // ── Daily expired-session purge (runs at 3am) ─────────────────────────────────
 cron.schedule('0 3 * * *', () => auth.purgeExpired().catch(e => console.error('Session purge error:', e.message)));
 
+// Google Drive is opt-in (GOOGLE_CLIENT_ID gates it elsewhere), but if it's configured the tokens
+// we'll store for it must be encryptable — fail at boot, not on the first OAuth callback.
+async function requireTokenEncryptionKeyIfGoogleConfigured() {
+  if (!process.env.GOOGLE_CLIENT_ID) return;
+  encryptToken('startup-check'); // throws with a clear message if TOKEN_ENCRYPTION_KEY is missing/invalid
+}
+
 const PORT = process.env.PORT || 3000;
 // Do not listen until the auth schema exists and the password hash is valid (fail closed).
 auth.init()
+  .then(requireTokenEncryptionKeyIfGoogleConfigured)
   .then(migrate)
   .then(() => app.listen(PORT, () => console.log(`PillPipe API v${version} running on port ${PORT}`)))
   .catch(e => { console.error(e.message); process.exit(1); });
