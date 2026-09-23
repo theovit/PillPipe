@@ -27,6 +27,10 @@
 - Android app: CSV export and JSON backup/restore use `expo-file-system/next`
 - Android app: font sizes are rem-based so the font size preference scales all text
 ### Fixed
+- Web: push notifications now re-sync with the server on every load instead of trusting the browser's own memory of being subscribed — a DB restore/wipe used to leave Settings saying "Enabled" while delivery was silently broken
+- Web: `DELETE /data`, `POST /restore` and `POST /drive/restore/:fileId` now require re-entering your password (a wrong one deletes nothing) and take an automatic snapshot before wiping anything
+- Web: every request body that wasn't already validated (phases, backup/restore and push-subscribe already were) now gets a real check — bad input is a clean 400, not a raw DB error
+- Web: Google OAuth tokens are now encrypted at rest (previously plaintext in the database)
 - Web: shortfall math (`server/calculator.js`) now takes "today" from the owner's timezone instead of the server's own UTC clock, so days-elapsed/on-hand no longer drift by a day near midnight for owners outside UTC
 - Web: backup/restore (v3) now includes `dose_log`, so a restore no longer wipes adherence history
 - Web: session copy now carries the regimen's notes field, not just its phases
