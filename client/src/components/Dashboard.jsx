@@ -120,7 +120,15 @@ export default function Dashboard() {
       const reg = await navigator.serviceWorker.register('/sw.js');
       setSwReg(reg);
       const existing = await reg.pushManager.getSubscription();
-      if (existing) { setPushSub(existing); setNotifStatus('granted'); }
+      if (existing) {
+        // The browser remembers a subscription indefinitely, independent of the server's own
+        // copy — a DB restore/wipe (or any admin cleanup) can drop the row while the browser
+        // stays convinced it's subscribed. Re-sync on every load so "Enabled" stays true; the
+        // route is an idempotent upsert, so this is cheap even when nothing changed.
+        api.pushSubscribe(existing.toJSON()).catch(() => {});
+        setPushSub(existing);
+        setNotifStatus('granted');
+      }
       else if (Notification.permission === 'denied') setNotifStatus('denied');
       else setNotifStatus('idle');
     } catch { setNotifStatus('unsupported'); }
