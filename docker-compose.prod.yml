@@ -1,0 +1,50 @@
+# Production stack: one app container (built client served as static files + the API, from
+# Dockerfile.prod) plus Postgres. No bind mounts, no dev tooling (nodemon/Vite) — see
+# docs/TODO.md "Production serving". Needs its own .env with PRODUCTION values, not the dev ones:
+# a fresh DB password, VAPID keys, TOKEN_ENCRYPTION_KEY and APP_PASSWORD_HASH (see docs/MEMORY.md
+# and server/scripts/hash-password.js). NODE_ENV=production below also flips COOKIE_SECURE on by
+# default (server/auth.js) — the app must be reached over HTTPS in front of this (the Unraid nginx
+# proxy / Cloudflare Tunnel — see docs/DECISIONS.md's 2026-09-23 entry), or logins will fail to
+# set a cookie at all.
+#
+#   docker compose -f docker-compose.prod.yml up -d --build
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    env_file: .env
+    environment:
+      DATABASE_URL: postgres://${DB_USER}:${DB_PASSWORD}@db:5432/${DB_NAME}
+      NODE_ENV: production
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  db:
+    image: postgres:13
+    env_file: .env
+    environment:
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
+    volumes:
+      - postgres_data_prod:/var/lib/postgresql/data
+      - ./db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  postgres_data_prod:

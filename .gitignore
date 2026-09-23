@@ -1,6 +1,7 @@
 .env
 .claude/
 server/node_modules/
+server/public/
 
 # Tooling
 .playwright-mcp/

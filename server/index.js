@@ -1,4 +1,6 @@
 const express = require('express');
+const fs = require('fs');
+const path = require('path');
 const cron = require('node-cron');
 const webpush = require('web-push');
 const { google } = require('googleapis');
@@ -51,11 +53,61 @@ const app = express();
 app.disable('x-powered-by');
 // One trusted proxy hop (nginx in production). Never `true`: that trusts a client-supplied XFF.
 app.set('trust proxy', 1);
+
+// In dev, Vite's own proxy strips the client's `/api` prefix before anything reaches this server
+// (see client/vite.config.js). In production this server serves the built client directly (no
+// separate proxy layer to do that), so it has to strip the same prefix itself — the route table
+// below is unprefixed either way. A no-op in dev, since nothing reaching this server there ever
+// has the prefix.
 app.use((req, res, next) => {
-  res.set('X-Content-Type-Options', 'nosniff');
-  res.set('Cache-Control', 'no-store');
+  if (req.url === '/api' || req.url.startsWith('/api/')) req.url = req.url.slice(4) || '/';
   next();
 });
+
+const PUBLIC_DIR = path.join(__dirname, 'public');
+const SERVE_CLIENT = fs.existsSync(PUBLIC_DIR);
+
+// Must run BEFORE express.static below: it ends matched requests without calling next(), so any
+// header set after it never reaches a served static file.
+app.use((req, res, next) => {
+  res.set('X-Content-Type-Options', 'nosniff');
+  res.set('Cache-Control', 'no-store'); // static's own middleware overrides this per-file with a cacheable value (hashed filenames)
+  if (SERVE_CLIENT) {
+    // 'unsafe-inline' on style-src only: a couple of components use inline style={{}} attributes;
+    // the production build has no inline <script>, so script-src stays strict. No external
+    // origins anywhere — fonts are self-hosted (see the 2026-09-23 CHANGELOG entry) and every API
+    // call is same-origin.
+    res.set('Content-Security-Policy', [
+      "default-src 'self'",
+      "script-src 'self'",
+      "style-src 'self' 'unsafe-inline'",
+      "font-src 'self'",
+      "img-src 'self' data:",
+      "connect-src 'self'",
+      "object-src 'none'",
+      "base-uri 'self'",
+      "form-action 'self'",
+      "frame-ancestors 'none'",
+    ].join('; '));
+  }
+  next();
+});
+
+if (SERVE_CLIENT) {
+  // The built client (server/public, copied from client/dist in the production Dockerfile) is
+  // served ahead of the auth gate below — it has to be, the login page's own JS/CSS can't
+  // require a session to load. Nothing sensitive lives here, only the compiled SPA.
+  app.use(express.static(PUBLIC_DIR, {
+    setHeaders: (res, filePath) => {
+      // Vite hashes every filename under assets/ on content change, so those are safe to cache
+      // forever. Everything else (index.html, favicon.svg, ...) keeps the no-store default set
+      // above, so a new deploy's updated asset references are always picked up.
+      if (path.relative(PUBLIC_DIR, filePath).startsWith('assets' + path.sep)) {
+        res.set('Cache-Control', 'public, max-age=31536000, immutable');
+      }
+    },
+  }));
+}
 // Order matters: flood limit -> CSRF -> auth gate -> everything else. Keep the gate before any
 // body parsing or route so every route needs a session unless allowlisted in auth.js.
 app.use(auth.apiLimiter);

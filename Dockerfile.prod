@@ -1,0 +1,22 @@
+# Production image: builds the client, then copies the built static files into the server image.
+# Build context is the repo root (see docker-compose.prod.yml) so this stage can reach both
+# client/ and server/ — each still has its own dev Dockerfile for docker-compose.yml.
+
+FROM node:20 AS client-build
+WORKDIR /app/client
+COPY client/package*.json ./
+RUN npm ci
+COPY client/ ./
+RUN npm run build
+
+FROM node:20
+WORKDIR /usr/src/app
+ENV NODE_ENV=production
+COPY server/package*.json ./
+RUN npm ci --omit=dev
+COPY server/ ./
+# server/index.js serves this directory directly when it exists (see PUBLIC_DIR/SERVE_CLIENT).
+COPY --from=client-build /app/client/dist ./public
+
+EXPOSE 3000
+CMD ["node", "index.js"]
