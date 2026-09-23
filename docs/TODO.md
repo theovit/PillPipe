@@ -4,11 +4,14 @@
 - [ ] Web app cleanup and hardening — get the web app clean, correct and safe to reach from the internet, *then* resume the Android port
 
 ## Blockers before exposing the web app to the internet
-**Deadline: Tuesday 2026-09-29** (set 2026-09-23). Deployment target: behind the existing nginx
-proxy on the Unraid server (proxy 10.0.0.4, Unraid host 10.0.0.25), not a Cloudflare Tunnel, so
-the production-serving/HTTPS items below get adapted to that proxy. Single-user auth only for
-this milestone — multi-user login is separately scoped under Long-term. Do not expose the app
-until production serving, HTTPS and the snapshot-before-wipe safeguard are done.
+**Deadline: Tuesday 2026-09-29** (set 2026-09-23). Path: `Internet → Cloudflare Tunnel → Nginx
+Proxy Manager (Unraid, pill.1044nma.com) → PillPipe`, all on the Unraid server (10.0.0.25) — see
+`docs/DECISIONS.md` 2026-09-23 entry (supersedes the earlier "nginx instead of tunnel" plan). The
+production stack itself needs to move from this Windows dev machine to Unraid. Single-user auth
+only for this milestone — multi-user login is separately scoped under Long-term. NPM currently
+points at the Windows dev stack and is set to local-only access (not public); do not flip it
+public until production serving, HTTPS, input validation, destructive-endpoint protection and the
+snapshot-before-wipe safeguard are done.
 
 **Corrected 2026-09-23** — this list had drifted from the actual code: Authentication was marked
 not-merged (false: it's `server/auth.js`, merged into `meal-time` at 8accd86, and live — confirmed

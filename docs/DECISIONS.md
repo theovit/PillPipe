@@ -7,12 +7,19 @@
 **Alternatives considered:** Staying Tailscale-only (still valid as defense in depth); an identity-aware proxy in front (Cloudflare Access / Tailscale Funnel) vs. built-in login — to be decided when auth is implemented.
 **Consequences:** Multi-user/public sign-up is still out of scope. Every route needs an auth check; the dev-server Docker setup can no longer be the deployed form.
 
-## Internet exposure deferred; Tailscale stays; existing nginx proxy replaces the Cloudflare Tunnel plan
+## Internet exposure deferred; Tailscale stays; existing nginx proxy replaces the Cloudflare Tunnel plan (superseded 2026-09-23)
 **Date:** 2026-09-19
 **Decision:** Do not expose the web app to the internet until it has been tested. Remote access stays on Tailscale. When exposure happens, front it with the nginx proxy that already runs on the Unraid server (proxy 10.0.0.4, host 10.0.0.25) rather than a Cloudflare Tunnel.
 **Why:** The app is still being tested with fake data, so hardening work beyond the login is not urgent; the owner already runs a reverse proxy and would rather reuse it than add a tunnel and a domain on Cloudflare.
 **Alternatives considered:** Cloudflare Tunnel (previous plan, see the 2026-09-19 authentication entry).
 **Consequences:** Production serving, TLS/headers and the destructive-endpoint safeguards (M3/M4 in `docs/TODO.md`) stay open but paused. Rate limiting keys on `req.ip`, so the proxy must overwrite `X-Forwarded-For` and the backend must be reachable only through it. The login itself stays useful behind Tailscale.
+
+## Internet exposure: back to Cloudflare Tunnel, routed through Nginx Proxy Manager on Unraid; deadline 2026-09-29
+**Date:** 2026-09-23
+**Decision:** Testing is done; the app goes internet-reachable by Tuesday 2026-09-29, single-user auth only. Reinstates the Cloudflare Tunnel plan from the original 2026-09-19 authentication entry, but routed through Nginx Proxy Manager (already running on the Unraid server, `pill.1044nma.com`) rather than a bare tunnel-to-app connection: `Internet → Cloudflare Tunnel → NPM → PillPipe`. The production stack itself will also move from the Windows dev machine to the Unraid server (always-on; the tunnel and NPM already live there).
+**Why:** The owner already runs a Cloudflare Tunnel container on Unraid for other services and NPM for TLS/host routing — reusing both is less new infrastructure than a bare nginx vhost, and NPM's per-host toggle between local-only and tunnel-routed access made it easy to test push notifications over HTTPS (required — Web Push is blocked on plain HTTP except localhost) before deciding to go public.
+**Alternatives considered:** Plain nginx proxy without the tunnel (the 2026-09-19 plan, superseded above) — dropped once NPM was already in place and the tunnel was the lower-effort path to HTTPS for testing.
+**Consequences:** Production serving, input validation, destructive-endpoint protection and secrets-at-rest (see `docs/TODO.md` Blockers) are no longer "paused" — they're due by the deadline. Deploying to Unraid needs its own compose project/ports that don't collide with the owner's other containers there. `trust proxy` hop count (currently 1 in `server/index.js`) needs re-checking against the real Tunnel→NPM→app path so `req.ip`-based rate limiting isn't spoofable via a forged `X-Forwarded-For` — verify during the production-serving work, don't assume.
 
 ## Web authentication: built-in single-user login, exposed via Cloudflare Tunnel
 **Date:** 2026-09-19
