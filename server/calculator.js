@@ -1,5 +1,10 @@
 const { dailyDose, round6 } = require('./dosing');
 
+function ymdToLocalMidnight(ymd) {
+  const [y, m, d] = ymd.split('-').map(Number);
+  return new Date(y, m - 1, d);
+}
+
 /**
  * Shortfall Engine
  *
@@ -10,19 +15,24 @@ const { dailyDose, round6 } = require('./dosing');
  * @param {string} params.targetDate      - ISO date string (next appointment)
  * @param {number} params.pillsPerBottle  - pills per purchasable unit
  * @param {number} params.pricePerBottle  - cost per bottle
+ * @param {string} [params.today]         - the owner's wall-clock date ('YYYY-MM-DD', from nowInTz);
+ *                                          defaults to the server's own clock if omitted
  */
-function calculate({ phases, inventory, startDate, targetDate, pillsPerBottle, pricePerBottle }) {
+function calculate({ phases, inventory, startDate, targetDate, pillsPerBottle, pricePerBottle, today }) {
   const start = new Date(startDate);
   const target = new Date(targetDate);
   const totalDays = Math.ceil((target - start) / (1000 * 60 * 60 * 24));
 
   const sorted = [...phases].sort((a, b) => a.sequence_order - b.sequence_order);
 
-  // How many calendar days have elapsed since session start (capped to session window)
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  // How many calendar days have elapsed since session start (capped to session window). `today`
+  // must land on the same local-midnight convention pg hands us for start/target, not
+  // `new Date('YYYY-MM-DD')` (that parses as UTC midnight and would drift by a day near the
+  // boundary) — see calculator.test.js's note on this.
+  const todayDate = today ? ymdToLocalMidnight(today) : new Date();
+  todayDate.setHours(0, 0, 0, 0);
   const daysElapsed = Math.min(
-    Math.max(0, Math.floor((today - start) / (1000 * 60 * 60 * 24))),
+    Math.max(0, Math.floor((todayDate - start) / (1000 * 60 * 60 * 24))),
     totalDays
   );
 

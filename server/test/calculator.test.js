@@ -74,3 +74,20 @@ test('all-or-nothing daily coverage: a day is covered only if the whole day fits
   assert.equal(r.daysShort, 8);
   assert.equal(r.runOutDay, 2);
 });
+
+test('daysElapsed follows the caller-supplied `today`, not the server clock', () => {
+  // Regression for calculator.js computing "today" from the server's own clock (UTC in Docker)
+  // instead of the owner's timezone. A caller now passes today as 'YYYY-MM-DD' (from nowInTz);
+  // it must land on the same local-midnight convention as start/target, one day apart per string.
+  const p = phase({ dose_morning: 1 });
+  const r0 = run([p], 100, 30, { today: '2099-01-05' }); // = START, 0 days elapsed
+  assert.equal(r0.daysElapsed, 0);
+  assert.equal(r0.pillsConsumedToDate, 0);
+
+  const r5 = run([p], 100, 30, { today: '2099-01-10' }); // 5 days later
+  assert.equal(r5.daysElapsed, 5);
+  assert.equal(r5.pillsConsumedToDate, 5);
+
+  const rClamped = run([p], 100, 30, { today: '2199-01-01' }); // long after target: clamps to totalDays
+  assert.equal(rClamped.daysElapsed, 30);
+});

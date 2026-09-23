@@ -381,6 +381,7 @@ app.get('/sessions/:sessionId/calculate', w(async (req, res) => {
      WHERE r.session_id=$1 AND r.as_needed = FALSE`,
     [req.params.sessionId]
   );
+  const today = nowInTz(await userTimezone()).date;
 
   const results = await Promise.all(regimens.map(async (regimen) => {
     const { rows: phases } = await pool.query(
@@ -400,6 +401,7 @@ app.get('/sessions/:sessionId/calculate', w(async (req, res) => {
       targetDate: session.target_date,
       pillsPerBottle,
       pricePerBottle: regimen.price,
+      today,
     });
     return { regimen_id: regimen.id, unit, drops_per_ml, ...calc };
   }));

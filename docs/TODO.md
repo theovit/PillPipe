@@ -22,7 +22,6 @@
   - [ ] Per-slot dose logging — `dose_log` is one row per regimen per day, so a notification tap only logs regimens with a single dose that day
   - [ ] Low-stock cron (`0 8 * * *`) still runs in server time (UTC); should use the owner's timezone (the 404 push-subscription cleanup for this sender was fixed 2026-09-22)
   - [ ] `/pill-icon.png` (notification icon) doesn't exist in `client/public`
-  - [ ] `server/calculator.js` still computes days elapsed from the server's local "today"
   - [ ] Root `README.md` / `INSTALL.md` / `FEATURES.md` still describe an older design in places — reconcile with `docs/`
 - [ ] Find what writes `// @atlas-entrypoint: …` first-line comments into source files (removed 2026-09-19). Investigated 2026-09-22: traced to ordinary Claude-Sonnet-4.6-co-authored commits on 2026-03-23/24, but no current hook/plugin/setting references "atlas" — likely a now-uninstalled tool. See `docs/MEMORY.md`. Watch for recurrence; can't fully close without more evidence.
 
