@@ -95,6 +95,23 @@ App is currently in **alpha** — items marked [x] are scaffolded but may not be
 - [ ] Google Drive backup (web-only — N/A for offline app)
 - [x] App version display
 
+## Sync / Remote Server Mode (long-term, not started — noted 2026-09-24)
+
+App is offline-first SQLite only today (see `app/CLAUDE.md` "What This App Does NOT Have" —
+no network calls). This would be a real architecture change, not a small feature. Also needs
+the web app's multi-user login first if the point is multiple people sharing one server
+(`docs/TODO.md` Long-term) — a URL field alone doesn't give each person their own account.
+
+- [ ] Settings: optional field for a hosted PillPipe server's public address (e.g. the Unraid/tunnel URL)
+- [ ] Initial connect, direction depends on which side already has data:
+  - [ ] **Push** — app already has local data, user then stands up a server: push local → server as the seed
+  - [ ] **Pull** — server already has data (they were using the web app first), user then installs the app: pull server → local as the seed
+- [ ] After the initial connect, user picks the ongoing mode:
+  - [ ] **Pull once, then local** — app becomes the source of truth from then on; server isn't touched again unless the user reconnects manually
+  - [ ] **Keep syncing** — server stays live going forward (two-way), effectively an offsite backup as well as a shared store
+- [ ] Two-way sync needs a conflict resolution rule (same regimen edited on both app and web before a sync runs — last-write-wins? merge? reject and ask?) — not designed yet
+- [ ] Network-loss handling — what the app does with local edits made while the server's unreachable, given it's built offline-first
+
 ## Found while porting meal-time dosing to the web app (2026-09-19)
 
 - [ ] Parity: `take_with_food` on supplements and `as_needed` on regimens (web has both; label-only semantics — see `docs/DECISIONS.md`)
