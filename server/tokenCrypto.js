@@ -37,11 +37,21 @@ function encryptToken(plaintext) {
   return [iv, authTag, ciphertext].map(b => b.toString('base64url')).join(':');
 }
 
+const B64URL_RE = /^[A-Za-z0-9_-]+$/;
+
 function decryptToken(stored) {
   if (stored === null || stored === undefined) return null;
+  const str = String(stored);
+  const parts = str.split(':');
+  // A real Google token never has this exact shape (3 base64url segments), so this only matches
+  // our own ciphertext format — anything else is a token written before encryption was added
+  // (upgrading an existing install). Returned as-is rather than thrown; it self-heals the next time
+  // oauth2Client's 'tokens' listener fires (any refresh re-encrypts and saves it).
+  if (parts.length !== 3 || !parts.every(p => B64URL_RE.test(p))) {
+    console.warn('google_tokens: found a pre-encryption plaintext token; will re-encrypt on next refresh.');
+    return str;
+  }
   const key = loadKey();
-  const parts = String(stored).split(':');
-  if (parts.length !== 3) throw new Error('Malformed encrypted token (expected iv:authTag:ciphertext).');
   const [iv, authTag, ciphertext] = parts.map(p => Buffer.from(p, 'base64url'));
   const decipher = crypto.createDecipheriv(ALGO, key, iv);
   decipher.setAuthTag(authTag);
