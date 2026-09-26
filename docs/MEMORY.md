@@ -105,3 +105,12 @@ Revisit this the moment real data goes in (i.e. before the app is used for real 
 
 ## The service worker can't be exercised with a real push in tests
 `server/test/sw.test.js` loads `client/public/sw.js` into a Node `vm` sandbox and drives its `push` / `notificationclick` handlers with stubs. Real delivery (VAPID, the browser's push service, action buttons — unsupported on iOS Safari and desktop Firefox) still needs a manual check on a device.
+
+## Prod on Unraid: first boot, the app races Postgres init
+On a fresh volume the `db` healthcheck (`pg_isready`, over the Unix socket) passes while the
+entrypoint's *temporary* init server is up, so `app` starts and then gets ECONNREFUSED when that
+server stops for the real start. `restart: unless-stopped` recovers it within a minute. Unraid's
+disk is slow enough (initdb ~1–2 min) that `up --wait` can report db unhealthy on first run; just
+wait and re-run `up -d`. Unraid has no `docker compose` unless the Compose Manager plugin is installed.
+The stack shows in its UI via an "indirect" entry: `/boot/config/plugins/compose.manager/projects/pillpipe/`
+(`name`=pillpipe, `indirect`=the repo's `docker-compose.prod.yml`, `indirect_mode`=file).

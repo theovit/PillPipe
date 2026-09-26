@@ -7,7 +7,10 @@
 **Deadline: Tuesday 2026-09-29** (set 2026-09-23). Path: `Internet → Cloudflare Tunnel → Nginx
 Proxy Manager (Unraid, pill.1044nma.com) → PillPipe`, all on the Unraid server (10.0.0.25) — see
 `docs/DECISIONS.md` 2026-09-23 entry (supersedes the earlier "nginx instead of tunnel" plan). The
-production stack itself needs to move from this Windows dev machine to Unraid. Single-user auth
+production stack now runs on Unraid (2026-09-26): repo cloned at `/mnt/user/appdata/pillpipe`
+(branch `meal-time`), `docker compose -p pillpipe -f docker-compose.prod.yml up -d --build`,
+app on `10.0.0.25:3000`, fresh DB, its own `.env` there (no Google OAuth yet). Remaining: repoint
+NPM from the Windows dev stack to `10.0.0.25:3000`. Single-user auth
 only for this milestone — multi-user login is separately scoped under Long-term. NPM currently
 points at the Windows dev stack and is set to local-only access (not public); do not flip it
 public until production serving, HTTPS, input validation, destructive-endpoint protection and the
