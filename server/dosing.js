@@ -37,19 +37,24 @@ function dailyDose(phase) {
   return round6(num(phase.dose_morning) + num(phase.dose_lunch) + num(phase.dose_dinner) + custom);
 }
 
+// Same [0, MAX_AMOUNT] bound validatePhaseBody enforces via readAmount() on a normal create/update
+// — a restore (backup/drive-restore) never goes through that, only isValidBackup's array/type
+// shape check, so a hand-edited or corrupted backup's dose amounts need clamping here too.
+const clampAmount = n => Math.min(MAX_AMOUNT, Math.max(0, n));
+
 // Reads the dose fields of any stored phase row — a current one, a version-1 backup row or a legacy
 // template row (flat `dosage`) — into the current shape, ready to INSERT (stringify custom_slots).
 function normalizePhaseRow(row) {
   const hasNew = row.dose_morning !== undefined || row.dose_lunch !== undefined
     || row.dose_dinner !== undefined || row.custom_slots !== undefined;
-  if (!hasNew) return { dose_morning: round3(num(row.dosage)), dose_lunch: 0, dose_dinner: 0, custom_slots: [] };
+  if (!hasNew) return { dose_morning: clampAmount(round3(num(row.dosage))), dose_lunch: 0, dose_dinner: 0, custom_slots: [] };
   return {
-    dose_morning: round3(num(row.dose_morning)),
-    dose_lunch: round3(num(row.dose_lunch)),
-    dose_dinner: round3(num(row.dose_dinner)),
+    dose_morning: clampAmount(round3(num(row.dose_morning))),
+    dose_lunch: clampAmount(round3(num(row.dose_lunch))),
+    dose_dinner: clampAmount(round3(num(row.dose_dinner))),
     custom_slots: parseSlots(row.custom_slots)
       .filter(s => s.amount > 0 && TIME_RE.test(s.time))
-      .map(s => ({ amount: round3(s.amount), time: s.time })),
+      .map(s => ({ amount: clampAmount(round3(s.amount)), time: s.time })),
   };
 }
 
