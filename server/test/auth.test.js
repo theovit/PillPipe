@@ -22,7 +22,7 @@ if (!PASSWORD) throw new Error('Set TEST_PASSWORD to the password used for TEST_
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-// The backend trusts one proxy hop, so a unique X-Forwarded-For per call gives every request its
+// The backend trusts private-address proxies (the test client connects from one), so a unique X-Forwarded-For per call gives every request its
 // own rate-limit bucket; tests that exercise the limiter pass a fixed `ip`.
 let ipCounter = 0;
 // Rate-limit tests need fixed IPs, but the limiter remembers them for 15 minutes — randomise per run
@@ -254,6 +254,19 @@ test('login is rate limited per IP; only failures count; other IPs are unaffecte
   assert.equal(blocked.status, 429, 'even the correct password is refused once the limit is hit');
   assert.equal(blocked.setCookie.length, 0);
   assert.equal((await login(PASSWORD, { ip: randomIp() })).status, 200);
+});
+
+test('behind the tunnel the limiter keys on the first public hop, not the proxy or a spoofed XFF', async () => {
+  // Shape of X-Forwarded-For after Cloudflare → cloudflared (10.0.0.254) → NPM, with the client
+  // prepending its own fake entries.
+  const ip = randomIp();
+  const via = (spoof) => `${spoof}, ${ip}, 10.0.0.254`;
+  for (let i = 0; i < 5; i++) {
+    assert.equal((await login('wrong-password-' + i, { ip: via(randomIp()) })).status, 401);
+  }
+  assert.equal((await login(PASSWORD, { ip: `${ip}, 10.0.0.254` })).status, 429);
+  assert.equal((await login(PASSWORD, { ip: `${randomIp()}, 10.0.0.254` })).status, 200,
+    'another internet client through the same tunnel is unaffected');
 });
 
 test('successful logins do not count toward the login limit', async () => {

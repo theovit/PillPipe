@@ -2,8 +2,8 @@
 // - Every route is denied unless allowlisted below (fail closed, incl. unknown paths).
 // - Session token = 32 random bytes in an HttpOnly cookie; only its SHA-256 is stored.
 // - auth_sessions has no foreign keys so TRUNCATE ... CASCADE in restore never touches it.
-// - Rate limits are per client IP (req.ip); index.js sets `trust proxy` to 1 hop, so this is only
-//   meaningful when the backend is reachable solely through our reverse proxy (see docs/DEPLOY.md).
+// - Rate limits are per client IP (req.ip); index.js trusts private-address proxies, so this is only
+//   meaningful when the backend is reachable solely through our reverse proxy (NPM, see docs/TODO.md).
 const crypto = require('crypto');
 const express = require('express');
 const rateLimit = require('express-rate-limit');

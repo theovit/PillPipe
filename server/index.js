@@ -51,8 +51,10 @@ if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
 
 const app = express();
 app.disable('x-powered-by');
-// One trusted proxy hop (nginx in production). Never `true`: that trusts a client-supplied XFF.
-app.set('trust proxy', 1);
+// Trust proxies on private addresses only, so req.ip is the first public hop in X-Forwarded-For.
+// Internet traffic crosses two of them (Cloudflare Tunnel's cloudflared → NPM), LAN traffic one
+// (NPM); a fixed hop count can't be right for both. Never `true`: that trusts a client-supplied XFF.
+app.set('trust proxy', 'loopback, linklocal, uniquelocal');
 
 // In dev, Vite's own proxy strips the client's `/api` prefix before anything reaches this server
 // (see client/vite.config.js). In production this server serves the built client directly (no
