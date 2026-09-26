@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../utils/api';
 import { applyAccentColor, applyColorScheme, applyPrefs, defaultTargetDate, detectTimezone, formatDate, loadPrefs, PRESET_COLORS, savePrefs } from '../utils/prefs';
 import { SLOTS, formatTime12, resolveMealTimes, todayInTz } from '../utils/dosing';
+import { promptConfirmPassword } from '../utils/confirmPassword';
 import SessionPane from './SessionPane';
 import SupplementsPanel from './SupplementsPanel';
 
@@ -157,14 +158,6 @@ export default function Dashboard() {
     await api.pushUnsubscribe(pushSub.endpoint).catch(() => {});
     setPushSub(null);
     setNotifStatus('idle');
-  }
-
-  // Re-auth for destructive actions (restore, wipe): the server requires the current app password
-  // in an X-Confirm-Password header. A plain prompt() matches this app's existing confirm()-dialog
-  // level of polish for these guard rails — a nicer modal can replace it later.
-  function promptConfirmPassword() {
-    const password = window.prompt('Enter your password to confirm this action:');
-    return password?.trim() || null;
   }
 
   function urlBase64ToUint8Array(base64String) {

@@ -71,6 +71,22 @@ test('PATCH /supplements/:id rejects a non-numeric current_inventory', async () 
   assert.equal(res.status, 400);
 });
 
+test('PUT /supplements/:id preserves fields a partial body omits, instead of zeroing/resetting them', async () => {
+  const cookie = await login();
+  const supp = (await call('POST', '/supplements', { cookie, body: { ...validSupplement, current_inventory: 42, reorder_threshold: 5, reorder_threshold_mode: 'days' } })).json;
+  // Only the required fields — everything else (current_inventory, unit, reorder_threshold*, take_with_food) omitted.
+  const res = await call('PUT', `/supplements/${supp.id}`, { cookie, body: { name: 'V', pills_per_bottle: 60, price: 10, type: 'maintenance' } });
+  assert.equal(res.status, 200, res.text);
+  assert.equal(Number(res.json.current_inventory), 42, 'omitted current_inventory must not zero it');
+  assert.equal(res.json.unit, 'capsules', 'omitted unit must not reset it');
+  assert.equal(Number(res.json.reorder_threshold), 5, 'omitted reorder_threshold must not clear it');
+  assert.equal(res.json.reorder_threshold_mode, 'days', 'omitted reorder_threshold_mode must not reset it');
+
+  // Explicit null on reorder_threshold still clears it (real behavior the UI depends on).
+  const cleared = await call('PUT', `/supplements/${supp.id}`, { cookie, body: { name: 'V', pills_per_bottle: 60, price: 10, type: 'maintenance', reorder_threshold: null } });
+  assert.equal(cleared.json.reorder_threshold, null, 'explicit null must still clear it');
+});
+
 test('POST /sessions rejects malformed dates', async () => {
   const cookie = await login();
   for (const body of [

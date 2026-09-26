@@ -208,12 +208,22 @@ app.post('/supplements', validate(supplementBody), w(async (req, res) => {
 
 app.put('/supplements/:id', validate(supplementBody), w(async (req, res) => {
   const { name, brand, pills_per_bottle, price, type, current_inventory, unit, drops_per_ml, reorder_threshold, reorder_threshold_mode, take_with_food } = req.body;
-  // take_with_food is only changed when sent, so an older client's edit can't silently reset it.
+  // Every optional field only changes when sent (COALESCE), so an older/partial client's edit can't
+  // silently zero/reset one it didn't touch. reorder_threshold is the one exception: null is a real,
+  // meaningful value (clears the alert) the current UI actually sends, so plain COALESCE would wrongly
+  // treat "clear it" the same as "omitted" — hasOwnProperty distinguishes them, same pattern as
+  // PATCH /regimens/:id's notes field.
+  const hasThreshold = Object.prototype.hasOwnProperty.call(req.body, 'reorder_threshold');
   const { rows } = await pool.query(
-    `UPDATE supplements SET name=$1, brand=$2, pills_per_bottle=$3, price=$4, type=$5, current_inventory=$6, unit=$7, drops_per_ml=$8, reorder_threshold=$9, reorder_threshold_mode=$10,
-       take_with_food=COALESCE($11, take_with_food)
-     WHERE id=$12 RETURNING *`,
-    [name, brand, pills_per_bottle, price, type, current_inventory ?? 0, unit || 'capsules', drops_per_ml ?? 20, reorder_threshold ?? null, reorder_threshold_mode || 'units',
+    `UPDATE supplements SET name=$1, brand=COALESCE($2, brand), pills_per_bottle=$3, price=$4, type=$5,
+       current_inventory=COALESCE($6, current_inventory), unit=COALESCE($7, unit), drops_per_ml=COALESCE($8, drops_per_ml),
+       reorder_threshold=CASE WHEN $9::boolean THEN $10 ELSE reorder_threshold END,
+       reorder_threshold_mode=COALESCE($11, reorder_threshold_mode),
+       take_with_food=COALESCE($12, take_with_food)
+     WHERE id=$13 RETURNING *`,
+    [name, brand ?? null, pills_per_bottle, price, type,
+      current_inventory ?? null, unit || null, drops_per_ml ?? null,
+      hasThreshold, reorder_threshold ?? null, reorder_threshold_mode || null,
       typeof take_with_food === 'boolean' ? take_with_food : null, req.params.id]
   );
   if (!rows.length) return res.status(404).json({ error: 'Not found' });
@@ -230,7 +240,10 @@ app.patch('/supplements/:id', validate(supplementInventoryPatchBody), w(async (r
   res.json(rows[0]);
 }));
 
-app.delete('/supplements/:id', w(async (req, res) => {
+app.delete('/supplements/:id', auth.requireCurrentPassword, w(async (req, res) => {
+  // Cascades to every regimen/phase/dose_log using this supplement across every session — same
+  // blast radius as DELETE /data, so it gets the same re-auth + pre-wipe snapshot.
+  await snapshotBeforeWipe();
   await pool.query('DELETE FROM supplements WHERE id=$1', [req.params.id]);
   res.status(204).end();
 }));
@@ -424,8 +437,12 @@ app.delete('/phases/:id', w(async (req, res) => {
 
 // ── Shortfall Engine ──────────────────────────────────────────────────────────
 app.get('/sessions/:sessionId/calculate', w(async (req, res) => {
+  // start_date_str/target_date_str feed the calculator (UTC-string date math, see calculator.js);
+  // the plain start_date/target_date columns are left alone so the JSON response shape (session.*)
+  // for existing clients doesn't change.
   const { rows: sessionRows } = await pool.query(
-    'SELECT * FROM sessions WHERE id=$1', [req.params.sessionId]
+    `SELECT *, to_char(start_date, 'YYYY-MM-DD') AS start_date_str, to_char(target_date, 'YYYY-MM-DD') AS target_date_str
+     FROM sessions WHERE id=$1`, [req.params.sessionId]
   );
   if (!sessionRows.length) return res.status(404).json({ error: 'Session not found' });
   const session = sessionRows[0];
@@ -452,8 +469,8 @@ app.get('/sessions/:sessionId/calculate', w(async (req, res) => {
     const calc = calculate({
       phases,
       inventory: Number(regimen.current_inventory),
-      startDate: session.start_date,
-      targetDate: session.target_date,
+      startDate: session.start_date_str,
+      targetDate: session.target_date_str,
       pillsPerBottle,
       pricePerBottle: regimen.price,
       today,
@@ -873,9 +890,12 @@ async function checkLowStock() {
     // Days of supply at the current active-phase rate (null when nothing is scheduled)
     const daysRemaining = supplementDaysRemaining(inv, active.get(supp.id) ?? []);
 
-    // Check threshold against the chosen mode
+    // Check threshold against the chosen mode. "days" needs a scheduled (non-as-needed) regimen to
+    // derive a daily rate from; a supplement only ever used as-needed has no rate to compute, so
+    // daysRemaining is always null there — fall back to an empty-inventory check rather than never
+    // alerting at all for an as-needed-only supplement in this mode.
     const isLow = mode === 'days'
-      ? (daysRemaining !== null && daysRemaining <= threshold)
+      ? (daysRemaining !== null ? daysRemaining <= threshold : inv <= 0)
       : (inv <= threshold);
     if (!isLow) continue;
 

@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { api } from '../utils/api';
+import { promptConfirmPassword } from '../utils/confirmPassword';
 
 const EMPTY = { name: '', brand: '', pills_per_bottle: '', price: '', type: 'maintenance', current_inventory: '', unit: 'capsules', drops_per_ml: 20, reorder_threshold: '', reorder_threshold_mode: 'units', take_with_food: false };
 const inputCls = 'rounded bg-gray-800 border border-gray-700 px-3 py-2.5 sm:py-1.5 text-base sm:text-sm text-gray-200 focus:outline-none focus:border-violet-500';
@@ -119,7 +120,14 @@ export default function SupplementsPanel({ supplements, onUpdate }) {
 
   async function deleteSupplement(id) {
     if (!window.confirm('Delete this supplement? It will be removed from all regimens.')) return;
-    await api.deleteSupplement(id);
+    const confirmPassword = promptConfirmPassword();
+    if (!confirmPassword) return;
+    try {
+      await api.deleteSupplement(id, confirmPassword);
+    } catch (err) {
+      alert(`Delete failed: ${err.message}`);
+      return;
+    }
     onUpdate();
   }
 

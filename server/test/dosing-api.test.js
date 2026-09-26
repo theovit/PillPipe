@@ -270,3 +270,12 @@ test('the old per-regimen reminder route is gone and the test push works without
   const push = await call('POST', '/push/test', { cookie, body: {} });
   assert.equal(push.status, 404, 'no subscriptions -> a clean 404, not a crash');
 });
+
+test('DELETE /supplements/:id requires X-Confirm-Password like the other destructive routes', async () => {
+  const cookie = await login();
+  const { supp } = await setup(cookie);
+  assert.equal((await call('DELETE', `/supplements/${supp.id}`, { cookie })).status, 400, 'missing header');
+  assert.equal((await call('DELETE', `/supplements/${supp.id}`, { cookie, headers: { 'X-Confirm-Password': 'wrong' } })).status, 403, 'wrong password');
+  assert.equal((await call('GET', '/supplements', { cookie })).json.some(s => s.id === supp.id), true, 'not deleted by a rejected attempt');
+  assert.equal((await call('DELETE', `/supplements/${supp.id}`, { cookie, headers: { 'X-Confirm-Password': PASSWORD } })).status, 204, 'correct password works');
+});
