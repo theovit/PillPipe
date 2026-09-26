@@ -112,7 +112,12 @@ async function sendBatch({ batch, subscriptions, send, onGone }) {
       sent++;
     } catch (err) {
       failed++;
-      if (err && (err.statusCode === 404 || err.statusCode === 410) && onGone) await onGone(sub);
+      // onGone (deletes the dead row) failing must not take down the rest of the batch — other
+      // subscriptions may have already sent successfully, and Promise.all would otherwise reject
+      // the whole thing on this one cleanup error.
+      if (err && (err.statusCode === 404 || err.statusCode === 410) && onGone) {
+        try { await onGone(sub); } catch (cleanupErr) { console.error('onGone cleanup failed:', cleanupErr.message); }
+      }
     }
   }));
   return { sent, failed, payload };
