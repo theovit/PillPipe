@@ -3,9 +3,16 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { calculate } = require('../calculator');
 
-// pg hands the engine local-midnight Date objects for DATE columns; build the same so results don't
-// depend on the machine's timezone. The far-future start keeps "days elapsed" at 0.
-const day = (y, m, d) => new Date(y, m - 1, d);
+// The engine takes 'YYYY-MM-DD' strings and does its own date math in UTC (see calculator.js) —
+// never a Date object. `day()` still builds one internally purely to get correct rollover (e.g. day
+// 35 -> next month) and reads it back with LOCAL getters, so construct and read use the same
+// convention and the result never depends on the machine's timezone. The far-future start keeps
+// "days elapsed" at 0.
+const day = (y, m, d) => {
+  const dt = new Date(y, m - 1, d);
+  const pad = n => String(n).padStart(2, '0');
+  return `${dt.getFullYear()}-${pad(dt.getMonth() + 1)}-${pad(dt.getDate())}`;
+};
 const START = day(2099, 1, 5); // a Monday
 const phase = (over = {}) => ({
   sequence_order: 1, duration_days: 30, indefinite: false, days_of_week: null,
@@ -90,4 +97,19 @@ test('daysElapsed follows the caller-supplied `today`, not the server clock', ()
 
   const rClamped = run([p], 100, 30, { today: '2199-01-01' }); // long after target: clamps to totalDays
   assert.equal(rClamped.daysElapsed, 30);
+});
+
+test('day-counting is exact across a real DST transition, independent of the host TZ', () => {
+  // Regression: local-time Date arithmetic (`new Date(y,m,d)`, `.getDate()`) drifts by a day across
+  // a DST spring-forward, because that local calendar day is only 23 hours. It's pure UTC math now
+  // (ymdToUtc), so this must come out exactly right no matter what TZ this test happens to run in.
+  // US spring-forward was 2027-03-14; session runs 2027-03-01 to 2027-03-31, "today" is two weeks in.
+  const p = phase({ dose_morning: 1 });
+  const r = calculate({
+    phases: [p], inventory: 100, startDate: '2027-03-01', targetDate: '2027-03-31',
+    pillsPerBottle: 60, pricePerBottle: 10, today: '2027-03-15',
+  });
+  assert.equal(r.totalDays, 30);
+  assert.equal(r.daysElapsed, 14); // 2027-03-01 -> 2027-03-15, exactly 14 calendar days
+  assert.equal(r.pillsConsumedToDate, 14);
 });

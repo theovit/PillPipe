@@ -1,8 +1,13 @@
 const { dailyDose, round6 } = require('./dosing');
 
-function ymdToLocalMidnight(ymd) {
-  const [y, m, d] = ymd.split('-').map(Number);
-  return new Date(y, m - 1, d);
+const DAY_MS = 86400000;
+
+// Date math on 'YYYY-MM-DD' strings only, in UTC — never local Date getters/setters. A local-time
+// approach drifts by a day across a DST transition (a local calendar day can be 23 or 25 hours);
+// mirrors server/dosing.js's own ymdToUtc, which was written for exactly this reason.
+function ymdToUtc(s) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(s));
+  return m ? Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : NaN;
 }
 
 /**
@@ -11,28 +16,23 @@ function ymdToLocalMidnight(ymd) {
  * @param {Object} params
  * @param {Array}  params.phases          - [{dose_morning, dose_lunch, dose_dinner, custom_slots, duration_days, days_of_week, sequence_order}]
  * @param {number} params.inventory       - current pill count
- * @param {string} params.startDate       - ISO date string (session start)
- * @param {string} params.targetDate      - ISO date string (next appointment)
+ * @param {string} params.startDate       - 'YYYY-MM-DD' (session start)
+ * @param {string} params.targetDate      - 'YYYY-MM-DD' (next appointment)
  * @param {number} params.pillsPerBottle  - pills per purchasable unit
  * @param {number} params.pricePerBottle  - cost per bottle
  * @param {string} [params.today]         - the owner's wall-clock date ('YYYY-MM-DD', from nowInTz);
- *                                          defaults to the server's own clock if omitted
+ *                                          defaults to the server's own clock (UTC) if omitted
  */
 function calculate({ phases, inventory, startDate, targetDate, pillsPerBottle, pricePerBottle, today }) {
-  const start = new Date(startDate);
-  const target = new Date(targetDate);
-  const totalDays = Math.ceil((target - start) / (1000 * 60 * 60 * 24));
+  const startUtc = ymdToUtc(startDate);
+  const totalDays = Math.round((ymdToUtc(targetDate) - startUtc) / DAY_MS);
 
   const sorted = [...phases].sort((a, b) => a.sequence_order - b.sequence_order);
 
-  // How many calendar days have elapsed since session start (capped to session window). `today`
-  // must land on the same local-midnight convention pg hands us for start/target, not
-  // `new Date('YYYY-MM-DD')` (that parses as UTC midnight and would drift by a day near the
-  // boundary) — see calculator.test.js's note on this.
-  const todayDate = today ? ymdToLocalMidnight(today) : new Date();
-  todayDate.setHours(0, 0, 0, 0);
+  // How many calendar days have elapsed since session start (capped to session window).
+  const todayUtc = today ? ymdToUtc(today) : Math.floor(Date.now() / DAY_MS) * DAY_MS;
   const daysElapsed = Math.min(
-    Math.max(0, Math.floor((todayDate - start) / (1000 * 60 * 60 * 24))),
+    Math.max(0, Math.floor((todayUtc - startUtc) / DAY_MS)),
     totalDays
   );
 
@@ -53,10 +53,7 @@ function calculate({ phases, inventory, startDate, targetDate, pillsPerBottle, p
       if (currentDay >= totalDays) break;
 
       // Check if this calendar day is a dosing day
-      const calDate = new Date(start);
-      calDate.setDate(calDate.getDate() + currentDay);
-      const dayOfWeek = calDate.getDay(); // 0=Sun ... 6=Sat
-
+      const dayOfWeek = new Date(startUtc + currentDay * DAY_MS).getUTCDay(); // 0=Sun ... 6=Sat
       const isDosing = dow ? dow.includes(dayOfWeek) : true;
 
       if (isDosing) {
