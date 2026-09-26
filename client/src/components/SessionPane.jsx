@@ -6,7 +6,7 @@ import PhaseEditor from './PhaseEditor';
 import ShortfallAlert from './ShortfallAlert';
 import AdherenceCalendar from './AdherenceCalendar';
 import { formatDate } from '../utils/prefs';
-import { activePhase, phaseNotation, todayInTz, totalLabel } from '../utils/dosing';
+import { activePhase, isDosingDay, phaseNotation, todayInTz, totalLabel } from '../utils/dosing';
 
 const inputCls = 'w-full rounded bg-gray-800 border border-gray-700 px-3 py-2.5 sm:py-1.5 text-base sm:text-sm text-gray-200 focus:outline-none focus:border-violet-500';
 
@@ -113,7 +113,9 @@ export default function SessionPane({ session, supplements, prefs }) {
     const active = activePhase(ps, session.start_date.slice(0, 10), today, sessionTotalDays);
     const phase = active ? active.phase : [...ps].sort((a, b) => a.sequence_order - b.sequence_order)[0];
     const unit = r.unit || 'capsules';
-    return { notation: phaseNotation(phase), total: totalLabel(phase, unit), active: !!active };
+    // In-window isn't enough — a days_of_week phase isn't a real dosing day every day (matches the
+    // server's own gate before it sends a reminder).
+    return { notation: phaseNotation(phase), total: totalLabel(phase, unit), active: !!active && isDosingDay(phase, today) };
   }
 
   function scheduleText(r) {

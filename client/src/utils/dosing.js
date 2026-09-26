@@ -45,6 +45,13 @@ function ymdToUtc(s) {
   return m ? Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : NaN;
 }
 export const dayIndex = (startStr, todayStr) => Math.round((ymdToUtc(todayStr) - ymdToUtc(startStr)) / DAY_MS);
+const dayOfWeek = dateStr => new Date(ymdToUtc(dateStr)).getUTCDay(); // 0 = Sunday
+
+// Mirrors server/dosing.js's isDosingDay: a phase with no days_of_week dosages every day.
+export function isDosingDay(phase, dateStr) {
+  const dow = Array.isArray(phase.days_of_week) && phase.days_of_week.length ? phase.days_of_week : null;
+  return dow ? dow.includes(dayOfWeek(dateStr)) : true;
+}
 
 // Today's date in the owner's timezone (prefs.timezone). Falls back to the browser's own zone.
 export function todayInTz(tz) {
