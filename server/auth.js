@@ -93,6 +93,16 @@ async function init() {
       'then add the printed APP_PASSWORD_HASH=... line to .env'
     );
   }
+  // Unlike APP_PASSWORD_HASH this doesn't fail closed (Tailscale-only/dev setups work fine without
+  // it), but leaving it unset in production silently drops the Origin-header CSRF check — csrf()'s
+  // `APP_ORIGIN && origin && ...` just no-ops. Warn loudly instead of failing silent.
+  if (!APP_ORIGIN && process.env.NODE_ENV === 'production') {
+    console.warn(
+      'WARNING: APP_ORIGIN is not set. The CSRF Origin-header check is disabled — only ' +
+      "Sec-Fetch-Site and X-Requested-With defend state-changing requests. Set APP_ORIGIN to " +
+      "this app's public URL (e.g. https://pill.example.com) before relying on it being internet-facing."
+    );
+  }
   await ensureSchema();
   await purgeExpired();
 }
@@ -254,13 +264,20 @@ router.post('/auth/logout-all', w(async (req, res) => {
   res.json({ authenticated: false });
 }));
 
-// Re-auth gate for destructive routes (DELETE /data, POST /restore, POST /drive/restore/:fileId):
-// require the current password in an X-Confirm-Password header (a header, not the body, so it
-// never has to share a shape with /restore's body — that's the backup file itself). Shares the
-// login flow's concurrency cap (scrypt is expensive) but skips the global failed-login slowdown —
-// a signed-in owner mistyping isn't the public-guessing-attack surface /auth/login is.
+// Re-auth gate for destructive routes (DELETE /data, /supplements/:id, POST /restore,
+// POST /drive/restore/:fileId): require the current password in an X-Confirm-Password header (a
+// header, not the body, so it never has to share a shape with /restore's body — that's the backup
+// file itself). Shares login's concurrency cap (scrypt is expensive) AND its global failed-attempt
+// slowdown/logging — a stolen session cookie turns this into the same guessing-attack surface
+// /auth/login is, not just a signed-in owner's typo.
 async function requireCurrentPassword(req, res, next) {
   const password = req.get('x-confirm-password');
+  const fail = async () => {
+    globalFails++;
+    console.warn(`Failed destructive-action re-auth from ${req.ip}`);
+    if (globalFails > GLOBAL_FAIL_SLOWDOWN) await sleep(SLOWDOWN_MS);
+    return res.status(403).json({ error: 'Incorrect password' });
+  };
   if (typeof password !== 'string' || !password || password.length > 256) {
     return res.status(400).json({ error: 'X-Confirm-Password header is required for this action' });
   }
@@ -272,7 +289,7 @@ async function requireCurrentPassword(req, res, next) {
   } finally {
     activeVerifications--;
   }
-  if (!ok) return res.status(403).json({ error: 'Incorrect password' });
+  if (!ok) return fail();
   next();
 }
 
