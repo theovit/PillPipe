@@ -11,3 +11,8 @@ app/src/db/seed.dev.ts
 
 # Git worktrees
 .worktrees/
+
+# Local tooling / generated
+.vexp/
+vexp.toml
+docs/repo-index.md
