@@ -114,3 +114,18 @@ disk is slow enough (initdb ~1–2 min) that `up --wait` can report db unhealthy
 wait and re-run `up -d`. Unraid has no `docker compose` unless the Compose Manager plugin is installed.
 The stack shows in its UI via an "indirect" entry: `/boot/config/plugins/compose.manager/projects/pillpipe/`
 (`name`=pillpipe, `indirect`=the repo's `docker-compose.prod.yml`, `indirect_mode`=file).
+
+## Prod login only works at the APP_ORIGIN URL
+With `APP_ORIGIN=https://pill.1044nma.com`, the CSRF check 403s any login whose `Origin` differs —
+e.g. browsing `http://10.0.0.25:3000` directly. It looks like "wrong password" but never reaches
+the password check (no `Failed login` log line). Plain HTTP would also drop the Secure cookie.
+
+## Client IP behind Cloudflare Tunnel
+Internet requests arrive via cloudflared (10.0.0.254) → NPM (10.0.0.4): two private hops; LAN via NPM
+only. `trust proxy` is therefore `'loopback, linklocal, uniquelocal'`, not a hop count — `1` made every
+internet visitor share cloudflared's IP in the rate limiter. `server/test/auth.test.js` covers it.
+
+## Google OAuth redirect URI in prod
+`GOOGLE_REDIRECT_URI=https://pill.1044nma.com/api/auth/google/callback` (keep `/api`; the server strips
+it). The same exact string must be in the Google Cloud OAuth client, or Google returns
+`redirect_uri_mismatch`.

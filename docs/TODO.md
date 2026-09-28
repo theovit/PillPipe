@@ -9,12 +9,17 @@ Proxy Manager (Unraid, pill.1044nma.com) → PillPipe`, all on the Unraid server
 `docs/DECISIONS.md` 2026-09-23 entry (supersedes the earlier "nginx instead of tunnel" plan). The
 production stack now runs on Unraid (2026-09-26): repo cloned at `/mnt/user/appdata/pillpipe`
 (branch `meal-time`), `docker compose -p pillpipe -f docker-compose.prod.yml up -d --build`,
-app on `10.0.0.25:3000`, fresh DB, its own `.env` there (no Google OAuth yet). Remaining: repoint
-NPM from the Windows dev stack to `10.0.0.25:3000`. Single-user auth
-only for this milestone — multi-user login is separately scoped under Long-term. NPM currently
-points at the Windows dev stack and is set to local-only access (not public); do not flip it
-public until production serving, HTTPS, input validation, destructive-endpoint protection and the
-snapshot-before-wipe safeguard are done.
+app on `10.0.0.25:3000`, fresh DB, its own `.env` there. NPM points at it and was switched to
+**Publicly Accessible on 2026-09-27** — verified through Cloudflare (200 `/health`, 401 unauthenticated,
+real client IP in logs). Single-user auth only for this milestone — multi-user login is separately
+scoped under Long-term.
+
+- [ ] **Google Drive in prod** — credentials + `GOOGLE_REDIRECT_URI` are in the Unraid `.env`, but
+  connecting fails with `redirect_uri_mismatch`: add `https://pill.1044nma.com/api/auth/google/callback`
+  to the OAuth client's Authorized redirect URIs and add the owner as a test user (consent screen is in
+  Testing). Done when `google_tokens` has a row.
+- [ ] **Unraid cache SSD** — dropped off the SATA bus 2026-09-26 (pool went read-only); fine after
+  reboot. Check SMART + run a btrfs scrub; replace if it recurs. All appdata (incl. PillPipe) lives on it.
 
 **Corrected 2026-09-23** — this list had drifted from the actual code: Authentication was marked
 not-merged (false: it's `server/auth.js`, merged into `meal-time` at 8accd86, and live — confirmed
