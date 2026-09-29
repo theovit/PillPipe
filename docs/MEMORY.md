@@ -129,3 +129,12 @@ internet visitor share cloudflared's IP in the rate limiter. `server/test/auth.t
 `GOOGLE_REDIRECT_URI=https://pill.1044nma.com/api/auth/google/callback` (keep `/api`; the server strips
 it). The same exact string must be in the Google Cloud OAuth client, or Google returns
 `redirect_uri_mismatch`.
+
+## Client forms send `''` for unset optional fields — zod must allow it
+Forms keep unset selects/text as `''` (e.g. `template_id: ''` on New Session). A zod `z.string().min(1).optional()`
+rejects `''` with a 400 and the app logs nothing, so the UI just silently fails. Accept it explicitly
+(`z.union([id, z.literal('')])`) when the route treats falsy as "none". Found 2026-09-29: no session could be created in prod.
+
+## Debugging prod 4xx: the app doesn't log them — read the NPM access log
+Rejected requests (validation 400s, 401s) leave no trace in `docker logs pillpipe-app-1`. The NPM log
+(`/data/logs/proxy-host-23_access.log` in the `Nginx-Proxy-Manager-Official` container) shows method, path and status.
