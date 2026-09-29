@@ -30,6 +30,7 @@
 - Web: production serving — `Dockerfile.prod` + `docker-compose.prod.yml` build the client and serve it from the API (no more Vite dev server / bind mounts in production); adds a Content-Security-Policy on those responses
 
 ### Fixed
+- Web: creating a new session without picking a template failed with "Invalid request body" (400), so no sessions — and therefore no regimens — could be added
 - Web (server): behind Cloudflare Tunnel, login and API rate limits now track each visitor's real IP instead of lumping every internet visitor under the tunnel's address — a stranger's failed logins can no longer lock the owner out
 - Web: push notifications now re-sync with the server on every load instead of trusting the browser's own memory of being subscribed — a DB restore/wipe used to leave Settings saying "Enabled" while delivery was silently broken
 - Web: fonts are self-hosted (`@fontsource`) instead of loaded from the Google Fonts CDN; Vite's dev server no longer accepts an arbitrary Host header

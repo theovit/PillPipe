@@ -98,6 +98,12 @@ test('POST /sessions rejects malformed dates', async () => {
   }
 });
 
+test('POST /sessions accepts the client form body with no template picked', async () => {
+  const cookie = await login();
+  const body = { start_date: '2099-01-05', target_date: '2099-03-01', notes: '', template_id: '' };
+  assert.equal((await call('POST', '/sessions', { cookie, body })).status, 201);
+});
+
 test('POST /sessions/:sessionId/regimens rejects a missing supplement_id', async () => {
   const cookie = await login();
   const sess = (await call('POST', '/sessions', { cookie, body: { start_date: '2099-01-05', target_date: '2099-03-01' } })).json;

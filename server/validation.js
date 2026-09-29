@@ -44,7 +44,8 @@ const sessionCreateBody = z.object({
   start_date: dateStr,
   target_date: dateStr,
   notes,
-  template_id: id.optional(),
+  // The client form sends '' when no template is picked; the route treats falsy as "none".
+  template_id: z.union([id, z.literal('')]).nullable().optional(),
 });
 
 const sessionUpdateBody = z.object({
