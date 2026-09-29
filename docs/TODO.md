@@ -47,6 +47,8 @@ list again next time, don't just take it at face value.
   - [ ] Low-stock cron (`0 8 * * *`) still runs in server time (UTC); should use the owner's timezone (the 404 push-subscription cleanup for this sender was fixed 2026-09-22)
   - [ ] `/pill-icon.png` (notification icon) doesn't exist in `client/public`
   - [ ] Root `README.md` / `INSTALL.md` / `FEATURES.md` still describe an older design in places — reconcile with `docs/`
+- [ ] Web: edit existing regimens — there's no way to change a regimen after it's created, so a wrong date can't be fixed (only delete and re-add). Needs an edit flow for the regimen and its phases (dates included). (Noted 2026-09-29)
+- [ ] Web: supplement description — an optional free-text field on each supplement (Supplements tab) to note what it's for; show it on the supplement card, keep it in copy, templates and backups. (Noted 2026-09-29)
 - [ ] Find what writes `// @atlas-entrypoint: …` first-line comments into source files (removed 2026-09-19). Investigated 2026-09-22: traced to ordinary Claude-Sonnet-4.6-co-authored commits on 2026-03-23/24, but no current hook/plugin/setting references "atlas" — likely a now-uninstalled tool. See `docs/MEMORY.md`. Watch for recurrence; can't fully close without more evidence.
 
 ## On hold (until the web app is clean and hardened)
@@ -59,5 +61,5 @@ list again next time, don't just take it at face value.
   - [ ] First launch of a fresh install (no users yet) prompts to create the first account as admin, instead of a shared setup password
   - [ ] A role/permission column on the users table (e.g. `is_admin` or a `role` enum) — more than one user can be an administrator, not just the first account
 - [ ] Flexible Ads — opt-in ad system (ad-free default); AdSense; four levels; deferred until larger public user base
-- [ ] Doctor Portal — multi-tenant support for healthcare providers; requires multi-user auth + user/role model (single-user auth is in Blockers above)
+- [ ] Doctor Portal — multi-tenant support for healthcare providers; requires multi-user auth + user/role model (single-user auth is in Blockers above). Back burner — owner wants to experiment with a provider portal once multi-user login is done; details to be worked out then. (Noted 2026-09-29)
 - [ ] Activate Donate / Support section — remove `false &&` guard in Dashboard.jsx once Ko-fi / GitHub Sponsors pages are live
